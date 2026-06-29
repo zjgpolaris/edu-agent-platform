@@ -15,15 +15,44 @@ export type Textbook = {
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 async function getTextbooks(): Promise<{ textbooks: Textbook[]; error: boolean }> {
-  try {
-    const response = await fetch(`${apiBaseUrl}/api/textbooks`, { cache: "no-store" });
-    if (!response.ok) return { textbooks: [], error: true };
-    const data = (await response.json()) as { textbooks?: Textbook[] };
-    return { textbooks: data.textbooks || [], error: false };
-  } catch {
-    // 后端不可达（如线上未配置 NEXT_PUBLIC_API_BASE_URL）时降级，避免整页 500。
-    return { textbooks: [], error: true };
+  // Render 免费实例闲置会休眠，冷启动需 30–50s，单次 fetch 易超时。
+  // 多次尝试：首个请求即便超时被 abort，也已触发后端唤醒，重试时通常已就绪。
+  // 配合 page.tsx 的 maxDuration=60，总耗时控制在函数时长上限内。
+  const attempts = 2;
+  const perAttemptTimeoutMs = 25000;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
+      let response: Response;
+      try {
+        response = await fetch(`${apiBaseUrl}/api/textbooks`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!response.ok) {
+        // 5xx / 网关错误多为冷启动中途，重试；4xx 是确定性错误，直接降级。
+        if (response.status >= 500 && i < attempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          continue;
+        }
+        return { textbooks: [], error: true };
+      }
+      const data = (await response.json()) as { textbooks?: Textbook[] };
+      return { textbooks: data.textbooks || [], error: false };
+    } catch {
+      // 超时 / 网络错误：还有机会就退避后重试，否则降级避免整页 500。
+      if (i < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        continue;
+      }
+      return { textbooks: [], error: true };
+    }
   }
+  return { textbooks: [], error: true };
 }
 
 function statusLabel(status: Textbook["status"]) {
