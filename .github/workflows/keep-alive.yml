@@ -1,0 +1,39 @@
+name: Keep backend warm
+
+# Render 免费实例闲置约 15 分钟会休眠，冷启动 30–50s 会让前端 SSR 拉 /api/textbooks
+# 超时、页面显示「教材服务暂时无法连接」。每 ~10 分钟 ping 一次 health 端点防止休眠。
+#
+# 注意：
+# - 定时任务只在默认分支（main）生效，且需 push 到 GitHub 后才会运行。
+# - 公开仓库 Actions 分钟数免费；私有仓库每月仅 2000 分钟，本工作流约 4300 分钟/月会超额。
+#   若本仓库为私有，建议改用外部监控（UptimeRobot / cron-job.org 免费版）ping 同一 URL。
+# - GitHub 会在仓库 60 天无活动后自动停用定时任务。
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping backend health
+        run: |
+          URL="https://edu-agent-backend-1e5x.onrender.com/api/debug/llm/health"
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$URL") || code=000
+            echo "attempt $i -> HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 10
+          done
+          echo "backend did not return 200 after retries"
+          exit 1
