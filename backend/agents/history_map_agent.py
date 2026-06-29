@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -9,14 +10,41 @@ from llm_config import llm_fast as llm, llm_quality as llm_opus
 from rag.knowledge_base import search_with_scores
 from tracing import truncate_text
 
-_GEO_EVENTS_PATH = Path(__file__).parent.parent.parent / "knowledge_base" / "history" / "geo_events.json"
+
+def _resolve_geo_events_path() -> Path:
+    """定位 geo_events.json，兼容本地仓库与容器布局。
+
+    本地仓库：agent 在 <repo>/backend/agents/，数据在 <repo>/knowledge_base/history。
+    线上容器：backend 被 `COPY backend/ .` 平铺到 /app，parents 上溯会落到根 /，
+    数据实际在 /app/knowledge_base/history（见 backend/Dockerfile）。
+    也允许用 GEO_EVENTS_PATH 环境变量显式覆盖。
+    """
+    env_path = os.environ.get("GEO_EVENTS_PATH")
+    if env_path:
+        return Path(env_path)
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parent.parent.parent / "knowledge_base" / "history" / "geo_events.json",
+        here.parent.parent / "knowledge_base" / "history" / "geo_events.json",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+_GEO_EVENTS_PATH = _resolve_geo_events_path()
 _geo_events_cache: list[dict] | None = None
 
 
 def load_geo_events() -> list[dict]:
     global _geo_events_cache
     if _geo_events_cache is None:
-        _geo_events_cache = json.loads(_GEO_EVENTS_PATH.read_text(encoding="utf-8"))
+        try:
+            _geo_events_cache = json.loads(_GEO_EVENTS_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # 数据文件缺失/损坏时降级为空，地图显示无事件，避免接口 500 连带 502。
+            _geo_events_cache = []
     return _geo_events_cache
 
 
