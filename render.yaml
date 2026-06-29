@@ -31,12 +31,7 @@ services:
         sync: false
       - key: BAILIAN_BASE_URL
         sync: false
-      # 模型名（与本地 .env.local 的 LLM_MODEL_* 一致）
-      - key: LLM_MODEL_FAST
-        sync: false
-      - key: LLM_MODEL_QUALITY
-        sync: false
-      - key: LLM_MODEL_FALLBACK
-        sync: false
+      # 模型名留空走代码内置默认（bailian: deepseek-v4-flash / qwen3.7-plus / qwen3.6-35b-a3b），
+      # 与本地一致，无需在面板填写。如要覆盖再设 LLM_MODEL_FAST/QUALITY/FALLBACK。
       # 说明：云端无本地 BGE 模型，故不设 EMBED_MODEL_PATH，
       # RAG 取材会自动降级为模型自有知识出题（auto_tutor 的 degraded 路径），demo 仍可跑通。
