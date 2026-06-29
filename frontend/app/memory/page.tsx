@@ -260,7 +260,7 @@ export default function MemoryCenterPage() {
           <div className="material-empty-state">
             <strong>请先登录</strong>
             <p>需要登录才能查看学习记忆。</p>
-            <Link className="primary-link" href="/login">去登录</Link>
+            <Link className="primary-link" href="/">去登录</Link>
           </div>
         </section>
       )}

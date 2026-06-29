@@ -47,7 +47,7 @@ export default function TeacherStudentDetail() {
 
   useEffect(() => {
     if (!ready) return;
-    if (!user) { router.replace("/login"); return; }
+    if (!user) { router.replace("/"); return; }
     if (user.role === "student") { router.replace("/"); return; }
     const h = authHeaders(user.token);
     Promise.all([

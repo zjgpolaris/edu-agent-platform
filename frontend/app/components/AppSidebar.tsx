@@ -164,7 +164,7 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
 
   function handleLogout() {
     logout();
-    router.push("/login");
+    router.push("/");
   }
 
   const nav = role === "teacher" ? teacherNav : studentNav;

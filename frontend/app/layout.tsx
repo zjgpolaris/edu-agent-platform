@@ -1,44 +1,27 @@
 import type { Metadata } from "next";
-import { ZCOOL_XiaoWei, Noto_Serif_SC, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import AuthGuard from "@/components/AuthGuard";
-
-// 展示字体：用于标题、大号装饰文字
-const zcoolXiaoWei = ZCOOL_XiaoWei({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-// 正文字体：中文衬线，正文阅读
-const notoSerifSC = Noto_Serif_SC({
-  weight: ["400", "700"],
-  subsets: ["latin"],
-  variable: "--font-body",
-  display: "swap",
-});
-
-// 西文装饰字体：数字、标签、英文标注
-const cormorant = Cormorant_Garamond({
-  weight: ["400", "500", "600", "700"],
-  subsets: ["latin"],
-  variable: "--font-accent",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "EduAgent",
   description: "面向历史与语文学科的 AI Agent 教学辅助平台",
 };
 
+// 字体改用国内可达的 Google Fonts 镜像（浏览器端按需加载，display=swap 不阻塞渲染）。
+// 之前用 next/font/google 会在构建/编译期从 fonts.gstatic.com 拉取字体文件，
+// 国内不可达导致超时阻塞，表现为页面进入缓慢；改为镜像 <link> + 系统字体回退后即可消除。
+const FONTS_CSS =
+  "https://fonts.loli.net/css2?family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@400;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="zh-CN"
-      className={`${zcoolXiaoWei.variable} ${notoSerifSC.variable} ${cormorant.variable}`}
-    >
+    <html lang="zh-CN">
+      <head>
+        <link rel="preconnect" href="https://fonts.loli.net" />
+        <link rel="preconnect" href="https://gstatic.loli.net" crossOrigin="anonymous" />
+        <link rel="stylesheet" href={FONTS_CSS} />
+      </head>
       <body>
         <AuthProvider>
           <AuthGuard>{children}</AuthGuard>

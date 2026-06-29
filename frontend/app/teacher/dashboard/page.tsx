@@ -24,7 +24,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     if (!ready) return;
     if (user?.role === "student") { router.replace("/"); return; }
-    if (!user) { router.replace("/login"); return; }
+    if (!user) { router.replace("/"); return; }
     const headers = authHeaders(user.token);
     Promise.all([
       fetch(`${API}/api/teacher/students`, { headers }),

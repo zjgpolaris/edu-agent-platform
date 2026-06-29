@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { loadAuth } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/", "/login", "/register"];
+const PUBLIC_PATHS = ["/", "/register"];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -14,7 +14,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     setReady(true);
     const auth = loadAuth();
     if (!PUBLIC_PATHS.includes(pathname) && !auth) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
     if (pathname === "/" && auth) {

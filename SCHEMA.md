@@ -230,10 +230,9 @@ frontend/
 │   ├── homework-grading/     # 作业批改
 │   ├── history-map/          # 历史地图
 │   ├── history-debate/       # 历史辩论
-│   ├── login/                # 登录
 │   ├── register/             # 注册
 │   ├── layout.tsx            # 根布局
-│   ├── page.tsx              # 首页
+│   ├── page.tsx              # 首页（含登录）
 │   └── globals.css           # 全局样式
 │
 ├── components/               # 全局组件
@@ -248,8 +247,7 @@ frontend/
 
 | 路由 | 说明 |
 |------|------|
-| `/` | 首页/学习中心 |
-| `/login` | 登录 |
+| `/` | 首页 + 登录（叙事 + 学生/教师身份切换、账号登录、一键体验；已登录自动跳工作台，退出后回到此页） |
 | `/register` | 注册 |
 | `/history-character` | 历史人物对话 |
 | `/history-games` | 历史游戏大厅 |

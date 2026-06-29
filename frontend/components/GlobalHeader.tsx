@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
-const HIDDEN_PATHS = ["/", "/login"];
+const HIDDEN_PATHS = ["/"];
 
 const STUDENT_NAV_LINKS = [
   { href: "/student-home", label: "学习中心" },
@@ -36,7 +36,7 @@ export default function GlobalHeader() {
 
   function handleLogout() {
     logout();
-    router.push("/login");
+    router.push("/");
   }
 
   const isTeacherLike = user.role === "teacher" || user.role === "admin";

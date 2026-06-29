@@ -112,7 +112,7 @@ export default function RegisterPage() {
           </form>
 
           <p className="auth-footnote">
-            已有账号？<Link href="/login">返回登录</Link>
+            已有账号？<Link href="/">返回登录</Link>
           </p>
         </div>
       </section>

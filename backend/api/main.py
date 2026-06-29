@@ -1559,16 +1559,14 @@ async def homework_save_review(req: dict, actor: Actor = Depends(require_auth)):
 
 @app.get("/api/teacher/homework-reviews")
 async def teacher_list_reviews(decision: str | None = None, limit: int = 50, actor: Actor = Depends(require_auth)):
-    if actor.role not in ("teacher", "admin") and not (actor.role == "student" and not auth_required()):
-        raise HTTPException(status_code=403, detail="教师权限required")
+    require_teacher_actor(actor)
     reviews = list_reviews(decision=decision or None, limit=limit)
     return {"reviews": reviews, "total": len(reviews)}
 
 
 @app.post("/api/teacher/homework-reviews/{review_id}/decision")
 async def teacher_review_decision(review_id: str, req: HomeworkReviewDecisionRequest, actor: Actor = Depends(require_auth)):
-    if auth_required() and actor.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=403, detail="教师权限 required")
+    require_teacher_actor(actor)
     ok = apply_decision(review_id, teacher_id=actor.actor_id, decision=req.decision, teacher_note=req.teacher_note, teacher_score=req.teacher_score)
     if not ok:
         raise HTTPException(status_code=404, detail="review not found")

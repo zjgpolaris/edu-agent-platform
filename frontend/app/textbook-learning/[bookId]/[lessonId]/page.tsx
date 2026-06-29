@@ -15,6 +15,19 @@ async function getToc(bookId: string) {
 }
 
 export default async function TextbookLessonPage({ params }: { params: { bookId: string; lessonId: string } }) {
-  const [lesson, toc] = await Promise.all([getLesson(params.bookId, params.lessonId), getToc(params.bookId)]);
-  return <LessonLearningClient lesson={lesson} toc={toc} />;
+  try {
+    const [lesson, toc] = await Promise.all([getLesson(params.bookId, params.lessonId), getToc(params.bookId)]);
+    return <LessonLearningClient lesson={lesson} toc={toc} />;
+  } catch {
+    // 后端不可达时降级，避免整页 500。
+    return (
+      <main className="academy-shell textbook-learning-shell">
+        <section className="panel textbook-toc-page" aria-label="课程内容">
+          <h1>课程内容暂时无法加载</h1>
+          <p>无法连接教材服务，请稍后重试。</p>
+          <a className="hero-game-link" href={`/textbook-learning/${params.bookId}`}>返回教材目录</a>
+        </section>
+      </main>
+    );
+  }
 }

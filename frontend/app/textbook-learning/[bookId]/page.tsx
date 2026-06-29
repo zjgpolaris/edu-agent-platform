@@ -19,14 +19,31 @@ type TocResponse = {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-async function getToc(bookId: string): Promise<TocResponse> {
-  const response = await fetch(`${apiBaseUrl}/api/textbooks/${bookId}/toc`, { cache: "no-store" });
-  if (!response.ok) throw new Error("教材目录加载失败");
-  return response.json();
+async function getToc(bookId: string): Promise<TocResponse | null> {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/textbooks/${bookId}/toc`, { cache: "no-store" });
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    // 后端不可达时降级，避免整页 500。
+    return null;
+  }
 }
 
 export default async function TextbookTocPage({ params }: { params: { bookId: string } }) {
   const toc = await getToc(params.bookId);
+
+  if (!toc) {
+    return (
+      <main className="academy-shell textbook-learning-shell">
+        <section className="panel textbook-toc-page" aria-label="教材目录">
+          <h1>教材目录暂时无法加载</h1>
+          <p>无法连接教材服务，请稍后重试。</p>
+          <a className="hero-game-link" href="/student/textbook">返回教材列表</a>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="academy-shell textbook-learning-shell">
