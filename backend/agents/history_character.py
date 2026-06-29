@@ -209,7 +209,13 @@ def retrieve_facts(state: CharacterState, rag_retriever=None) -> CharacterState:
             )
         except Exception:
             retrieval_strategy = "retriever_fallback"
-            docs = rag_retriever.invoke(primary_query) if rag_retriever is not None else []
+            try:
+                docs = rag_retriever.invoke(primary_query) if rag_retriever is not None else []
+            except Exception:
+                # 云端无 BGE 向量模型（未设 EMBED_MODEL_PATH）时检索整体不可用，
+                # 降级为无史料：人物仍可基于模型自有知识作答，而非把异常透传给用户。
+                retrieval_strategy = "degraded_no_rag"
+                docs = []
             sources = []
             for index, doc in enumerate(docs, start=1):
                 meta = doc.metadata or {}
