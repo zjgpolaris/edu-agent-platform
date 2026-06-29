@@ -265,12 +265,18 @@ else:
     DEFAULT_MODEL_FALLBACK = ANTHROPIC_MODEL_FALLBACK
     DEFAULT_MODEL_REASONING = ANTHROPIC_MODEL_REASONING
 
-MODEL_FAST = os.getenv("LLM_MODEL_FAST", DEFAULT_MODEL_FAST)
-MODEL_QUALITY = os.getenv("LLM_MODEL_QUALITY", DEFAULT_MODEL_QUALITY)
-MODEL_FALLBACK = os.getenv("LLM_MODEL_FALLBACK", DEFAULT_MODEL_FALLBACK)
-MODEL_REASONING = os.getenv("LLM_MODEL_REASONING", DEFAULT_MODEL_REASONING)
-MODEL_MULTIMODAL = os.getenv("LLM_MODEL_MULTIMODAL", "qwen3.5-omni-flash")
-MODEL_MULTIMODAL_QUALITY = os.getenv("LLM_MODEL_MULTIMODAL_QUALITY", "qwen3.5-omni-plus")
+def _model_env(name: str, default: str) -> str:
+    """空字符串/未设都回退到默认，避免平台残留空变量覆盖默认模型名。"""
+    value = (os.getenv(name) or "").strip()
+    return value or default
+
+
+MODEL_FAST = _model_env("LLM_MODEL_FAST", DEFAULT_MODEL_FAST)
+MODEL_QUALITY = _model_env("LLM_MODEL_QUALITY", DEFAULT_MODEL_QUALITY)
+MODEL_FALLBACK = _model_env("LLM_MODEL_FALLBACK", DEFAULT_MODEL_FALLBACK)
+MODEL_REASONING = _model_env("LLM_MODEL_REASONING", DEFAULT_MODEL_REASONING)
+MODEL_MULTIMODAL = _model_env("LLM_MODEL_MULTIMODAL", "qwen3.5-omni-flash")
+MODEL_MULTIMODAL_QUALITY = _model_env("LLM_MODEL_MULTIMODAL_QUALITY", "qwen3.5-omni-plus")
 
 logger.info(
     "llm_config_loaded provider=%s fast=%s quality=%s fallback=%s reasoning=%s multimodal=%s multimodal_quality=%s bailian_base_url=%s bailian_key=%s anthropic_base_url=%s anthropic_key=%s",
