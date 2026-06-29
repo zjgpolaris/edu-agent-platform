@@ -12,7 +12,9 @@ venv
 # 本地向量库 / 大语料（运行时挂载或重建，不进镜像）
 .chroma
 knowledge_base
-textbooks
+# textbooks 的原始 PDF/OCR 不进镜像，但结构化教材 YAML 是教材同步学习页的数据源，必须打进后端镜像
+textbooks/*
+!textbooks/structured
 scripts
 eval
 

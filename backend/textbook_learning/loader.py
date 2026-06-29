@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -19,7 +20,31 @@ from textbook_learning.schema import (
 )
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-STRUCTURED_DIR = ROOT_DIR / "textbooks" / "structured"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+def _resolve_structured_dir() -> Path:
+    """定位结构化教材目录，兼容本地仓库与容器布局。
+
+    本地仓库：loader 在 <repo>/backend/textbook_learning/，教材在 <repo>/textbooks/structured。
+    线上容器：backend 被 `COPY backend/ .` 平铺到 /app，parents[2] 会落到文件系统根 /，
+    此时教材实际在 /app/textbooks/structured（见 backend/Dockerfile）。
+    也允许用 TEXTBOOKS_STRUCTURED_DIR 环境变量显式覆盖。
+    """
+    env_dir = os.environ.get("TEXTBOOKS_STRUCTURED_DIR")
+    if env_dir:
+        return Path(env_dir)
+    candidates = [
+        ROOT_DIR / "textbooks" / "structured",
+        BACKEND_DIR / "textbooks" / "structured",
+    ]
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return candidates[0]
+
+
+STRUCTURED_DIR = _resolve_structured_dir()
 
 BOOK_ID_MAP = {
     "中国历史七年级上册": "history-grade-7a",

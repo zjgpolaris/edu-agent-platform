@@ -13,6 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 
+# 结构化教材 YAML（教材同步学习页数据源）。backend 被平铺到 /app，
+# loader 会在 /app/textbooks/structured 查找，故放到该路径下。
+COPY textbooks/structured/ ./textbooks/structured/
+
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
