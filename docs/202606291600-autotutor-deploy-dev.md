@@ -39,10 +39,11 @@
 1. Render Dashboard → **New → Blueprint** → 连接本仓库，自动读取 `render.yaml`。
 2. 在服务的 **Environment** 填以下 secret（`render.yaml` 里标了 `sync: false` 的项）：
    - `DATABASE_URL` —— Supabase 连接串
-   - `ANTHROPIC_AUTH_TOKEN`（或 `ANTHROPIC_API_KEY`）
-   - `ANTHROPIC_BASE_URL`（如用代理网关）
-   - `ANTHROPIC_MODEL_QUALITY` / `ANTHROPIC_MODEL_FAST` / `ANTHROPIC_MODEL_FALLBACK`
-   - `LLM_PROVIDER` 默认 `anthropic`；用百炼则设 `bailian` 并补 `BAILIAN_API_KEY`
+   - `BAILIAN_API_KEY` —— 百炼 API key
+   - `BAILIAN_BASE_URL` —— 百炼公网地址（如 `https://dashscope.aliyuncs.com/compatible-mode/v1`）
+   - `LLM_MODEL_FAST` / `LLM_MODEL_QUALITY` / `LLM_MODEL_FALLBACK` —— 与本地 `.env.local` 一致
+   - `LLM_PROVIDER` 已在 `render.yaml` 设为 `bailian`
+   > 注：本地 LLM 网关是 qima-inc 内网，Render 公网访问不到；线上必须用百炼/阿里云**公网**地址。
 3. 部署完成后记下后端公网 URL，例如 `https://edu-agent-backend.onrender.com`。
 4. 健康检查：访问 `https://<后端>/api/debug/llm/health`，确认 LLM 连通。
 

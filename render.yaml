@@ -24,18 +24,19 @@ services:
       # Supabase / Postgres 连接串
       - key: DATABASE_URL
         sync: false
-      # LLM 凭证 —— 在 Render 面板填写，勿入库
+      # LLM 凭证 —— 在 Render 面板填写，勿入库。线上走百炼公网。
       - key: LLM_PROVIDER
-        value: anthropic
-      - key: ANTHROPIC_AUTH_TOKEN
+        value: bailian
+      - key: BAILIAN_API_KEY
         sync: false
-      - key: ANTHROPIC_BASE_URL
+      - key: BAILIAN_BASE_URL
         sync: false
-      - key: ANTHROPIC_MODEL_QUALITY
+      # 模型名（与本地 .env.local 的 LLM_MODEL_* 一致）
+      - key: LLM_MODEL_FAST
         sync: false
-      - key: ANTHROPIC_MODEL_FAST
+      - key: LLM_MODEL_QUALITY
         sync: false
-      - key: ANTHROPIC_MODEL_FALLBACK
+      - key: LLM_MODEL_FALLBACK
         sync: false
       # 说明：云端无本地 BGE 模型，故不设 EMBED_MODEL_PATH，
       # RAG 取材会自动降级为模型自有知识出题（auto_tutor 的 degraded 路径），demo 仍可跑通。
