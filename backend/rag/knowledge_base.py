@@ -1,16 +1,26 @@
-"""RAG 知识库 — 历史史料 & 古诗文典籍"""
+"""RAG 知识库 — 历史史料 & 古诗文典籍
+
+生产形态：Embedding 走 DashScope/百炼 兼容 API（复用 LLM 的 BAILIAN_API_KEY），
+向量库走 Postgres + pgvector（复用 DATABASE_URL）。本地若 DATABASE_URL 仍是 sqlite，
+向量检索会优雅降级为空（调用方均有兜底）；本地要用 RAG 请把 DATABASE_URL 指向
+带 pgvector 的 Postgres（可直接用 Supabase）。
+"""
 from __future__ import annotations
 
 import json
 import os
 import re
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Literal, TypeAlias, TypedDict
 
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sqlalchemy import text as sa_text
+
+from db.engine import engine
 from tracing import end_span, start_span, truncate_text
 
 MetadataValue: TypeAlias = str | int | float | bool
@@ -31,35 +41,102 @@ class ScoredDocument(TypedDict, total=False):
     rerank_score: float | None
     final_score: float
 
-_EMBED_MODEL: HuggingFaceEmbeddings | None = None
+_EMBED_MODEL: "DashScopeEmbeddings | None" = None
+
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-v3")
+EMBED_DIM = int(os.getenv("EMBED_DIM", "1024"))
+_EMBED_BASE_URL = (os.getenv("BAILIAN_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
+_EMBED_BATCH = int(os.getenv("EMBED_BATCH", "10"))
 
 
-def get_embed_model() -> HuggingFaceEmbeddings:
-    """Lazily load embeddings so tool/eval imports work without a local model."""
+class DashScopeEmbeddings:
+    """OpenAI 兼容的 DashScope/百炼 文本向量客户端（复用 LLM 的 BAILIAN_API_KEY）。
+
+    暴露 LangChain Embeddings 同名方法 embed_documents / embed_query，
+    无需本地 BGE 模型与 GPU/大内存。
+    """
+
+    def __init__(self, model: str = EMBED_MODEL, dimensions: int = EMBED_DIM):
+        self.model = model
+        self.dimensions = dimensions
+
+    def _api_key(self) -> str:
+        key = os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "BAILIAN_API_KEY (or DASHSCOPE_API_KEY) is not set; "
+                "cannot call the embedding API for RAG retrieval."
+            )
+        return key
+
+    def _embed_batch(self, inputs: list[str]) -> list[list[float]]:
+        body = json.dumps({
+            "model": self.model,
+            "input": inputs,
+            "dimensions": self.dimensions,
+            "encoding_format": "float",
+        }).encode("utf-8")
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(
+                    f"{_EMBED_BASE_URL}/embeddings",
+                    data=body,
+                    headers={
+                        "Authorization": f"Bearer {self._api_key()}",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                rows = sorted(payload.get("data", []), key=lambda d: d.get("index", 0))
+                return [row["embedding"] for row in rows]
+            except urllib.error.HTTPError as exc:
+                try:
+                    error_body = exc.read().decode("utf-8")[:1000]
+                except Exception:
+                    error_body = ""
+                last_error = RuntimeError(f"HTTP {exc.code}: {error_body}")
+                time.sleep(1.5 * (attempt + 1))
+            except (urllib.error.URLError, TimeoutError, KeyError, ValueError) as exc:
+                last_error = exc
+                time.sleep(1.5 * (attempt + 1))
+        raise RuntimeError(f"embedding API failed after retries: {last_error}")
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        out: list[list[float]] = []
+        for i in range(0, len(texts), _EMBED_BATCH):
+            out.extend(self._embed_batch_resilient(texts[i:i + _EMBED_BATCH]))
+        return out
+
+    def _embed_batch_resilient(self, texts: list[str]) -> list[list[float]]:
+        try:
+            return self._embed_batch(texts)
+        except Exception as exc:
+            reason = str(exc)
+            if "Arrearage" in reason or "Access denied" in reason:
+                raise RuntimeError(f"embedding API is not available: {exc}") from exc
+            if len(texts) <= 1:
+                preview = texts[0][:120].replace("\n", " ") if texts else ""
+                raise RuntimeError(f"embedding failed for single text: {exc}; preview={preview}") from exc
+            mid = len(texts) // 2
+            return self._embed_batch_resilient(texts[:mid]) + self._embed_batch_resilient(texts[mid:])
+
+    def embed_query(self, text_in: str) -> list[float]:
+        return self._embed_batch([text_in])[0]
+
+
+def get_embed_model() -> "DashScopeEmbeddings":
+    """Lazily build the embedding client (no local model needed)."""
     global _EMBED_MODEL
-    if _EMBED_MODEL is not None:
-        return _EMBED_MODEL
-    embed_model_path = os.getenv("EMBED_MODEL_PATH", "")
-    if not embed_model_path:
-        # 与 eval 脚本一致：未显式配置时，回退到已知的本地 BGE 模型路径（存在则用），
-        # 这样开发态后端无需手动设置 EMBED_MODEL_PATH 即可启用 RAG 检索。
-        default_path = os.path.expanduser("~/.cache/modelscope/BAAI/bge-large-zh-v1___5")
-        if os.path.isdir(default_path):
-            embed_model_path = default_path
-    if not embed_model_path:
-        raise RuntimeError(
-            "EMBED_MODEL_PATH environment variable is not set. "
-            "Please set it to the local path of the BGE embedding model."
-        )
-    _EMBED_MODEL = HuggingFaceEmbeddings(
-        model_name=embed_model_path,
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
-    )
+    if _EMBED_MODEL is None:
+        _EMBED_MODEL = DashScopeEmbeddings()
     return _EMBED_MODEL
 
-BGE_QUERY_PREFIX = "为这个句子生成表示以用于检索相关文章："
-PERSIST_DIRECTORY = ".chroma"
+# DashScope 向量无需 BGE 查询前缀；保留常量为空串，兼容历史调用点（vector_search / materials）。
+BGE_QUERY_PREFIX = ""
+RAG_TABLE = "rag_documents"
 
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=500,
@@ -68,7 +145,109 @@ splitter = RecursiveCharacterTextSplitter(
 )
 
 
-def build_vectorstore(collection: str, docs_path: Path) -> Chroma:
+def _vec_literal(vec: list[float]) -> str:
+    # pgvector 文本输入格式：[0.1,0.2,...]
+    return "[" + ",".join(f"{x:.7f}" for x in vec) + "]"
+
+
+def _row_to_document(content: str, metadata_json: str | dict | None) -> Document:
+    if isinstance(metadata_json, dict):
+        metadata = metadata_json
+    else:
+        try:
+            metadata = json.loads(metadata_json) if metadata_json else {}
+        except (TypeError, ValueError):
+            metadata = {}
+    return Document(page_content=content or "", metadata=metadata or {})
+
+
+class PgVectorStore:
+    """Chroma 兼容的最小向量库，后端为 Postgres + pgvector。
+
+    只实现检索层与 materials 实际用到的方法：similarity_search /
+    similarity_search_with_relevance_scores / get / add_documents / delete /
+    delete_collection。其余 Chroma API 未实现。
+    """
+
+    def __init__(self, collection: str):
+        self.collection = collection
+
+    # --- 读 ---
+    def similarity_search(self, query: str, k: int = 5, filter: dict | None = None) -> list[Document]:
+        return [doc for doc, _ in self._search_scored(query, k, filter)]
+
+    def similarity_search_with_relevance_scores(self, query: str, k: int = 5, filter: dict | None = None):
+        return self._search_scored(query, k, filter)
+
+    def _search_scored(self, query: str, k: int, filter: dict | None) -> list[tuple[Document, float]]:
+        vec = _vec_literal(get_embed_model().embed_query(query))
+        where_sql, params = _sql_metadata_filter(filter)
+        params.update({"coll": self.collection, "vec": vec, "k": max(int(k), 1)})
+        sql = (
+            f"SELECT content, metadata, 1 - (embedding <=> CAST(:vec AS vector)) AS score "
+            f"FROM {RAG_TABLE} WHERE collection = :coll {where_sql} "
+            f"ORDER BY embedding <=> CAST(:vec AS vector) LIMIT :k"
+        )
+        with engine.connect() as conn:
+            rows = conn.execute(sa_text(sql), params).fetchall()
+        return [(_row_to_document(r[0], r[1]), float(r[2])) for r in rows]
+
+    def get(self, where: dict | None = None, include=None, limit: int = 80) -> dict:
+        where_sql, params = _sql_metadata_filter(where)
+        params.update({"coll": self.collection, "lim": max(int(limit), 1)})
+        sql = (
+            f"SELECT id, content, metadata FROM {RAG_TABLE} "
+            f"WHERE collection = :coll {where_sql} LIMIT :lim"
+        )
+        with engine.connect() as conn:
+            rows = conn.execute(sa_text(sql), params).fetchall()
+        return {
+            "ids": [r[0] for r in rows],
+            "documents": [r[1] for r in rows],
+            "metadatas": [_row_to_document("", r[2]).metadata for r in rows],
+        }
+
+    # --- 写 ---
+    def add_documents(self, docs: list[Document], ids: list[str]) -> None:
+        vectors = get_embed_model().embed_documents([d.page_content for d in docs])
+        rows = [
+            {
+                "id": doc_id,
+                "coll": self.collection,
+                "content": doc.page_content,
+                "metadata": json.dumps(doc.metadata or {}, ensure_ascii=False),
+                "embedding": _vec_literal(vec),
+            }
+            for doc_id, doc, vec in zip(ids, docs, vectors)
+        ]
+        sql = (
+            f"INSERT INTO {RAG_TABLE} (id, collection, content, metadata, embedding) "
+            f"VALUES (:id, :coll, :content, CAST(:metadata AS jsonb), CAST(:embedding AS vector)) "
+            f"ON CONFLICT (id) DO UPDATE SET content = EXCLUDED.content, "
+            f"metadata = EXCLUDED.metadata, embedding = EXCLUDED.embedding"
+        )
+        with engine.begin() as conn:
+            for row in rows:
+                conn.execute(sa_text(sql), row)
+
+    def delete(self, ids: list[str]) -> None:
+        if not ids:
+            return
+        with engine.begin() as conn:
+            conn.execute(
+                sa_text(f"DELETE FROM {RAG_TABLE} WHERE collection = :coll AND id = ANY(:ids)"),
+                {"coll": self.collection, "ids": list(ids)},
+            )
+
+    def delete_collection(self) -> None:
+        with engine.begin() as conn:
+            conn.execute(
+                sa_text(f"DELETE FROM {RAG_TABLE} WHERE collection = :coll"),
+                {"coll": self.collection},
+            )
+
+
+def build_vectorstore(collection: str, docs_path: Path) -> PgVectorStore:
     raw = json.loads(docs_path.read_text(encoding="utf-8"))
     docs = [
         Document(
@@ -78,28 +257,15 @@ def build_vectorstore(collection: str, docs_path: Path) -> Chroma:
         for d in raw
     ]
     chunks = splitter.split_documents(docs)
-    try:
-        Chroma(
-            collection_name=collection,
-            embedding_function=get_embed_model(),
-            persist_directory=PERSIST_DIRECTORY,
-        ).delete_collection()
-    except Exception:
-        pass
-    return Chroma.from_documents(
-        chunks,
-        get_embed_model(),
-        collection_name=collection,
-        persist_directory=PERSIST_DIRECTORY,
-    )
+    store = PgVectorStore(collection)
+    store.delete_collection()
+    ids = [f"{collection}-{i}" for i in range(len(chunks))]
+    store.add_documents(chunks, ids=ids)
+    return store
 
 
-def load_vectorstore(collection: str) -> Chroma:
-    return Chroma(
-        collection_name=collection,
-        embedding_function=get_embed_model(),
-        persist_directory=PERSIST_DIRECTORY,
-    )
+def load_vectorstore(collection: str) -> PgVectorStore:
+    return PgVectorStore(collection)
 
 
 def add_documents_to_collection(collection: str, docs: list[Document], ids: list[str]) -> int:
@@ -152,6 +318,36 @@ def build_chroma_where(metadata_filter: MetadataFilter | None) -> dict | None:
     return {"$and": clauses}
 
 
+_SAFE_KEY = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def _filter_clause_sql(clause: dict, params: dict, idx: int) -> str | None:
+    """把单个 {key: val} / {key: {"$in": [...]}} 子句翻成 jsonb 条件。"""
+    if not clause:
+        return None
+    (key, value), = clause.items()
+    if not _SAFE_KEY.match(str(key)):
+        return None  # 防注入：非法 key 直接忽略
+    pname = f"mf_{idx}"
+    if isinstance(value, dict) and "$in" in value:
+        params[pname] = [str(v) for v in value["$in"]]
+        return f"metadata->>'{key}' = ANY(:{pname})"
+    params[pname] = str(value)
+    return f"metadata->>'{key}' = :{pname}"
+
+
+def _sql_metadata_filter(where: dict | None) -> tuple[str, dict]:
+    """build_chroma_where 的输出 → (SQL 片段, 参数)。片段含前导 ' AND '，无过滤则为空串。"""
+    if not where:
+        return "", {}
+    params: dict = {}
+    clauses = where["$and"] if "$and" in where else [where]
+    fragments = [frag for i, c in enumerate(clauses) if (frag := _filter_clause_sql(c, params, i))]
+    if not fragments:
+        return "", {}
+    return " AND " + " AND ".join(fragments), params
+
+
 def vector_search(
     collection: str,
     query: str,
@@ -164,12 +360,17 @@ def vector_search(
     limit = fetch_k or k
     try:
         if where:
-            return vs.similarity_search(BGE_QUERY_PREFIX + query, k=limit, filter=where)
-        return vs.similarity_search(BGE_QUERY_PREFIX + query, k=limit)
+            return vs.similarity_search(query, k=limit, filter=where)
+        return vs.similarity_search(query, k=limit)
     except Exception:
+        # embedding API / pgvector 不可用（未配 key、未建索引、DB 非 Postgres）时降级：
+        # 带过滤的再试一次无过滤；仍失败则返回空，让 keyword 路径独立工作、上层不崩。
         if where:
-            return vs.similarity_search(BGE_QUERY_PREFIX + query, k=limit)
-        raise
+            try:
+                return vs.similarity_search(query, k=limit)
+            except Exception:
+                return []
+        return []
 
 
 QUERY_STOPWORDS = {
