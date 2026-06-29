@@ -2,6 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# LLM 调用经 zode_client.js（node 子进程，仅用内置 https 模块）发出，
+# 故镜像需装 Node.js；否则运行时报 [Errno 2] No such file or directory: 'node'。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
