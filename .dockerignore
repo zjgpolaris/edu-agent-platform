@@ -11,11 +11,10 @@ venv
 
 # 本地向量库 / 大语料（运行时挂载或重建，不进镜像）
 .chroma
-# RAG 大语料 corpus.json 不进镜像（RAG 会降级），但历史地图的 geo_events.json 是
-# 历史时空页的数据源，需打进后端镜像，故排除整个 knowledge_base 后单独放行 history 小数据。
+# 真正重的是 .chroma 向量库与 BGE 模型；knowledge_base/history 下只是小数据
+# （corpus.json 2.3MB + geo_events 60K），是历史地图与游戏 LLM 出题的上下文源，需进镜像。
 knowledge_base
 !knowledge_base/history
-knowledge_base/history/corpus.json
 # textbooks 的原始 PDF/OCR 不进镜像，但结构化教材 YAML 是教材同步学习页的数据源，必须打进后端镜像
 textbooks/*
 !textbooks/structured

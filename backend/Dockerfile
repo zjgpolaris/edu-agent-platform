@@ -17,8 +17,8 @@ COPY backend/ .
 # loader 会在 /app/textbooks/structured 查找，故放到该路径下。
 COPY textbooks/structured/ ./textbooks/structured/
 
-# 历史时空地图的地理事件数据（geo_events.json）。corpus.json 已被 .dockerignore
-# 排除，这里只会带入 history 下的小数据；loader 会在 /app/knowledge_base/history 查找。
+# 历史时空地图与游戏 LLM 出题所需的小数据（geo_events.json + corpus.json）。
+# .dockerignore 已放行 knowledge_base/history；loader 会在 /app/knowledge_base/history 查找。
 COPY knowledge_base/ ./knowledge_base/
 
 ENV PYTHONPATH=/app

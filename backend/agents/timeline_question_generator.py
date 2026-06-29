@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 from pathlib import Path
@@ -13,7 +14,24 @@ from rag.knowledge_base import search_with_scores
 from structured_output import StructuredOutputError, invoke_structured, parse_json_object
 from tracing import truncate_text
 
-CORPUS_PATH = Path(__file__).parents[2] / "knowledge_base" / "history" / "corpus.json"
+
+def _resolve_corpus_path() -> Path:
+    """定位 corpus.json，兼容本地仓库与容器布局（见 history_map_agent 同款说明）。"""
+    env_path = os.environ.get("HISTORY_CORPUS_PATH")
+    if env_path:
+        return Path(env_path)
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[2] / "knowledge_base" / "history" / "corpus.json",
+        here.parents[1] / "knowledge_base" / "history" / "corpus.json",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+CORPUS_PATH = _resolve_corpus_path()
 _corpus_cache: list[dict] | None = None
 
 _TOPIC_GRADE_MAP = {
@@ -459,8 +477,12 @@ def generate_timeline_round_with_llm(
 def _load_corpus() -> list[dict]:
     global _corpus_cache
     if _corpus_cache is None:
-        with open(CORPUS_PATH, encoding="utf-8") as f:
-            _corpus_cache = json.load(f)
+        try:
+            with open(CORPUS_PATH, encoding="utf-8") as f:
+                _corpus_cache = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            # corpus 缺失/损坏时降级为空：出题会走静态兜底而非抛 FileNotFoundError。
+            _corpus_cache = []
     return _corpus_cache
 
 
