@@ -1,0 +1,371 @@
+[
+  {
+    "name": "商鞅变法",
+    "character": "商鞅",
+    "message": "你为什么要变法？",
+    "expected_source_keywords": ["商鞅", "变法"],
+    "expected_response_keywords": ["变法", "秦国", "法令"],
+    "min_sources": 1
+  },
+  {
+    "name": "商鞅变法影响",
+    "character": "商鞅",
+    "message": "变法对秦国有什么长远影响？",
+    "expected_source_keywords": ["秦", "变法"],
+    "expected_response_keywords": ["富国强兵", "统一", "秦国"],
+    "min_sources": 1
+  },
+  {
+    "name": "商鞅变法阻力",
+    "character": "商鞅",
+    "message": "变法为什么会遇到阻力？",
+    "expected_source_keywords": ["变法", "贵族"],
+    "expected_response_keywords": ["贵族", "利益", "阻力"],
+    "min_sources": 1
+  },
+  {
+    "name": "商鞅变法推演",
+    "character": "商鞅",
+    "message": "如果变法没有成功，秦国会怎样？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["秦", "变法"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "商鞅徙木立信",
+    "character": "商鞅",
+    "message": "你为什么要徙木立信？",
+    "expected_source_keywords": ["商鞅", "徙木立信"],
+    "expected_response_keywords": ["信", "法令", "百姓"],
+    "min_sources": 1
+  },
+  {
+    "name": "秦始皇统一文字",
+    "character": "秦始皇",
+    "message": "统一文字为什么重要？",
+    "expected_source_keywords": ["秦", "统一", "文字"],
+    "expected_response_keywords": ["文字", "统一", "交流"],
+    "min_sources": 1
+  },
+  {
+    "name": "秦始皇焚书坑儒",
+    "character": "秦始皇",
+    "message": "你为什么下令焚书坑儒？",
+    "expected_source_keywords": ["秦始皇", "焚书"],
+    "expected_response_keywords": ["思想", "统治", "儒"],
+    "min_sources": 1
+  },
+  {
+    "name": "秦始皇统一六国",
+    "character": "秦始皇",
+    "message": "你是如何统一六国的？",
+    "expected_source_keywords": ["秦始皇", "统一"],
+    "expected_response_keywords": ["六国", "统一", "秦"],
+    "min_sources": 1
+  },
+  {
+    "name": "秦始皇修长城",
+    "character": "秦始皇",
+    "message": "你为什么要修筑长城？",
+    "expected_source_keywords": ["秦始皇", "长城"],
+    "expected_response_keywords": ["匈奴", "防御", "长城"],
+    "min_sources": 1
+  },
+  {
+    "name": "秦始皇反事实",
+    "character": "秦始皇",
+    "message": "如果秦朝没有灭亡，中国会怎样？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["秦"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "林则徐虎门销烟",
+    "character": "林则徐",
+    "message": "虎门销烟有什么历史意义？",
+    "expected_source_keywords": ["林则徐", "虎门销烟", "鸦片"],
+    "expected_response_keywords": ["鸦片", "虎门", "抗争"],
+    "min_sources": 1
+  },
+  {
+    "name": "林则徐禁烟动机",
+    "character": "林则徐",
+    "message": "你为什么决心禁烟？",
+    "expected_source_keywords": ["鸦片", "林则徐"],
+    "expected_response_keywords": ["危害", "百姓", "禁烟"],
+    "min_sources": 1
+  },
+  {
+    "name": "林则徐开眼看世界",
+    "character": "林则徐",
+    "message": "你为什么要开眼看世界？",
+    "expected_source_keywords": ["林则徐", "开眼看世界"],
+    "expected_response_keywords": ["西方", "学习", "强国"],
+    "min_sources": 1
+  },
+  {
+    "name": "林则徐流放",
+    "character": "林则徐",
+    "message": "你被流放新疆后做了什么？",
+    "expected_source_keywords": ["林则徐", "流放"],
+    "expected_response_keywords": ["新疆", "水利", "爱国"],
+    "min_sources": 1
+  },
+  {
+    "name": "林则徐反事实",
+    "character": "林则徐",
+    "message": "如果鸦片战争清政府获胜，中国会怎样？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["鸦片战争"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "孔子教育思想",
+    "character": "孔子",
+    "message": "你的教育理念是什么？",
+    "expected_source_keywords": ["孔子", "教育"],
+    "expected_response_keywords": ["仁", "礼", "学习"],
+    "min_sources": 1
+  },
+  {
+    "name": "孔子仁的思想",
+    "character": "孔子",
+    "message": "什么是仁？",
+    "expected_source_keywords": ["孔子", "仁"],
+    "expected_response_keywords": ["仁", "爱人", "道德"],
+    "min_sources": 1
+  },
+  {
+    "name": "孔子反事实",
+    "character": "孔子",
+    "message": "如果你能见到秦始皇，你会说什么？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["孔子"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "孔子周游列国",
+    "character": "孔子",
+    "message": "你为什么要周游列国？",
+    "expected_source_keywords": ["孔子", "周游列国"],
+    "expected_response_keywords": ["仁政", "诸侯", "理想"],
+    "min_sources": 1
+  },
+  {
+    "name": "孔子有教无类",
+    "character": "孔子",
+    "message": "你为什么要提倡有教无类？",
+    "expected_source_keywords": ["孔子", "有教无类"],
+    "expected_response_keywords": ["教育", "平等", "弟子"],
+    "min_sources": 1
+  },
+  {
+    "name": "岳飞抗金",
+    "character": "岳飞",
+    "message": "你为什么坚持抗金？",
+    "expected_source_keywords": ["岳飞", "金"],
+    "expected_response_keywords": ["抗金", "国家", "忠"],
+    "min_sources": 1
+  },
+  {
+    "name": "岳飞被害",
+    "character": "岳飞",
+    "message": "你被以莫须有罪名处死，你怎么看？",
+    "expected_source_keywords": ["岳飞", "秦桧"],
+    "expected_response_keywords": ["忠义", "冤屈", "国家"],
+    "min_sources": 1
+  },
+  {
+    "name": "岳飞岳家军",
+    "character": "岳飞",
+    "message": "岳家军为什么能打仗？",
+    "expected_source_keywords": ["岳飞", "岳家军"],
+    "expected_response_keywords": ["纪律", "训练", "爱国"],
+    "min_sources": 1
+  },
+  {
+    "name": "岳飞反事实",
+    "character": "岳飞",
+    "message": "如果宋高宗不召回你，你能收复中原吗？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["岳飞"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "岳飞精忠报国",
+    "character": "岳飞",
+    "message": "精忠报国对你意味着什么？",
+    "expected_source_keywords": ["岳飞", "精忠报国"],
+    "expected_response_keywords": ["忠", "国家", "母亲"],
+    "min_sources": 1
+  },
+  {
+    "name": "郑和下西洋",
+    "character": "郑和",
+    "message": "下西洋的主要目的是什么？",
+    "expected_source_keywords": ["郑和", "下西洋"],
+    "expected_response_keywords": ["贸易", "友好", "航海"],
+    "min_sources": 1
+  },
+  {
+    "name": "郑和航海成就",
+    "character": "郑和",
+    "message": "你的航海有什么成就？",
+    "expected_source_keywords": ["郑和", "航海"],
+    "expected_response_keywords": ["船队", "远航", "交流"],
+    "min_sources": 1
+  },
+  {
+    "name": "郑和反事实",
+    "character": "郑和",
+    "message": "如果明朝继续下西洋，中国会怎样？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["郑和"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "郑和宝船",
+    "character": "郑和",
+    "message": "宝船有多大？",
+    "expected_source_keywords": ["郑和", "宝船"],
+    "expected_response_keywords": ["船", "规模", "明朝"],
+    "min_sources": 1
+  },
+  {
+    "name": "郑和外交",
+    "character": "郑和",
+    "message": "你在海外如何开展外交？",
+    "expected_source_keywords": ["郑和", "外交"],
+    "expected_response_keywords": ["友好", "贸易", "明朝"],
+    "min_sources": 1
+  },
+  {
+    "name": "武则天执政",
+    "character": "武则天",
+    "message": "你是如何治理国家的？",
+    "expected_source_keywords": ["武则天", "唐"],
+    "expected_response_keywords": ["科举", "农业", "治国"],
+    "min_sources": 1
+  },
+  {
+    "name": "武则天称帝",
+    "character": "武则天",
+    "message": "你为什么能成为中国唯一女皇帝？",
+    "expected_source_keywords": ["武则天", "女皇帝"],
+    "expected_response_keywords": ["能力", "时机", "唐"],
+    "min_sources": 1
+  },
+  {
+    "name": "武则天反事实",
+    "character": "武则天",
+    "message": "如果你没有称帝，唐朝会怎样？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["武则天"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "武则天无字碑",
+    "character": "武则天",
+    "message": "你为什么要立无字碑？",
+    "expected_source_keywords": ["武则天", "无字碑"],
+    "expected_response_keywords": ["评价", "后人", "碑"],
+    "min_sources": 1
+  },
+  {
+    "name": "武则天用人",
+    "character": "武则天",
+    "message": "你如何选拔人才？",
+    "expected_source_keywords": ["武则天", "人才"],
+    "expected_response_keywords": ["科举", "贤能", "用人"],
+    "min_sources": 1
+  },
+  {
+    "name": "张骞出使西域",
+    "character": "张骞",
+    "message": "出使西域遇到了哪些困难？",
+    "expected_source_keywords": ["张骞", "西域"],
+    "expected_response_keywords": ["丝绸之路", "西域", "使命"],
+    "min_sources": 1
+  },
+  {
+    "name": "张骞丝绸之路",
+    "character": "张骞",
+    "message": "丝绸之路有什么意义？",
+    "expected_source_keywords": ["张骞", "丝绸之路"],
+    "expected_response_keywords": ["贸易", "交流", "汉朝"],
+    "min_sources": 1
+  },
+  {
+    "name": "张骞反事实",
+    "character": "张骞",
+    "message": "如果张骞没有出使西域，汉朝会怎样？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["张骞"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "张骞被俘",
+    "character": "张骞",
+    "message": "你被匈奴俘虏后如何逃脱？",
+    "expected_source_keywords": ["张骞", "匈奴"],
+    "expected_response_keywords": ["逃脱", "使命", "西域"],
+    "min_sources": 1
+  },
+  {
+    "name": "张骞两次出使",
+    "character": "张骞",
+    "message": "你为什么要两次出使西域？",
+    "expected_source_keywords": ["张骞", "出使"],
+    "expected_response_keywords": ["使命", "西域", "汉朝"],
+    "min_sources": 1
+  },
+  {
+    "name": "戊戌变法失败原因",
+    "character": "康有为",
+    "message": "戊戌变法为什么会失败？",
+    "expected_source_keywords": ["戊戌", "变法"],
+    "expected_response_keywords": ["变法", "守旧", "改革"],
+    "min_sources": 1
+  },
+  {
+    "name": "康有为改革方向",
+    "character": "康有为",
+    "message": "你认为中国最需要哪方面的改革？",
+    "expected_source_keywords": ["康有为", "改革"],
+    "expected_response_keywords": ["制度", "变法", "富强"],
+    "min_sources": 1
+  },
+  {
+    "name": "康有为公车上书",
+    "character": "康有为",
+    "message": "你为什么要公车上书？",
+    "expected_source_keywords": ["康有为", "公车上书"],
+    "expected_response_keywords": ["变法", "上书", "甲午"],
+    "min_sources": 1
+  },
+  {
+    "name": "康有为反事实",
+    "character": "康有为",
+    "message": "如果戊戌变法成功，中国会怎样？",
+    "mode": "counterfactual",
+    "expected_source_keywords": ["戊戌变法"],
+    "expected_response_keywords": ["推演"],
+    "min_sources": 1
+  },
+  {
+    "name": "康有为变法主张",
+    "character": "康有为",
+    "message": "你的变法主张有哪些？",
+    "expected_source_keywords": ["康有为", "变法"],
+    "expected_response_keywords": ["君主立宪", "变法", "维新"],
+    "min_sources": 1
+  }
+]

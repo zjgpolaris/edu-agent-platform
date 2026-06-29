@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>虚拟历史人物对话</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #172033;
+      background: #f5f7fb;
+    }
+    body {
+      margin: 0;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #1f3b73, #7b4fb3);
+      color: white;
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 16px 40px rgba(31, 59, 115, 0.18);
+    }
+    .hero p {
+      max-width: 720px;
+      line-height: 1.7;
+      opacity: 0.92;
+    }
+    .panel {
+      background: white;
+      border-radius: 20px;
+      margin-top: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(18, 31, 58, 0.08);
+    }
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    input, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #d9deea;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+      background: #fbfcff;
+    }
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 16px;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .chip {
+      border: 1px solid #d9deea;
+      background: #f8f9fd;
+      color: #2b3652;
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .chip:hover {
+      border-color: #7b4fb3;
+      color: #5b34a0;
+    }
+    button.primary {
+      margin-top: 16px;
+      border: 0;
+      background: #1f3b73;
+      color: white;
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 12px;
+      color: #5a6478;
+    }
+    .answer {
+      white-space: pre-wrap;
+      line-height: 1.8;
+      background: #fbfcff;
+      border: 1px solid #edf0f6;
+      border-radius: 16px;
+      padding: 18px;
+    }
+    .sources {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .source-card {
+      border: 1px solid #e4e8f1;
+      border-radius: 14px;
+      padding: 14px;
+      background: #fff;
+    }
+    .source-title {
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .source-meta {
+      color: #64708a;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .hidden {
+      display: none;
+    }
+    @media (max-width: 720px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>虚拟历史人物对话</h1>
+      <p>输入历史人物和问题，系统会先检索广东初中历史史料，再用教学模拟方式回答，并展示史料依据。</p>
+    </section>
+
+    <section class="panel">
+      <div class="chips" id="characterChips"></div>
+      <div class="grid">
+        <div>
+          <label for="character">历史人物</label>
+          <input id="character" value="商鞅" />
+        </div>
+        <div>
+          <label for="message">学生问题</label>
+          <textarea id="message">你为什么要变法？</textarea>
+        </div>
+      </div>
+      <button class="primary" id="submit">开始对话</button>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="panel hidden" id="resultPanel">
+      <h2>教学模拟回答</h2>
+      <div class="answer" id="answer"></div>
+      <h2>史料依据</h2>
+      <div class="sources" id="sources"></div>
+    </section>
+  </main>
+
+  <script>
+    const examples = [
+      ["商鞅", "你为什么要变法？"],
+      ["秦始皇", "统一文字为什么重要？"],
+      ["唐太宗", "什么是贞观之治？"],
+      ["林则徐", "虎门销烟有什么历史意义？"],
+      ["孙中山", "为什么要推翻清朝？"]
+    ];
+
+    const characterInput = document.querySelector("#character");
+    const messageInput = document.querySelector("#message");
+    const submitButton = document.querySelector("#submit");
+    const statusEl = document.querySelector("#status");
+    const resultPanel = document.querySelector("#resultPanel");
+    const answerEl = document.querySelector("#answer");
+    const sourcesEl = document.querySelector("#sources");
+    const chipsEl = document.querySelector("#characterChips");
+
+    for (const [character, message] of examples) {
+      const button = document.createElement("button");
+      button.className = "chip";
+      button.type = "button";
+      button.textContent = character;
+      button.addEventListener("click", () => {
+        characterInput.value = character;
+        messageInput.value = message;
+      });
+      chipsEl.appendChild(button);
+    }
+
+    function renderSources(sources) {
+      sourcesEl.innerHTML = "";
+      if (!sources.length) {
+        sourcesEl.textContent = "暂无史料依据。";
+        return;
+      }
+      for (const source of sources) {
+        const card = document.createElement("article");
+        card.className = "source-card";
+        card.innerHTML = `
+          <div class="source-title">${escapeHtml(source.topic || "未标注主题")}</div>
+          <div class="source-meta">${escapeHtml([source.grade, source.unit, source.source].filter(Boolean).join(" · "))}</div>
+          <div>${escapeHtml(source.content || "")}</div>
+        `;
+        sourcesEl.appendChild(card);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    submitButton.addEventListener("click", async () => {
+      const character = characterInput.value.trim();
+      const message = messageInput.value.trim();
+      if (!character || !message) {
+        statusEl.textContent = "请填写历史人物和问题。";
+        return;
+      }
+
+      submitButton.disabled = true;
+      statusEl.textContent = "正在检索史料、生成回答并校验史实...";
+      resultPanel.classList.add("hidden");
+
+      try {
+        const response = await fetch("http://localhost:8000/api/history/character/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ character, message, stream: true })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        const data = JSON.parse(text.trim().split("\n").at(-1));
+        answerEl.textContent = data.response || "";
+        renderSources(data.sources || []);
+        resultPanel.classList.remove("hidden");
+        statusEl.textContent = data.verified ? "已完成，并通过史实校验。" : "已完成。";
+      } catch (error) {
+        statusEl.textContent = `请求失败：${error.message}。请确认后端服务运行在 http://localhost:8000`;
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

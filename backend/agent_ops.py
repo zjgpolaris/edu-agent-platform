@@ -1,0 +1,189 @@
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
+from typing import Any
+
+from security.audit_log import list_audit_events
+from student_profile import list_learning_events
+
+
+def _generated_at() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _top(counter: Counter[str], limit: int = 8) -> dict[str, int]:
+    return dict(counter.most_common(limit))
+
+
+def _trace_id(event: dict[str, Any]) -> str | None:
+    metadata = event.get("metadata") or {}
+    trace_id = metadata.get("trace_id")
+    return trace_id if isinstance(trace_id, str) and trace_id else None
+
+
+def _event_time(event: dict[str, Any]) -> str:
+    return str(event.get("created_at") or "")
+
+
+def _tool_name(event: dict[str, Any]) -> str | None:
+    value = (event.get("metadata") or {}).get("tool_name")
+    return value if isinstance(value, str) and value else None
+
+
+def _compact_recent(events: list[dict[str, Any]], *, fields: list[str], limit: int = 10) -> list[dict[str, Any]]:
+    recent = []
+    for event in events[:limit]:
+        item = {field: event.get(field) for field in fields if field in event}
+        metadata = event.get("metadata") or {}
+        trace_id = metadata.get("trace_id")
+        if trace_id:
+            item["trace_id"] = trace_id
+        recent.append(item)
+    return recent
+
+
+def _build_trace_groups(audit_events: list[dict[str, Any]], learning_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "trace_id": "",
+            "audit_count": 0,
+            "learning_count": 0,
+            "actions": set(),
+            "features": set(),
+            "tools": set(),
+            "latest_at": "",
+        }
+    )
+
+    for event in audit_events:
+        trace_id = _trace_id(event)
+        if not trace_id:
+            continue
+        group = groups[trace_id]
+        group["trace_id"] = trace_id
+        group["audit_count"] += 1
+        if event.get("action"):
+            group["actions"].add(event["action"])
+        group["latest_at"] = max(group["latest_at"], _event_time(event))
+
+    for event in learning_events:
+        trace_id = _trace_id(event)
+        if not trace_id:
+            continue
+        group = groups[trace_id]
+        group["trace_id"] = trace_id
+        group["learning_count"] += 1
+        if event.get("feature"):
+            group["features"].add(event["feature"])
+        tool_name = (event.get("metadata") or {}).get("tool_name")
+        if isinstance(tool_name, str) and tool_name:
+            group["tools"].add(tool_name)
+        group["latest_at"] = max(group["latest_at"], _event_time(event))
+
+    normalized = []
+    for group in groups.values():
+        normalized.append(
+            {
+                "trace_id": group["trace_id"],
+                "audit_count": group["audit_count"],
+                "learning_count": group["learning_count"],
+                "actions": sorted(group["actions"]),
+                "features": sorted(group["features"]),
+                "tools": sorted(group["tools"]),
+                "latest_at": group["latest_at"],
+            }
+        )
+    return sorted(normalized, key=lambda item: item["latest_at"], reverse=True)[:20]
+
+
+def _status(total_events: int, coverage_rate: float) -> str:
+    if total_events == 0:
+        return "no_events"
+    if coverage_rate < 0.5:
+        return "partial_trace_coverage"
+    return "ok"
+
+
+def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
+    limit = max(1, min(int(limit), 500))
+    try:
+        audit_events = list_audit_events(limit=limit)
+        learning_events = list_learning_events(limit=limit)
+    except Exception as exc:
+        return {
+            "schema_version": 1,
+            "generated_at": _generated_at(),
+            "window": {"limit": limit},
+            "status": "unavailable",
+            "error": str(exc),
+        }
+
+    audit_with_trace = sum(1 for event in audit_events if _trace_id(event))
+    learning_with_trace = sum(1 for event in learning_events if _trace_id(event))
+    total_events = len(audit_events) + len(learning_events)
+    traced_events = audit_with_trace + learning_with_trace
+    coverage_rate = round(traced_events / total_events, 3) if total_events else 0.0
+
+    audit_action_counts = Counter(str(event.get("action") or "unknown") for event in audit_events)
+    audit_resource_counts = Counter(str(event.get("resource_type") or "unknown") for event in audit_events)
+    learning_feature_counts = Counter(str(event.get("feature") or "unknown") for event in learning_events)
+    learning_type_counts = Counter(str(event.get("event_type") or "unknown") for event in learning_events)
+    tool_counts = Counter(tool_name for event in learning_events if (tool_name := _tool_name(event)))
+    tool_failures = [
+        {
+            "tool_name": (event.get("metadata") or {}).get("tool_name"),
+            "event_type": event.get("event_type"),
+            "student_id": event.get("student_id"),
+            "trace_id": _trace_id(event),
+            "created_at": event.get("created_at"),
+        }
+        for event in learning_events
+        if (event.get("metadata") or {}).get("tool_name") and event.get("success") is False
+    ][:20]
+
+    unique_trace_ids = sorted({trace_id for event in [*audit_events, *learning_events] if (trace_id := _trace_id(event))})
+    learning_success = sum(1 for event in learning_events if event.get("success") is True)
+    learning_failure = sum(1 for event in learning_events if event.get("success") is False)
+    learning_unknown = len(learning_events) - learning_success - learning_failure
+    audit_success = sum(1 for event in audit_events if event.get("success") is True)
+    audit_failure = len(audit_events) - audit_success
+
+    return {
+        "schema_version": 1,
+        "generated_at": _generated_at(),
+        "window": {"limit": limit},
+        "status": _status(total_events, coverage_rate),
+        "trace_correlation": {
+            "audit_total": len(audit_events),
+            "audit_with_trace": audit_with_trace,
+            "learning_total": len(learning_events),
+            "learning_with_trace": learning_with_trace,
+            "coverage_rate": coverage_rate,
+            "unique_trace_ids": len(unique_trace_ids),
+        },
+        "audit": {
+            "total": len(audit_events),
+            "success": audit_success,
+            "failure": audit_failure,
+            "by_action": _top(audit_action_counts),
+            "by_resource_type": _top(audit_resource_counts),
+            "recent": _compact_recent(audit_events, fields=["id", "action", "actor_id", "resource_type", "resource_id", "success", "created_at"]),
+        },
+        "learning": {
+            "total": len(learning_events),
+            "success": learning_success,
+            "failure": learning_failure,
+            "unknown": learning_unknown,
+            "by_feature": _top(learning_feature_counts),
+            "by_event_type": _top(learning_type_counts),
+            "recent": _compact_recent(learning_events, fields=["id", "student_id", "feature", "event_type", "success", "created_at"]),
+        },
+        "tools": {
+            "by_tool_name": _top(tool_counts),
+            "failures": tool_failures,
+        },
+        "traces": {
+            "recent": _build_trace_groups(audit_events, learning_events),
+        },
+    }

@@ -1,0 +1,37 @@
+[
+  {
+    "name": "秦始皇修长城动机",
+    "question": "秦始皇为什么要修长城？",
+    "ground_truth": "为了抵御北方匈奴的入侵，保护中原农业文明。",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "name": "商鞅变法内容",
+    "question": "商鞅变法的主要措施有哪些？",
+    "ground_truth": "废除井田制，奖励军功，推行县制，统一度量衡。",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "name": "林则徐虎门销烟",
+    "question": "虎门销烟有什么历史意义？",
+    "ground_truth": "展示了中国人民反抗外来侵略的决心，是鸦片战争的导火线。",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "name": "辛亥革命",
+    "question": "辛亥革命的历史意义是什么？",
+    "ground_truth": "推翻了清朝统治，结束了中国两千多年的封建帝制，建立了中华民国。",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "name": "丝绸之路",
+    "question": "丝绸之路对中国有什么影响？",
+    "ground_truth": "促进了东西方经济文化交流，推动了汉朝的繁荣。",
+    "contexts": [],
+    "answer": ""
+  }
+]

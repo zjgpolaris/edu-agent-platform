@@ -1,0 +1,41 @@
+# Render Blueprint — AutoTutor 后端（Docker）
+# 用法：Render Dashboard → New → Blueprint → 指向本仓库，自动读取此文件。
+# 部署后把后端公网 URL 填到 Vercel 的 NEXT_PUBLIC_API_BASE_URL。
+#
+# 注：会话/限流当前用进程内存兜底（TTL 1h），demo 无需独立 Redis；
+#     如需跨实例持久化，再单独接 Render Key Value 并改造 session_store。
+services:
+  - type: web
+    name: edu-agent-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /api/debug/llm/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHONPATH
+        value: /app
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # 线上前端域名（Vercel 自定义域名时回填；*.vercel.app 已由后端正则放行）
+      - key: FRONTEND_ORIGIN
+        sync: false
+      # Supabase / Postgres 连接串
+      - key: DATABASE_URL
+        sync: false
+      # LLM 凭证 —— 在 Render 面板填写，勿入库
+      - key: LLM_PROVIDER
+        value: anthropic
+      - key: ANTHROPIC_AUTH_TOKEN
+        sync: false
+      - key: ANTHROPIC_BASE_URL
+        sync: false
+      - key: ANTHROPIC_MODEL_QUALITY
+        sync: false
+      - key: ANTHROPIC_MODEL_FAST
+        sync: false
+      - key: ANTHROPIC_MODEL_FALLBACK
+        sync: false
+      # 说明：云端无本地 BGE 模型，故不设 EMBED_MODEL_PATH，
+      # RAG 取材会自动降级为模型自有知识出题（auto_tutor 的 degraded 路径），demo 仍可跑通。

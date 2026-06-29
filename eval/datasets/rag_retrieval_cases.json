@@ -1,0 +1,42 @@
+[
+  {
+    "name": "商鞅变法",
+    "query": "商鞅为什么要变法？",
+    "expected_keywords": ["商鞅", "变法"],
+    "expected_metadata": {"topic": "商鞅变法", "grade": "七年级上"},
+    "metadata_filter": {"grade": "七年级上"},
+    "metadata_hints": {"topic": "商鞅变法", "event": "商鞅变法", "entities": ["商鞅"], "tags": ["变法", "秦国"]}
+  },
+  {
+    "name": "秦始皇统一文字",
+    "query": "秦始皇统一文字为什么重要？",
+    "expected_keywords": ["秦", "统一", "文字"],
+    "expected_metadata": {"topic": "统一文字", "grade": "七年级上"},
+    "metadata_filter": {"grade": "七年级上"},
+    "metadata_hints": {"topic": "统一文字", "event": "统一文字", "entities": ["秦始皇"], "tags": ["秦朝", "文字", "统一"]}
+  },
+  {
+    "name": "林则徐虎门销烟",
+    "query": "虎门销烟有什么历史意义？",
+    "expected_keywords": ["林则徐", "虎门销烟", "鸦片"],
+    "expected_metadata": {"topic": "虎门销烟", "grade": "八年级上"},
+    "metadata_filter": {"grade": "八年级上"},
+    "metadata_hints": {"topic": "虎门销烟", "event": "虎门销烟", "entities": ["林则徐"], "tags": ["鸦片", "禁烟运动"]}
+  },
+  {
+    "name": "唐太宗贞观之治",
+    "query": "什么是贞观之治？",
+    "expected_keywords": ["唐太宗", "贞观", "唐朝"],
+    "expected_metadata": {"topic": "贞观之治", "grade": "七年级下"},
+    "metadata_filter": {"grade": ["七年级上", "七年级下"]},
+    "metadata_hints": {"topic": "贞观之治", "event": "贞观之治", "entities": ["唐太宗"], "tags": ["唐朝", "治世"]}
+  },
+  {
+    "name": "张骞出使西域",
+    "query": "张骞出使西域为什么重要？",
+    "expected_keywords": ["张骞", "西域", "丝绸之路"],
+    "expected_metadata": {"topic": "张骞", "grade": "七年级上"},
+    "metadata_filter": {"grade": "七年级上"},
+    "metadata_hints": {"topic": "张骞", "event": "张骞出使西域", "entities": ["张骞"], "tags": ["西域", "丝绸之路"]}
+  }
+]

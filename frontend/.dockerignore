@@ -1,0 +1,27 @@
+# 依赖与构建产物
+node_modules
+.next
+out
+dist
+
+# 版本控制与本地环境
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# 本地数据 / 大文件（不进镜像）
+.chroma
+*.log
+
+# 编辑器 / 系统
+.DS_Store
+.vscode
+.idea
+
+# Python 侧产物（前端镜像不需要）
+__pycache__
+*.pyc
+.venv
+venv

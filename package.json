@@ -1,0 +1,11 @@
+{
+  "name": "edu-agent-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:backend": "set -a; [ -f .env.local ] && . ./.env.local; set +a; PYTHONPATH=backend python3 -m uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "test": "PYTHONPATH=backend python3 eval/run_core_evals.py --smoke"
+  }
+}

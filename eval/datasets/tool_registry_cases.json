@@ -1,0 +1,30 @@
+[
+  {
+    "name": "search_history_knowledge_valid",
+    "tool_name": "search_history_knowledge",
+    "payload": {"query": "商鞅变法", "k": 3},
+    "actor_role": "anonymous"
+  },
+  {
+    "name": "get_student_profile_role_denied",
+    "tool_name": "get_student_profile",
+    "payload": {"student_id": "test-student"},
+    "actor_role": "anonymous",
+    "expected_error": "role_denied"
+  },
+  {
+    "name": "delete_demo_memory_needs_confirmation",
+    "tool_name": "delete_demo_memory",
+    "payload": {"student_id": "test-student", "memory_id": "demo_wrong_memory_001", "reason": "eval"},
+    "actor_role": "student",
+    "confirmed": false,
+    "expected_error": "confirmation_required"
+  },
+  {
+    "name": "search_invalid_input_rejected",
+    "tool_name": "search_history_knowledge",
+    "payload": {"top_k": "not_a_number"},
+    "actor_role": "anonymous",
+    "expected_error": "invalid_input"
+  }
+]

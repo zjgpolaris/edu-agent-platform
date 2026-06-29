@@ -1,0 +1,16 @@
+.env.local
+.env
+.data/
+node_modules
+.next
+frontend/node_modules
+frontend/.next
+__pycache__
+*.pyc
+textbooks/raw/
+
+# 本地向量库（云端走 degraded，不需要；48M 不入库）
+.chroma
+# 前端 standalone 构建产物
+frontend/.next/standalone
+.DS_Store

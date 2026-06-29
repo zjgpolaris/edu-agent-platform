@@ -1,0 +1,23 @@
+[
+  {
+    "name": "默认教材解释",
+    "question": "解释一下",
+    "action": "explain",
+    "expected_answer_keywords": [],
+    "expected_source_keywords": []
+  },
+  {
+    "name": "默认教材重要性",
+    "question": "为什么重要",
+    "action": "importance",
+    "expected_answer_keywords": [],
+    "expected_source_keywords": []
+  },
+  {
+    "name": "默认教材考点",
+    "question": "容易怎么考",
+    "action": "exam",
+    "expected_answer_keywords": [],
+    "expected_source_keywords": []
+  }
+]
