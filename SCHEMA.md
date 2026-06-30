@@ -27,7 +27,7 @@ EduAgent 是一个 K-12 中文/历史 AI 教学平台，采用前后端分离架
 - **后端：** FastAPI + LangGraph + Postgres/pgvector RAG
 - **前端：** Next.js 14 App Router + TypeScript
 - **数据存储：** Supabase PostgreSQL（未配置时本地 SQLite 降级）+ pgvector 向量库
-- **LLM/Embedding：** 支持 Anthropic、Bailian、DashScope；生产 RAG embedding 走 DashScope/百炼 `text-embedding-v3`
+- **LLM/Embedding：** 支持 Anthropic、Bailian、DashScope；生产 RAG embedding 走 OpenAI-compatible 托管 API（默认 Jina `jina-embeddings-v3`）
 
 ---
 
@@ -182,7 +182,7 @@ backend/
 | `api/main.py` | FastAPI 主入口，所有 API 端点 |
 | `homework_grading/` | 作业批改，支持拍照上传、OCR、AI 批改 |
 | `materials/` | 多模态资料库，支持 PDF/图片上传、解析、RAG |
-| `rag/` | RAG 检索，基于 DashScope/百炼 embedding + PostgreSQL pgvector；未建索引/未配 embedding 时调用方降级 |
+| `rag/` | RAG 检索，基于 OpenAI-compatible 托管 embedding + PostgreSQL pgvector；未建索引/未配 embedding 时调用方降级 |
 | `security/` | 安全模块，认证、限流、防护、审计 |
 | `services/` | 业务服务，批量批改、错题本 |
 | `textbook_learning/` | 教材学习，章节浏览、AI 问答、测验 |
@@ -445,7 +445,7 @@ frontend/
 | collection | TEXT | 集合名，如 `history`、`materials` |
 | content | TEXT | 分块文本 |
 | metadata | JSONB | 元数据（grade/topic/source/page/owner_key/material_id 等） |
-| embedding | vector(1024) | DashScope/百炼 `text-embedding-v3` 生成的向量 |
+| embedding | vector(1024) | OpenAI-compatible embedding API 生成的向量（默认 Jina `jina-embeddings-v3`，1024 维） |
 
 #### student_profiles 表
 
@@ -755,9 +755,9 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | `.dockerignore` / `frontend/.dockerignore` | 瘦身 Docker 构建上下文 |
 | `docker-compose.yml` | 本地一键起 redis + backend + frontend |
 | `scripts/seed_demo_student.py` | 灌 demo 学生（demo-student/demo123）+ 预置错题本 |
-| `scripts/build_pgvector_index.py` | 离线构建历史 RAG pgvector 索引（corpus.json → DashScope embedding → rag_documents） |
+| `scripts/build_pgvector_index.py` | 离线构建历史 RAG pgvector 索引（corpus.json → OpenAI-compatible embedding → rag_documents） |
 
-关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_MODEL`（默认 `text-embedding-v3`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。
+关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。
 
 ---
 
@@ -779,7 +779,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-06-26 | 1.10.1 | 修正时间巨轮空局容器 class，确保开局设置面板视口 fixed 居中兜底样式命中 |
 | 2026-06-26 | 1.10.2 | 时间巨轮非本人回合持续展示玩家手牌，仅禁用点击与拖拽出牌交互 |
 | 2026-06-29 | 1.11.0 | AutoTutor 上线部署配置：render.yaml + vercel.json + .dockerignore + 前端 standalone 构建 + CORS 经 FRONTEND_ORIGIN/*.vercel.app 放行；新增部署文档 |
-| 2026-06-29 | 1.12.0 | RAG 从本地 BGE/Chroma 迁移到 DashScope 托管 embedding + PostgreSQL pgvector，新增 rag_documents 表与 build_pgvector_index.py 离线建索引脚本 |
+| 2026-06-29 | 1.12.0 | RAG 从本地 BGE/Chroma 迁移到 OpenAI-compatible 托管 embedding（默认 Jina）+ PostgreSQL pgvector，新增 rag_documents 表与 build_pgvector_index.py 离线建索引脚本 |
 
 ---
 

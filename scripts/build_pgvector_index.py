@@ -2,8 +2,9 @@
 
 用法（需连真库，建议本地或 CI 跑一次，改语料后重跑）：
     DATABASE_URL=postgresql://... \
-    BAILIAN_API_KEY=sk-... \
-    [BAILIAN_BASE_URL=...] [EMBED_MODEL=text-embedding-v3] [EMBED_DIM=1024] \
+    EMBED_API_BASE=https://api.jina.ai/v1 \
+    EMBED_API_KEY=jina_... \
+    EMBED_MODEL=jina-embeddings-v3 EMBED_TASK=text-matching EMBED_DIM=1024 \
     python3 scripts/build_pgvector_index.py
 
 - 不在生产运行时执行；生产只查询。

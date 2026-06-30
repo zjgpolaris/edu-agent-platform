@@ -1,6 +1,6 @@
 """RAG 知识库 — 历史史料 & 古诗文典籍
 
-生产形态：Embedding 走 DashScope/百炼 兼容 API（复用 LLM 的 BAILIAN_API_KEY），
+生产形态：Embedding 走 OpenAI-compatible 托管 API（默认 Jina，可切 SiliconFlow/百炼等），
 向量库走 Postgres + pgvector（复用 DATABASE_URL）。本地若 DATABASE_URL 仍是 sqlite，
 向量检索会优雅降级为空（调用方均有兜底）；本地要用 RAG 请把 DATABASE_URL 指向
 带 pgvector 的 Postgres（可直接用 Supabase）。
@@ -41,19 +41,25 @@ class ScoredDocument(TypedDict, total=False):
     rerank_score: float | None
     final_score: float
 
-_EMBED_MODEL: "DashScopeEmbeddings | None" = None
+_EMBED_MODEL: "OpenAICompatibleEmbeddings | None" = None
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-v3")
 EMBED_DIM = int(os.getenv("EMBED_DIM", "1024"))
-_EMBED_BASE_URL = (os.getenv("BAILIAN_BASE_URL") or "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
+EMBED_TASK = os.getenv("EMBED_TASK", "")
+_EMBED_BASE_URL = (
+    os.getenv("EMBED_API_BASE")
+    or os.getenv("BAILIAN_BASE_URL")
+    or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+).rstrip("/")
 _EMBED_BATCH = int(os.getenv("EMBED_BATCH", "10"))
 
 
-class DashScopeEmbeddings:
-    """OpenAI 兼容的 DashScope/百炼 文本向量客户端（复用 LLM 的 BAILIAN_API_KEY）。
+class OpenAICompatibleEmbeddings:
+    """OpenAI-compatible 文本向量客户端。
 
-    暴露 LangChain Embeddings 同名方法 embed_documents / embed_query，
-    无需本地 BGE 模型与 GPU/大内存。
+    优先使用 EMBED_API_BASE/EMBED_API_KEY（例如 Jina/SiliconFlow），未配置时再复用
+    BAILIAN_BASE_URL/BAILIAN_API_KEY。暴露 LangChain Embeddings 同名方法
+    embed_documents / embed_query，无需本地 BGE 模型与 GPU/大内存。
     """
 
     def __init__(self, model: str = EMBED_MODEL, dimensions: int = EMBED_DIM):
@@ -61,21 +67,31 @@ class DashScopeEmbeddings:
         self.dimensions = dimensions
 
     def _api_key(self) -> str:
-        key = os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+        explicit_embed_base = bool(os.getenv("EMBED_API_BASE"))
+        key = os.getenv("EMBED_API_KEY")
+        if not key and not explicit_embed_base:
+            key = os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
         if not key:
             raise RuntimeError(
-                "BAILIAN_API_KEY (or DASHSCOPE_API_KEY) is not set; "
+                "EMBED_API_KEY is not set for the configured EMBED_API_BASE; "
                 "cannot call the embedding API for RAG retrieval."
             )
         return key
 
     def _embed_batch(self, inputs: list[str]) -> list[list[float]]:
-        body = json.dumps({
+        payload_body: dict[str, object] = {
             "model": self.model,
             "input": inputs,
             "dimensions": self.dimensions,
-            "encoding_format": "float",
-        }).encode("utf-8")
+        }
+        if EMBED_TASK:
+            payload_body["task"] = EMBED_TASK
+        # Jina 使用 embedding_type；DashScope/OpenAI-compatible 常用 encoding_format。
+        if "jina.ai" in _EMBED_BASE_URL:
+            payload_body["embedding_type"] = "float"
+        else:
+            payload_body["encoding_format"] = "float"
+        body = json.dumps(payload_body).encode("utf-8")
         last_error: Exception | None = None
         for attempt in range(3):
             try:
@@ -127,14 +143,14 @@ class DashScopeEmbeddings:
         return self._embed_batch([text_in])[0]
 
 
-def get_embed_model() -> "DashScopeEmbeddings":
+def get_embed_model() -> "OpenAICompatibleEmbeddings":
     """Lazily build the embedding client (no local model needed)."""
     global _EMBED_MODEL
     if _EMBED_MODEL is None:
-        _EMBED_MODEL = DashScopeEmbeddings()
+        _EMBED_MODEL = OpenAICompatibleEmbeddings()
     return _EMBED_MODEL
 
-# DashScope 向量无需 BGE 查询前缀；保留常量为空串，兼容历史调用点（vector_search / materials）。
+# 托管 embedding 无需 BGE 查询前缀；保留常量为空串，兼容历史调用点（vector_search / materials）。
 BGE_QUERY_PREFIX = ""
 RAG_TABLE = "rag_documents"
 

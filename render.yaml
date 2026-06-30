@@ -24,19 +24,24 @@ services:
       # Supabase / Postgres 连接串
       - key: DATABASE_URL
         sync: false
-      # LLM 凭证 —— 在 Render 面板填写，勿入库。线上走百炼公网。
-      # 同一把 BAILIAN_API_KEY/BASE_URL 也用于 RAG embedding（DashScope text-embedding-v3）。
+      # LLM 凭证 —— 在 Render 面板填写，勿入库。线上聊天走百炼公网。
       - key: LLM_PROVIDER
         value: bailian
       - key: BAILIAN_API_KEY
         sync: false
       - key: BAILIAN_BASE_URL
         sync: false
-      # RAG 向量检索：embedding 走百炼托管 API（无本地 BGE 模型），向量库走 DATABASE_URL
-      # 指向的 Postgres + pgvector。离线用 scripts/build_pgvector_index.py 建索引后即生效；
-      # 未建索引时检索返回空，各调用方会优雅降级为模型自有知识。
+      # RAG 向量检索：embedding 走 OpenAI-compatible 托管 API（如 Jina），
+      # 向量库走 DATABASE_URL 指向的 Postgres + pgvector。离线用
+      # scripts/build_pgvector_index.py 建索引后即生效；未建索引/未配 key 时检索返回空。
+      - key: EMBED_API_BASE
+        value: https://api.jina.ai/v1
+      - key: EMBED_API_KEY
+        sync: false
       - key: EMBED_MODEL
-        value: text-embedding-v3
+        value: jina-embeddings-v3
+      - key: EMBED_TASK
+        value: text-matching
       - key: EMBED_DIM
         value: "1024"
       # 模型名留空走代码内置默认（bailian: deepseek-v4-flash / qwen3.7-plus / qwen3.6-35b-a3b），
