@@ -53,10 +53,14 @@ async def main() -> None:
         print("SKIP history_character_smoke: no LLM API key set")
         return
     try:
-        from rag.knowledge_base import get_embed_model
+        from rag.knowledge_base import get_embed_model, search_with_scores
         get_embed_model()
+        probe = search_with_scores("history", "鸦片战争", k=1, mode="hybrid")
+        if not probe:
+            print("SKIP history_character_smoke: RAG sources unavailable")
+            return
     except Exception as e:
-        print(f"SKIP history_character_smoke: embedding unavailable ({e})")
+        print(f"SKIP history_character_smoke: embedding/RAG unavailable ({e})")
         return
     for case in CASES:
         await run_case(*case)

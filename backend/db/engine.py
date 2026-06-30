@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from sqlalchemy import create_engine, event as sa_event, text
 
 _DEFAULT_DB = Path(__file__).resolve().parents[2] / ".data" / "edu_agent.sqlite3"
+_DEFAULT_DB.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _normalize_database_url(url: str) -> str:

@@ -9,9 +9,12 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "backend"))
 DATASET_PATH = Path(__file__).parent / "datasets" / "rag_retrieval_cases.json"
 
 
-def _embedding_ready() -> bool:
-    path = os.getenv("EMBED_MODEL_PATH")
-    return bool(path and Path(path).exists())
+def _rag_ready() -> bool:
+    try:
+        from rag.knowledge_base import search_with_scores
+        return bool(search_with_scores("history", "鸦片战争", k=1, mode="hybrid"))
+    except Exception:
+        return False
 
 
 def _haystack(doc) -> str:
@@ -70,8 +73,8 @@ def run_case(case: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
-    if not _embedding_ready():
-        print("SKIP rag_retrieval_eval: EMBED_MODEL_PATH is not set or does not exist")
+    if not _rag_ready():
+        print("SKIP rag_retrieval_eval: RAG sources unavailable")
         return
     global search_with_scores
     from rag.knowledge_base import search_with_scores

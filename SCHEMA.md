@@ -694,6 +694,9 @@ frontend/
 # 运行主 smoke 套件（同 npm test）
 npm test
 
+# CI 后端验证入口（语法检查 + smoke）
+PYTHONPATH=backend python3 scripts/verify_core.py --smoke --no-report
+
 # 运行 quick 套件
 python3 eval/run_core_evals.py --quick
 
@@ -789,7 +792,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-06-26 | 1.10.2 | 时间巨轮非本人回合持续展示玩家手牌，仅禁用点击与拖拽出牌交互 |
 | 2026-06-29 | 1.11.0 | AutoTutor 上线部署配置：render.yaml + vercel.json + .dockerignore + 前端 standalone 构建 + CORS 经 FRONTEND_ORIGIN/*.vercel.app 放行；新增部署文档 |
 | 2026-06-29 | 1.12.0 | RAG 从本地 BGE/Chroma 迁移到 OpenAI-compatible 托管 embedding（默认 Jina）+ PostgreSQL pgvector，新增 rag_documents 表与 build_pgvector_index.py 离线建索引脚本 |
-| 2026-06-30 | 1.13.0 | 新增生产 RAG 健康检查端点与显式 production smoke，验证托管 embedding + Postgres/pgvector + rag_documents 索引链路 |
+| 2026-06-30 | 1.13.0 | 新增生产 RAG 健康检查端点与显式 production smoke，验证托管 embedding + Postgres/pgvector + rag_documents 索引链路；补齐 CI 后端验证入口并让 RAG 依赖评测在无 sources 时跳过 |
 
 ---
 
