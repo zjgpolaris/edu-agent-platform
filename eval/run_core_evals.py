@@ -88,6 +88,7 @@ SUITE_FILES = {
     "trace_smoke": EVAL_DIR / "trace_smoke.py",
     "trajectory_eval": EVAL_DIR / "trajectory_eval.py",
     "auto_tutor_trajectory_eval": EVAL_DIR / "auto_tutor_trajectory_eval.py",
+    "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "history_character_smoke": {
@@ -203,6 +204,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "category": "rag",
         "kind": "quality",
         "priority": "p1",
+    },
+    "production_rag_health_smoke": {
+        "label": "生产 RAG 健康检查 Smoke",
+        "category": "rag",
+        "kind": "production_smoke",
+        "priority": "p0",
     },
 }
 METRIC_RE = re.compile(r"^([a-zA-Z0-9_]+)=(\d+)/(\d+)$")

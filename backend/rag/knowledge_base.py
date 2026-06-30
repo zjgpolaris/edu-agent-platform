@@ -20,7 +20,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy import text as sa_text
 
-from db.engine import engine
+from db.engine import DATABASE_URL, engine
 from tracing import end_span, start_span, truncate_text
 
 MetadataValue: TypeAlias = str | int | float | bool
@@ -162,10 +162,206 @@ splitter = RecursiveCharacterTextSplitter(
     separators=["。", "；", "\n\n", "\n"],
 )
 
+_SAFE_COLLECTION = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _embedding_api_key_configured() -> bool:
+    explicit_embed_base = bool(os.getenv("EMBED_API_BASE"))
+    if os.getenv("EMBED_API_KEY"):
+        return True
+    if explicit_embed_base:
+        return False
+    return bool(os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY"))
+
+
+def _sanitize_health_reason(exc: Exception, max_chars: int = 240) -> str:
+    reason = str(exc)
+    for key in (
+        "DATABASE_URL",
+        "DIRECT_URL",
+        "EMBED_API_KEY",
+        "BAILIAN_API_KEY",
+        "DASHSCOPE_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_API_KEY",
+    ):
+        value = os.getenv(key)
+        if value:
+            reason = reason.replace(value, f"[{key}]")
+    if DATABASE_URL:
+        reason = reason.replace(DATABASE_URL, "[DATABASE_URL]")
+    return reason[:max_chars]
+
+
+def _health_error(exc: Exception) -> dict[str, object]:
+    return {"ok": False, "error_type": exc.__class__.__name__, "reason": _sanitize_health_reason(exc)}
+
+
+def _latency_ms(started: float) -> int:
+    return int(round((time.perf_counter() - started) * 1000))
+
+
+def check_rag_health(collection: str = "history", *, deep: bool = True, min_documents: int = 1) -> dict[str, object]:
+    """检查生产 RAG 链路：Postgres/pgvector、索引、embedding API 与直接向量查询。"""
+    config: dict[str, object] = {
+        "database": {
+            "dialect": engine.dialect.name,
+            "database_url_configured": bool(os.getenv("DATABASE_URL")),
+        },
+        "embedding": {
+            "model": EMBED_MODEL,
+            "dim": EMBED_DIM,
+            "task": EMBED_TASK,
+            "api_base_configured": bool(_EMBED_BASE_URL),
+            "api_key_configured": _embedding_api_key_configured(),
+        },
+        "rag_table": RAG_TABLE,
+    }
+    checks: dict[str, dict[str, object]] = {}
+
+    if not _SAFE_COLLECTION.match(collection):
+        checks["collection"] = {"ok": False, "name": collection, "reason": "invalid_collection"}
+        return {
+            "ok": False,
+            "status": "failed",
+            "collection": collection,
+            "deep": deep,
+            "config": config,
+            "checks": checks,
+        }
+
+    started = time.perf_counter()
+    try:
+        with engine.connect() as conn:
+            conn.execute(sa_text("SELECT 1"))
+        checks["database"] = {"ok": True, "latency_ms": _latency_ms(started)}
+    except Exception as exc:
+        checks["database"] = {**_health_error(exc), "latency_ms": _latency_ms(started)}
+
+    is_postgres = engine.dialect.name == "postgresql"
+    checks["postgres"] = {
+        "ok": is_postgres,
+        "dialect": engine.dialect.name,
+        **({} if is_postgres else {"reason": "RAG vector search requires PostgreSQL + pgvector"}),
+    }
+
+    if not checks.get("database", {}).get("ok") or not is_postgres:
+        reason = "database_unavailable" if not checks.get("database", {}).get("ok") else "not_postgresql"
+        for name in ("pgvector_extension", "rag_table", "collection"):
+            checks[name] = {"ok": False, "skipped": True, "reason": reason}
+    else:
+        started = time.perf_counter()
+        try:
+            with engine.connect() as conn:
+                enabled = bool(conn.execute(
+                    sa_text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+                ).scalar())
+            checks["pgvector_extension"] = {"ok": enabled, "latency_ms": _latency_ms(started)}
+            if not enabled:
+                checks["pgvector_extension"]["reason"] = "pgvector extension is not installed"
+        except Exception as exc:
+            checks["pgvector_extension"] = {**_health_error(exc), "latency_ms": _latency_ms(started)}
+
+        started = time.perf_counter()
+        try:
+            with engine.connect() as conn:
+                exists = conn.execute(sa_text("SELECT to_regclass(:table_name) IS NOT NULL"), {"table_name": RAG_TABLE}).scalar()
+            checks["rag_table"] = {"ok": bool(exists), "name": RAG_TABLE, "latency_ms": _latency_ms(started)}
+            if not exists:
+                checks["rag_table"]["reason"] = "rag table does not exist"
+        except Exception as exc:
+            checks["rag_table"] = {**_health_error(exc), "name": RAG_TABLE, "latency_ms": _latency_ms(started)}
+
+        if checks.get("rag_table", {}).get("ok"):
+            started = time.perf_counter()
+            try:
+                with engine.connect() as conn:
+                    count = int(conn.execute(
+                        sa_text(f"SELECT COUNT(*) FROM {RAG_TABLE} WHERE collection = :collection"),
+                        {"collection": collection},
+                    ).scalar() or 0)
+                checks["collection"] = {
+                    "ok": count >= min_documents,
+                    "name": collection,
+                    "document_count": count,
+                    "min_documents": min_documents,
+                    "latency_ms": _latency_ms(started),
+                }
+                if count < min_documents:
+                    checks["collection"]["reason"] = "collection has no indexed documents"
+            except Exception as exc:
+                checks["collection"] = {**_health_error(exc), "name": collection, "latency_ms": _latency_ms(started)}
+        else:
+            checks["collection"] = {"ok": False, "skipped": True, "reason": "rag_table_unavailable", "name": collection}
+
+    if deep:
+        probe_vector: list[float] | None = None
+        started = time.perf_counter()
+        try:
+            probe_vector = get_embed_model().embed_query("鸦片战争")
+            checks["embedding_api"] = {
+                "ok": len(probe_vector) == EMBED_DIM,
+                "vector_dim": len(probe_vector),
+                "expected_dim": EMBED_DIM,
+                "latency_ms": _latency_ms(started),
+            }
+            if len(probe_vector) != EMBED_DIM:
+                checks["embedding_api"]["reason"] = "embedding dimension mismatch"
+        except Exception as exc:
+            checks["embedding_api"] = {**_health_error(exc), "latency_ms": _latency_ms(started)}
+
+        can_query = bool(probe_vector) and all(
+            checks.get(name, {}).get("ok")
+            for name in ("postgres", "pgvector_extension", "rag_table", "collection", "embedding_api")
+        )
+        if can_query:
+            started = time.perf_counter()
+            try:
+                rows = _search_collection_by_vector(collection, probe_vector or [], k=1)
+                result_count = len(rows)
+                top_score = float(rows[0][1]) if rows else None
+                checks["vector_query"] = {
+                    "ok": result_count >= 1,
+                    "result_count": result_count,
+                    "top_score": round(top_score, 4) if top_score is not None else None,
+                    "latency_ms": _latency_ms(started),
+                }
+                if result_count < 1:
+                    checks["vector_query"]["reason"] = "direct vector query returned no results"
+            except Exception as exc:
+                checks["vector_query"] = {**_health_error(exc), "latency_ms": _latency_ms(started)}
+        else:
+            checks["vector_query"] = {"ok": False, "skipped": True, "reason": "prerequisite_check_failed"}
+
+    required = ["database", "postgres", "pgvector_extension", "rag_table", "collection"]
+    if deep:
+        required.extend(["embedding_api", "vector_query"])
+    ok = all(bool(checks.get(name, {}).get("ok")) for name in required)
+    return {
+        "ok": ok,
+        "status": "ok" if ok else "failed",
+        "collection": collection,
+        "deep": deep,
+        "config": config,
+        "checks": checks,
+    }
+
 
 def _vec_literal(vec: list[float]) -> str:
     # pgvector 文本输入格式：[0.1,0.2,...]
     return "[" + ",".join(f"{x:.7f}" for x in vec) + "]"
+
+
+def _search_collection_by_vector(collection: str, vector: list[float], k: int = 1) -> list[tuple[Document, float]]:
+    params = {"coll": collection, "vec": _vec_literal(vector), "k": max(int(k), 1)}
+    sql = (
+        f"SELECT content, metadata, 1 - (embedding <=> CAST(:vec AS vector)) AS score "
+        f"FROM {RAG_TABLE} WHERE collection = :coll "
+        f"ORDER BY embedding <=> CAST(:vec AS vector) LIMIT :k"
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(sa_text(sql), params).fetchall()
+    return [(_row_to_document(r[0], r[1]), float(r[2])) for r in rows]
 
 
 def _row_to_document(content: str, metadata_json: str | dict | None) -> Document:

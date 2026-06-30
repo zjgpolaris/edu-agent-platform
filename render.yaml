@@ -46,5 +46,6 @@ services:
         value: "1024"
       # 模型名留空走代码内置默认（bailian: deepseek-v4-flash / qwen3.7-plus / qwen3.6-35b-a3b），
       # 与本地一致，无需在面板填写。如要覆盖再设 LLM_MODEL_FAST/QUALITY/FALLBACK。
-      # 说明：云端无本地 BGE 模型，故不设 EMBED_MODEL_PATH，
-      # RAG 取材会自动降级为模型自有知识出题（auto_tutor 的 degraded 路径），demo 仍可跑通。
+      # 生产 RAG 不依赖本地 EMBED_MODEL_PATH：embedding 走 EMBED_API_BASE/EMBED_API_KEY，
+      # 向量库走 DATABASE_URL + pgvector。部署后用 /api/debug/rag/health 或
+      # production_rag_health_smoke 验证 embedding API、pgvector、rag_documents 索引是否完整。

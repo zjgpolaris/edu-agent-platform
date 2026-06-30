@@ -2,7 +2,7 @@
 
 **创建时间：** 2026-06-23
 **项目名称：** EduAgent - K-12 中文/历史 AI 教学平台
-**最后更新：** 2026-06-26
+**最后更新：** 2026-06-30
 
 ---
 
@@ -413,6 +413,7 @@ frontend/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/debug/llm/health` | LLM 健康检查 |
+| GET | `/api/debug/rag/health` | 生产 RAG 健康检查：验证 PostgreSQL/pgvector、`rag_documents`、embedding API 与直接向量查询 |
 | GET | `/api/traces/{trace_id}` | 获取 Agent 执行轨迹 |
 
 ### 评估
@@ -435,7 +436,7 @@ frontend/
 
 ### PostgreSQL / SQLite 数据库
 
-后端数据库通过 SQLAlchemy 统一访问，`DATABASE_URL` 设置后使用 PostgreSQL（当前 Supabase），未设置时回退到本地 SQLite。Alembic 迁移位于 `backend/alembic/`，迁移时优先读取 `DIRECT_URL`，应用运行读取 `DATABASE_URL`。RAG 向量检索依赖 PostgreSQL `vector` 扩展；SQLite 本地库仅支持非向量功能与降级路径。
+后端数据库通过 SQLAlchemy 统一访问，`DATABASE_URL` 设置后使用 PostgreSQL（当前 Supabase），未设置时回退到本地 SQLite。Alembic 迁移位于 `backend/alembic/`，迁移时优先读取 `DIRECT_URL`，应用运行读取 `DATABASE_URL`。RAG 向量检索依赖 PostgreSQL `vector` 扩展；SQLite 本地库仅支持非向量功能与降级路径。`GET /api/debug/rag/health` 会显式验证 pgvector 扩展、`rag_documents` 表、collection 索引条数、embedding API 与直接向量查询，避免业务层降级掩盖生产 RAG 故障。
 
 #### rag_documents 表
 
@@ -684,6 +685,7 @@ frontend/
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
 | `trajectory_eval.py` | 学习助手工具调用轨迹准确率，已接入 `run_core_evals.py`（CORE/QUICK） |
 | `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中），已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
+| `production_rag_health_smoke.py` | 生产 RAG HTTP smoke，显式通过 `API_BASE` 指向线上后端，不进入默认本地 smoke/core 套件 |
 | `tool_permission_smoke.py` | 工具权限确认测试 |
 
 ### 运行测试
@@ -700,6 +702,13 @@ python3 eval/run_core_evals.py --suite learning_closure_smoke
 
 # 运行教师功能 smoke
 python3 eval/run_core_evals.py --suite teacher_features_smoke
+
+# 显式运行生产 RAG smoke（不属于默认 npm test；必须指定线上 API_BASE）
+API_BASE=https://<render-backend> npm run test:prod-rag
+
+# 若生产开启认证，可提供 JWT 或 smoke 账号
+API_BASE=https://<render-backend> API_TOKEN=<jwt> npm run test:prod-rag
+API_BASE=https://<render-backend> SMOKE_USERNAME=<user> SMOKE_PASSWORD=<password> npm run test:prod-rag
 
 # 运行单个 legacy smoke 脚本
 python3 eval/material_rag_smoke.py
@@ -757,7 +766,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | `scripts/seed_demo_student.py` | 灌 demo 学生（demo-student/demo123）+ 预置错题本 |
 | `scripts/build_pgvector_index.py` | 离线构建历史 RAG pgvector 索引（corpus.json → OpenAI-compatible embedding → rag_documents） |
 
-关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。
+关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。production smoke 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
 
 ---
 
@@ -780,6 +789,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-06-26 | 1.10.2 | 时间巨轮非本人回合持续展示玩家手牌，仅禁用点击与拖拽出牌交互 |
 | 2026-06-29 | 1.11.0 | AutoTutor 上线部署配置：render.yaml + vercel.json + .dockerignore + 前端 standalone 构建 + CORS 经 FRONTEND_ORIGIN/*.vercel.app 放行；新增部署文档 |
 | 2026-06-29 | 1.12.0 | RAG 从本地 BGE/Chroma 迁移到 OpenAI-compatible 托管 embedding（默认 Jina）+ PostgreSQL pgvector，新增 rag_documents 表与 build_pgvector_index.py 离线建索引脚本 |
+| 2026-06-30 | 1.13.0 | 新增生产 RAG 健康检查端点与显式 production smoke，验证托管 embedding + Postgres/pgvector + rag_documents 索引链路 |
 
 ---
 

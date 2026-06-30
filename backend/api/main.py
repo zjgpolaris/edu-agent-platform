@@ -27,7 +27,7 @@ from agents.history_games import (
 )
 from agents.multiplayer_game import play_ai_turn, play_human_turn, start_multiplayer_round
 from llm_config import LLM_PROVIDER, MODEL_FALLBACK, MODEL_FAST, MODEL_QUALITY, llm_fast
-from rag.knowledge_base import get_retriever
+from rag.knowledge_base import check_rag_health, get_retriever
 from tracing import current_trace_id, safe_shutdown, trace_context
 from trace_store import get_trace_store
 from security.audit_log import list_audit_events, record_audit_event
@@ -557,6 +557,18 @@ async def llm_health(actor: Actor = Depends(require_auth)):
             return {**config, "ok": True, "content": response.content[:500]}
         except Exception as exc:
             return {**config, "ok": False, "error": str(exc)[:1200]}
+
+
+@app.get("/api/debug/rag/health")
+async def rag_health(collection: str = "history", deep: bool = True, actor: Actor = Depends(require_auth)):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", collection):
+        raise HTTPException(status_code=400, detail="Invalid collection")
+    with trace_context(
+        name="GET /api/debug/rag/health",
+        metadata=trace_meta("rag_health", "/api/debug/rag/health", stream=False, collection=collection, deep=deep),
+    ):
+        payload = await run_in_threadpool(lambda: check_rag_health(collection, deep=deep))
+        return {**payload, "trace_id": current_trace_id()}
 
 
 # --- Eval Dashboard ---

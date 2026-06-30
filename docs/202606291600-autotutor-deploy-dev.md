@@ -16,7 +16,7 @@
 - **前端**：Vercel，Next.js 原生支持，免费档够用。
 - **后端**：Render，跑 `backend/Dockerfile`（已就绪），免费档够 demo。
 - **数据库**：复用现有 Supabase Postgres（`DATABASE_URL`）。
-- **RAG 取材**：云端无本地 BGE 模型 → 自动走 `auto_tutor` 的 **degraded 降级**（用模型自有知识出题），闭环仍完整可演示。
+- **RAG 取材**：生产使用托管 OpenAI-compatible embedding（Render 默认 Jina）+ Supabase/Postgres pgvector；未配置 `EMBED_API_KEY`、未建 `rag_documents` 索引或 pgvector 不可用时，业务调用走既有降级路径。
 
 ---
 
@@ -42,10 +42,12 @@
    - `BAILIAN_API_KEY` —— 百炼 API key
    - `BAILIAN_BASE_URL` —— 百炼公网地址（如 `https://dashscope.aliyuncs.com/compatible-mode/v1`）
    - `LLM_MODEL_FAST` / `LLM_MODEL_QUALITY` / `LLM_MODEL_FALLBACK` —— 与本地 `.env.local` 一致
+   - `EMBED_API_KEY` —— 托管 embedding key（Render 默认 Jina）
+   - `EMBED_API_BASE` / `EMBED_MODEL` / `EMBED_TASK` / `EMBED_DIM` —— 已在 `render.yaml` 默认配置为 Jina + 1024 维；如换供应商再覆盖
    - `LLM_PROVIDER` 已在 `render.yaml` 设为 `bailian`
    > 注：本地 LLM 网关是 qima-inc 内网，Render 公网访问不到；线上必须用百炼/阿里云**公网**地址。
 3. 部署完成后记下后端公网 URL，例如 `https://edu-agent-backend.onrender.com`。
-4. 健康检查：访问 `https://<后端>/api/debug/llm/health`，确认 LLM 连通。
+4. 健康检查：先访问 `https://<后端>/api/debug/llm/health` 确认 LLM 连通，再访问 `https://<后端>/api/debug/rag/health?collection=history&deep=true` 或运行 `API_BASE=https://<后端> npm run test:prod-rag` 验证 embedding API、pgvector 与 `rag_documents` 索引。
 
 > 免费档冷启动有几十秒延迟，演示前先打开一次预热。
 
@@ -80,7 +82,7 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 1. 打开 `https://<前端>/student/auto-tutor`，用 **demo-student / demo123** 登录。
 2. 点「开始本节课」→ agent 现场读画像+错题本规划本节课（左栏出现计划，右栏 trace 出现 `plan` step）。
 3. 当前题**故意答错** → 右栏出现 `reflect` + `re_plan` step（带诊断结论），中栏弹「agent 反思并调整了计划」，难度被降级、题目变化。
-4. 点右栏某条 trace / 底部 TraceTimeline，看 `Act·取材` 的工具调用与状态（线上为琥珀「降级」）。
+4. 点右栏某条 trace / 底部 TraceTimeline，看 `Act·取材` 的工具调用与状态；RAG 正常时应能看到向量检索取材，异常时会显示降级路径。
 5. 答对推进至课程结束 → 打开 `/student/memory` 看本节课写入的 `review_goal` 记忆；`/student/review` 看排入的复习。
 6. 打开 `/eval` 看该 agent 的 trajectory 通过率。
 
@@ -91,6 +93,7 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 ## 七、上线检查清单
 
 - [ ] Render 后端 `/api/debug/llm/health` 返回正常
+- [ ] `API_BASE=https://<后端> npm run test:prod-rag` 通过，确认 embedding API + pgvector + `rag_documents` 可用
 - [ ] Vercel `NEXT_PUBLIC_API_BASE_URL` 指向后端、无结尾斜杠
 - [ ] 浏览器 Network 无 CORS 报错（看前端域名是否被后端放行）
 - [ ] `scripts/seed_demo_student.py` 已对线上 DB 跑过一次
@@ -103,6 +106,6 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 
 | 项 | 现状 | 影响 |
 |----|------|------|
-| RAG 取材 | 云端无 BGE 模型，走 degraded | 取材状态显示琥珀「降级」，用模型知识出题，闭环不断 |
+| RAG 取材 | 生产使用托管 embedding + pgvector；未配 key、未建索引或外部服务不可用时走 degraded | 健康检查会 `ok=false`，业务层仍可用模型知识兜底，闭环不断 |
 | 会话存储 | 进程内存兜底（TTL 1h），未接云 Redis | 后端重启/多实例会丢进行中的会话；单实例 demo 无感 |
 | Render 免费档 | 闲置休眠 | 首次访问冷启动慢，演示前预热即可 |
