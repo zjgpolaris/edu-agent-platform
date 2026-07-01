@@ -11,7 +11,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     plan: free
-    healthCheckPath: /api/debug/llm/health
+    healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: PYTHONPATH

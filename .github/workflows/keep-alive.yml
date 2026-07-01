@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Ping backend health
         run: |
-          URL="https://edu-agent-backend-1e5x.onrender.com/api/debug/llm/health"
+          URL="https://edu-agent-backend-1e5x.onrender.com/api/health"
           for i in 1 2 3; do
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$URL") || code=000
             echo "attempt $i -> HTTP $code"
