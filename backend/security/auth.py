@@ -87,7 +87,7 @@ def assert_student_access(actor: Actor, student_id: str) -> None:
 def require_auth(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> Actor:
     """Require valid JWT token. Returns Actor if valid, raises 401 if invalid."""
     if not auth_required():
-        return Actor()
+        return Actor(actor_id="dev-teacher", role="teacher")
 
     token = creds.token if creds else None
     if not token:
