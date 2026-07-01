@@ -23,6 +23,12 @@ type AssignmentSummary = {
   average_score: number | null;
   created_at: string;
 };
+type GradedAnswer = { question_index: number; student_answer: unknown; is_correct: boolean | null; correct_answer: unknown };
+type Submission = { student_id: string; score: number | null; status: string; submitted_at: string; answers: GradedAnswer[] };
+type AssignmentDetail = {
+  assignment: { id: string; title: string; subject: string | null; questions: Array<{ prompt: string; type: string; knowledge_tag: string | null }> };
+  submissions: Submission[];
+};
 
 const blankQuestion = (): DraftQuestion => ({
   type: "single_choice", prompt: "", options: ["", "", "", ""], answer: "A", knowledge_tag: "",
@@ -45,10 +51,14 @@ export default function TeacherAssignmentsPage() {
   const [saving, setSaving] = useState(false);
 
   // AI 出题
-  const [aiKps, setAiKps] = useState("");          // 知识点，换行分隔
+  const [aiKps, setAiKps] = useState("");
   const [aiDifficulty, setAiDifficulty] = useState("medium");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState("");
+
+  // 作业详情下钻
+  const [detail, setDetail] = useState<AssignmentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     if (user?.role !== "teacher" && user?.role !== "admin") {
@@ -69,6 +79,15 @@ export default function TeacherAssignmentsPage() {
     if (!user?.token) return;
     const res = await fetch(`${API}/api/teacher/assignments`, { headers: authHeaders(user.token) });
     if (res.ok) setAssignments((await res.json()).assignments || []);
+  }
+  async function loadDetail(id: string) {
+    if (!user?.token) return;
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`${API}/api/teacher/assignments/${id}/submissions`, { headers: authHeaders(user.token) });
+      if (res.ok) setDetail(await res.json());
+      else setError(`加载详情失败 HTTP ${res.status}`);
+    } finally { setDetailLoading(false); }
   }
 
   async function generateWithAI() {
@@ -178,7 +197,7 @@ export default function TeacherAssignmentsPage() {
             {assignments.length === 0 ? (
               <p className="tasg-empty">还没有布置作业，点「新建作业」开始。</p>
             ) : assignments.map((a) => (
-              <div key={a.id} className="tasg-row">
+              <div key={a.id} className="tasg-row tasg-row-link" onClick={() => { setDetail(null); loadDetail(a.id); }}>
                 <div className="tasg-row-main">
                   <span className="tasg-row-title">{a.title}</span>
                   <span className="tasg-row-meta">{a.subject || "—"} · {a.assignee_count} 名学生</span>
@@ -196,9 +215,53 @@ export default function TeacherAssignmentsPage() {
                     <span className="tasg-stat-val">{a.average_score != null ? a.average_score : "—"}</span>
                     <span className="tasg-stat-lbl">均分</span>
                   </div>
+                  <span className="tasg-row-arrow">详情 →</span>
                 </div>
               </div>
             ))}
+          </section>
+        )}
+
+        {/* 作业详情下钻面板 */}
+        {tab === "list" && (detail || detailLoading) && (
+          <section className="tasg-detail">
+            <button className="tasg-back" onClick={() => setDetail(null)}>← 返回列表</button>
+            {detailLoading && <p className="tasg-empty">加载中…</p>}
+            {detail && (
+              <>
+                <h2 className="tasg-detail-title">{detail.assignment.title}</h2>
+                <p className="tasg-detail-sub">{detail.submissions.length} 人已提交</p>
+                {detail.submissions.length === 0 ? (
+                  <p className="tasg-empty">暂无学生提交</p>
+                ) : detail.submissions.map((sub) => (
+                  <div key={sub.student_id} className="tasg-sub-card">
+                    <div className="tasg-sub-head">
+                      <span className="tasg-sub-student">{sub.student_id}</span>
+                      <span className={`tasg-sub-score ${sub.score != null && sub.score >= 60 ? "pass" : "fail"}`}>
+                        {sub.score != null ? `${sub.score}分` : "待评阅"}
+                      </span>
+                    </div>
+                    <div className="tasg-sub-answers">
+                      {sub.answers.map((ans, i) => {
+                        const q = detail.assignment.questions[ans.question_index];
+                        return (
+                          <div key={i} className={`tasg-ans-row ${ans.is_correct === true ? "ok" : ans.is_correct === false ? "ng" : "subjective"}`}>
+                            <span className="tasg-ans-icon">{ans.is_correct === true ? "✓" : ans.is_correct === false ? "✗" : "—"}</span>
+                            <span className="tasg-ans-prompt">{q?.prompt?.slice(0, 40) || `第${ans.question_index + 1}题`}</span>
+                            {ans.is_correct === false && (
+                              <span className="tasg-ans-detail">
+                                答：{String(ans.student_answer)} · 正确：{String(ans.correct_answer)}
+                              </span>
+                            )}
+                            {q?.knowledge_tag && <span className="tasg-ans-tag">{q.knowledge_tag}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </section>
         )}
 
@@ -370,4 +433,30 @@ const CSS = `
 .tasg-ai-btn { margin-left:auto; background:var(--cinnabar,#b7422b); color:#fff; border:none; border-radius:8px;
   padding:9px 20px; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }
 .tasg-ai-btn:disabled { opacity:.6; cursor:not-allowed; }
+/* 列表行可点击 */
+.tasg-row-link { cursor:pointer; transition:border-color .15s, transform .1s; }
+.tasg-row-link:hover { border-color:var(--cinnabar,#b7422b); transform:translateX(2px); }
+.tasg-row-arrow { font-size:12px; font-weight:600; color:var(--cinnabar,#b7422b); white-space:nowrap; margin-left:8px; }
+.tasg-back { background:none; border:none; color:var(--muted,#7a7068); font-size:13px; cursor:pointer; padding:0 0 16px; display:block; }
+/* 详情面板 */
+.tasg-detail { margin-top:24px; border-top:1px solid #e5e0d5; padding-top:20px; }
+.tasg-detail-title { font-size:20px; font-weight:700; margin:0 0 4px; }
+.tasg-detail-sub { font-size:13px; color:var(--muted,#7a7068); margin:0 0 16px; }
+.tasg-sub-card { background:#fff; border:1px solid #e5e0d5; border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+.tasg-sub-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.tasg-sub-student { font-size:14px; font-weight:600; }
+.tasg-sub-score { font-size:16px; font-weight:700; }
+.tasg-sub-score.pass { color:var(--jade,#2d6a4f); }
+.tasg-sub-score.fail { color:var(--cinnabar,#b7422b); }
+.tasg-sub-answers { display:flex; flex-direction:column; gap:6px; }
+.tasg-ans-row { display:flex; align-items:baseline; gap:8px; font-size:13px; padding:6px 8px; border-radius:6px; }
+.tasg-ans-row.ok { background:#f0faf5; }
+.tasg-ans-row.ng { background:#fdf1ee; }
+.tasg-ans-row.subjective { background:#f8f6f2; }
+.tasg-ans-icon { font-size:12px; font-weight:700; width:14px; flex-shrink:0; }
+.tasg-ans-row.ok .tasg-ans-icon { color:var(--jade,#2d6a4f); }
+.tasg-ans-row.ng .tasg-ans-icon { color:var(--cinnabar,#b7422b); }
+.tasg-ans-prompt { flex:1; color:var(--ink,#1a1612); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:240px; }
+.tasg-ans-detail { font-size:12px; color:var(--cinnabar,#b7422b); white-space:nowrap; }
+.tasg-ans-tag { font-size:11px; background:#f0ebe0; border-radius:4px; padding:1px 6px; white-space:nowrap; margin-left:auto; }
 `;

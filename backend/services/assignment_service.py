@@ -205,6 +205,9 @@ def submit_assignment(student_id: str, assignment_id: str, answers: list[Any]) -
     graded_answers: list[dict[str, Any]] = []
     has_subjective = False
 
+    wrong_tags: list[str] = []     # 答错的知识点标签，提交后写入错题本
+    correct_tags: list[str] = []   # 答对的，用于从错题本移除（已掌握）
+
     for idx, question in enumerate(questions):
         q_type = question.get("type", "single_choice")
         student_answer = answers[idx] if idx < len(answers) else None
@@ -217,6 +220,10 @@ def submit_assignment(student_id: str, assignment_id: str, answers: list[Any]) -
                 objective_correct += 1
             entry["is_correct"] = is_correct
             entry["correct_answer"] = correct
+            # 收集知识点标签，用于回流错题本
+            tag = (question.get("knowledge_tag") or "").strip()
+            if tag:
+                (correct_tags if is_correct else wrong_tags).append(tag)
         else:
             has_subjective = True
             entry["is_correct"] = None
@@ -239,6 +246,18 @@ def submit_assignment(student_id: str, assignment_id: str, answers: list[Any]) -
                 "score": score, "status": status, "submitted_at": submitted_at,
             },
         )
+
+    # ── 错题回流：答错写入薄弱点，答对尝试移除（已掌握）──────────────────
+    try:
+        from services.weakpoint_service import delete_weakpoint, record_weakpoint
+        for tag in wrong_tags:
+            record_weakpoint(student_id, tag, source="assignment")
+        for tag in correct_tags:
+            delete_weakpoint(student_id, tag)
+    except Exception:
+        pass  # 不因错题回流失败而影响提交结果
+    # ──────────────────────────────────────────────────────────────────────
+
     return {
         "submission_id": submission_id, "assignment_id": assignment_id,
         "score": score, "status": status,
