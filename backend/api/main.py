@@ -567,7 +567,22 @@ async def rag_health(collection: str = "history", deep: bool = True, actor: Acto
         name="GET /api/debug/rag/health",
         metadata=trace_meta("rag_health", "/api/debug/rag/health", stream=False, collection=collection, deep=deep),
     ):
-        payload = await run_in_threadpool(lambda: check_rag_health(collection, deep=deep))
+        try:
+            payload = await run_in_threadpool(lambda: check_rag_health(collection, deep=deep))
+        except Exception as exc:
+            payload = {
+                "ok": False,
+                "status": "failed",
+                "collection": collection,
+                "deep": deep,
+                "checks": {
+                    "rag_health": {
+                        "ok": False,
+                        "error_type": exc.__class__.__name__,
+                        "reason": str(exc)[:500],
+                    }
+                },
+            }
         return {**payload, "trace_id": current_trace_id()}
 
 
