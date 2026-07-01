@@ -2730,6 +2730,7 @@ from services.assignment_service import (
     get_assignment_submissions as _get_assignment_submissions,
     list_student_assignments as _list_student_assignments,
     list_teacher_assignments as _list_teacher_assignments,
+    review_assignment_submission as _review_assignment_submission,
     submit_assignment as _submit_assignment,
 )
 
@@ -2753,6 +2754,12 @@ class CreateAssignmentRequest(BaseModel):
 
 class SubmitAssignmentRequest(BaseModel):
     answers: list[Any]
+
+
+class ReviewSubmissionRequest(BaseModel):
+    student_id: str
+    score: float
+    feedback: str | None = None
 
 
 class GenerateQuestionsRequest(BaseModel):
@@ -2916,6 +2923,30 @@ async def teacher_assignment_submissions(assignment_id: str, actor: Actor = Depe
         raise HTTPException(status_code=404, detail=str(exc))
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+
+
+@app.post("/api/teacher/assignments/{assignment_id}/review")
+async def teacher_review_assignment_submission(
+    assignment_id: str,
+    req: ReviewSubmissionRequest,
+    actor: Actor = Depends(require_auth),
+):
+    require_teacher_actor(actor)
+    try:
+        return await run_in_threadpool(
+            _review_assignment_submission,
+            actor.actor_id,
+            assignment_id,
+            req.student_id,
+            req.score,
+            req.feedback,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/api/student/{student_id}/assignments")

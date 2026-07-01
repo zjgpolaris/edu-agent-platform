@@ -40,7 +40,11 @@ def _ensure_tables() -> None:
             score REAL,
             status TEXT NOT NULL DEFAULT 'submitted',
             submitted_at TEXT NOT NULL,
+            teacher_feedback TEXT,
+            reviewed_at TEXT,
             UNIQUE(student_id, assignment_id))"""))
+        conn.execute(text("ALTER TABLE assignment_submissions ADD COLUMN IF NOT EXISTS teacher_feedback TEXT"))
+        conn.execute(text("ALTER TABLE assignment_submissions ADD COLUMN IF NOT EXISTS reviewed_at TEXT"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_assignment_submissions_assignment ON assignment_submissions(assignment_id)"))
 
 
@@ -146,10 +150,71 @@ def get_assignment_submissions(teacher_id: str, assignment_id: str) -> dict[str,
         {
             "student_id": s["student_id"], "score": s["score"], "status": s["status"],
             "submitted_at": s["submitted_at"], "answers": json.loads(s["answers_json"] or "[]"),
+            "teacher_feedback": s.get("teacher_feedback") if hasattr(s, "get") else None,
+            "reviewed_at": s.get("reviewed_at") if hasattr(s, "get") else None,
         }
         for s in subs
     ]
     return {"assignment": assignment, "submissions": submissions}
+
+
+def review_assignment_submission(
+    teacher_id: str,
+    assignment_id: str,
+    student_id: str,
+    score: float,
+    feedback: str | None = None,
+) -> dict[str, Any]:
+    """教师人工评阅一份学生提交（主要用于主观题），更新分数与反馈。"""
+    _ensure_tables()
+    if score < 0 or score > 100:
+        raise ValueError("分数必须在 0-100 之间")
+
+    with get_connection() as conn:
+        assignment_row = conn.execute(
+            text("SELECT * FROM assignments WHERE id = :aid"), {"aid": assignment_id},
+        ).mappings().fetchone()
+        if not assignment_row:
+            raise LookupError("作业不存在")
+        if assignment_row["teacher_id"] != teacher_id:
+            raise PermissionError("无权评阅此作业")
+
+        sub = conn.execute(
+            text("SELECT * FROM assignment_submissions WHERE assignment_id = :aid AND student_id = :sid"),
+            {"aid": assignment_id, "sid": student_id},
+        ).mappings().fetchone()
+        if not sub:
+            raise LookupError("学生尚未提交此作业")
+
+        reviewed_at = now_iso()
+        conn.execute(
+            text("""UPDATE assignment_submissions
+                SET score = :score, status = 'graded', teacher_feedback = :feedback, reviewed_at = :reviewed_at
+                WHERE assignment_id = :aid AND student_id = :sid"""),
+            {"score": score, "feedback": feedback or "", "reviewed_at": reviewed_at, "aid": assignment_id, "sid": student_id},
+        )
+
+    # 主观题评阅后按整份作业分数粗粒度回流知识点：低分保留/写入，高分移除。
+    try:
+        from services.weakpoint_service import delete_weakpoint, record_weakpoint
+        questions = json.loads(assignment_row["questions_json"] or "[]")
+        tags = [str(q.get("knowledge_tag") or "").strip() for q in questions if q.get("type") == "subjective"]
+        for tag in [t for t in tags if t]:
+            if score < 60:
+                record_weakpoint(student_id, tag, source="assignment_review")
+            else:
+                delete_weakpoint(student_id, tag)
+    except Exception:
+        pass
+
+    return {
+        "assignment_id": assignment_id,
+        "student_id": student_id,
+        "score": score,
+        "status": "graded",
+        "teacher_feedback": feedback or "",
+        "reviewed_at": reviewed_at,
+    }
 
 
 def list_student_assignments(student_id: str) -> list[dict[str, Any]]:

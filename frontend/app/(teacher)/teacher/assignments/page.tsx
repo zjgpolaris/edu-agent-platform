@@ -24,7 +24,7 @@ type AssignmentSummary = {
   created_at: string;
 };
 type GradedAnswer = { question_index: number; student_answer: unknown; is_correct: boolean | null; correct_answer: unknown };
-type Submission = { student_id: string; score: number | null; status: string; submitted_at: string; answers: GradedAnswer[] };
+type Submission = { student_id: string; score: number | null; status: string; submitted_at: string; answers: GradedAnswer[]; teacher_feedback?: string | null; reviewed_at?: string | null };
 type AssignmentDetail = {
   assignment: { id: string; title: string; subject: string | null; questions: Array<{ prompt: string; type: string; knowledge_tag: string | null }> };
   submissions: Submission[];
@@ -60,6 +60,8 @@ export default function TeacherAssignmentsPage() {
   // 作业详情下钻
   const [detail, setDetail] = useState<AssignmentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, { score: string; feedback: string }>>({});
+  const [reviewing, setReviewing] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.role !== "teacher" && user?.role !== "admin") {
@@ -89,6 +91,29 @@ export default function TeacherAssignmentsPage() {
       if (res.ok) setDetail(await res.json());
       else setError(`加载详情失败 HTTP ${res.status}`);
     } finally { setDetailLoading(false); }
+  }
+  async function submitReview(studentId: string) {
+    if (!user?.token || !detail) return;
+    const draft = reviewDrafts[studentId] || { score: "", feedback: "" };
+    const score = Number(draft.score);
+    if (!Number.isFinite(score) || score < 0 || score > 100) { setError("请输入 0-100 的分数"); return; }
+    setReviewing(studentId); setError("");
+    try {
+      const res = await fetch(`${API}/api/teacher/assignments/${detail.assignment.id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+        body: JSON.stringify({ student_id: studentId, score, feedback: draft.feedback }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      await loadDetail(detail.assignment.id);
+      loadAssignments();
+      setMsg("评阅已保存 ✓");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "评阅失败");
+    } finally { setReviewing(null); }
   }
 
   async function generateWithAI() {
@@ -262,11 +287,40 @@ export default function TeacherAssignmentsPage() {
                                 答：{String(ans.student_answer)} · 正确：{String(ans.correct_answer)}
                               </span>
                             )}
+                            {ans.is_correct == null && ans.student_answer != null && (
+                              <span className="tasg-ans-detail subjective-answer">答：{String(ans.student_answer).slice(0, 60)}</span>
+                            )}
                             {q?.knowledge_tag && <span className="tasg-ans-tag">{q.knowledge_tag}</span>}
                           </div>
                         );
                       })}
                     </div>
+                    {sub.teacher_feedback && <p className="tasg-review-saved">教师反馈：{sub.teacher_feedback}</p>}
+                    {sub.status !== "graded" && (
+                      <div className="tasg-review-box">
+                        <div className="tasg-label">人工评阅</div>
+                        <div className="tasg-review-row">
+                          <input
+                            className="tasg-input tasg-review-score"
+                            type="number"
+                            min="0"
+                            max="100"
+                            placeholder="分数"
+                            value={reviewDrafts[sub.student_id]?.score ?? ""}
+                            onChange={(e) => setReviewDrafts((d) => ({ ...d, [sub.student_id]: { ...(d[sub.student_id] || { feedback: "" }), score: e.target.value } }))}
+                          />
+                          <input
+                            className="tasg-input"
+                            placeholder="反馈（可选，如：论述完整，但缺少史实依据）"
+                            value={reviewDrafts[sub.student_id]?.feedback ?? ""}
+                            onChange={(e) => setReviewDrafts((d) => ({ ...d, [sub.student_id]: { ...(d[sub.student_id] || { score: "" }), feedback: e.target.value } }))}
+                          />
+                          <button className="tasg-review-btn" onClick={() => submitReview(sub.student_id)} disabled={reviewing === sub.student_id}>
+                            {reviewing === sub.student_id ? "保存中…" : "保存评阅"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </>
@@ -476,4 +530,11 @@ const CSS = `
 .tasg-ans-prompt { flex:1; color:var(--ink,#1a1612); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:240px; }
 .tasg-ans-detail { font-size:12px; color:var(--cinnabar,#b7422b); white-space:nowrap; }
 .tasg-ans-tag { font-size:11px; background:#f0ebe0; border-radius:4px; padding:1px 6px; white-space:nowrap; margin-left:auto; }
+.tasg-ans-detail.subjective-answer { color:var(--muted,#7a7068); white-space:normal; }
+.tasg-review-saved { font-size:12px; color:var(--jade,#2d6a4f); background:#f0faf5; border-radius:6px; padding:7px 9px; margin:10px 0 0; }
+.tasg-review-box { margin-top:12px; padding-top:12px; border-top:1px dashed #e5e0d5; display:flex; flex-direction:column; gap:8px; }
+.tasg-review-row { display:flex; gap:8px; align-items:center; }
+.tasg-review-score { width:92px; flex:none; }
+.tasg-review-btn { background:var(--jade,#2d6a4f); color:#fff; border:none; border-radius:7px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.tasg-review-btn:disabled { opacity:.6; cursor:not-allowed; }
 `;
