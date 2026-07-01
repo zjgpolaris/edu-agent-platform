@@ -545,13 +545,16 @@ async def get_trace(trace_id: str, actor: Actor = Depends(require_auth)):
 
 
 @app.get("/api/debug/llm/health")
-async def llm_health(actor: Actor = Depends(require_auth)):
+async def llm_health(deep: bool = False, actor: Actor = Depends(require_auth)):
     config = {
         "provider": LLM_PROVIDER,
         "quality_model": MODEL_QUALITY,
         "fast_model": MODEL_FAST,
         "fallback_model": MODEL_FALLBACK,
     }
+    if not deep:
+        return {**config, "ok": True, "mode": "shallow", "message": "LLM config loaded; use ?deep=true to test provider connectivity"}
+
     with trace_context(
         name="GET /api/debug/llm/health",
         metadata=trace_meta("llm_health", "/api/debug/llm/health", stream=False),
@@ -561,9 +564,9 @@ async def llm_health(actor: Actor = Depends(require_auth)):
                 {"role": "system", "content": "你是健康检查助手，只返回 JSON。"},
                 {"role": "user", "content": "返回 {\"ok\": true, \"message\": \"pong\"}"},
             ])
-            return {**config, "ok": True, "content": response.content[:500]}
+            return {**config, "ok": True, "mode": "deep", "content": response.content[:500]}
         except Exception as exc:
-            return {**config, "ok": False, "error": str(exc)[:1200]}
+            return {**config, "ok": False, "mode": "deep", "error": str(exc)[:1200]}
 
 
 @app.get("/api/debug/rag/health")
@@ -2747,6 +2750,7 @@ class AssignmentQuestion(BaseModel):
     options: list[str] | None = None
     answer: Any | None = None
     knowledge_tag: str | None = None
+    reference_answer: str | None = None
 
 
 class CreateAssignmentRequest(BaseModel):

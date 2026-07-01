@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections import Counter, defaultdict
 from typing import Any
 
 from sqlalchemy import inspect, text
@@ -109,26 +110,179 @@ def _row_to_assignment(row: Any, *, include_questions: bool = True) -> dict[str,
     return data
 
 
+def _submission_from_row(row: Any) -> dict[str, Any]:
+    return {
+        "student_id": row["student_id"], "score": row["score"], "status": row["status"],
+        "submitted_at": row["submitted_at"], "answers": json.loads(row["answers_json"] or "[]"),
+        "teacher_feedback": row.get("teacher_feedback") if hasattr(row, "get") else None,
+        "reviewed_at": row.get("reviewed_at") if hasattr(row, "get") else None,
+    }
+
+
+def compute_assignment_insights(
+    assignment: dict[str, Any],
+    submissions: list[dict[str, Any]],
+    *,
+    threshold: float = 60.0,
+) -> dict[str, Any]:
+    """聚合一份作业的讲评洞察：低正确率题、薄弱知识点、低分学生与讲评重点。"""
+    questions = assignment.get("questions") or []
+    assignee_ids = assignment.get("assignee_ids") or []
+    submitted_ids = {s.get("student_id") for s in submissions}
+    assignee_count = len(assignee_ids)
+    submitted_count = len(submissions)
+    score_values = [float(s["score"]) for s in submissions if s.get("score") is not None]
+    graded_scores = [float(s["score"]) for s in submissions if s.get("score") is not None and s.get("status") == "graded"]
+
+    q_stats: dict[int, dict[str, Any]] = {}
+    tag_stats: dict[str, dict[str, Any]] = {}
+    student_missed_tags: dict[str, set[str]] = defaultdict(set)
+
+    def _question(idx: int) -> dict[str, Any]:
+        return questions[idx] if 0 <= idx < len(questions) else {}
+
+    def _tag_stat(tag: str) -> dict[str, Any]:
+        if tag not in tag_stats:
+            tag_stats[tag] = {"knowledge_tag": tag, "wrong_count": 0, "students": set(), "question_indices": set(), "sources": set()}
+        return tag_stats[tag]
+
+    for sub in submissions:
+        sid = str(sub.get("student_id") or "")
+        for ans in sub.get("answers") or []:
+            try:
+                q_idx = int(ans.get("question_index", -1))
+            except Exception:
+                q_idx = -1
+            q = _question(q_idx)
+            if q.get("type") not in OBJECTIVE_TYPES:
+                continue
+            is_correct = ans.get("is_correct")
+            if is_correct not in {True, False}:
+                continue
+            stat = q_stats.setdefault(q_idx, {
+                "question_index": q_idx, "prompt": q.get("prompt", ""), "type": q.get("type", "single_choice"),
+                "knowledge_tag": q.get("knowledge_tag"), "attempts": 0, "correct": 0, "wrong": 0,
+                "wrong_answers": Counter(),
+            })
+            stat["attempts"] += 1
+            if is_correct:
+                stat["correct"] += 1
+            else:
+                stat["wrong"] += 1
+                stat["wrong_answers"][str(ans.get("student_answer"))] += 1
+                tag = str(q.get("knowledge_tag") or "").strip()
+                if tag:
+                    ts = _tag_stat(tag)
+                    ts["wrong_count"] += 1
+                    ts["students"].add(sid)
+                    ts["question_indices"].add(q_idx)
+                    ts["sources"].add("objective_wrong")
+                    student_missed_tags[sid].add(tag)
+
+    subjective_tags = [str(q.get("knowledge_tag") or "").strip() for q in questions if q.get("type") == "subjective" and q.get("knowledge_tag")]
+    for sub in submissions:
+        sid = str(sub.get("student_id") or "")
+        score = sub.get("score")
+        if sub.get("status") == "graded" and score is not None and float(score) < threshold:
+            for tag in subjective_tags:
+                ts = _tag_stat(tag)
+                ts["wrong_count"] += 1
+                ts["students"].add(sid)
+                ts["sources"].add("review_score")
+                student_missed_tags[sid].add(tag)
+
+    lowest_accuracy_questions = []
+    for stat in q_stats.values():
+        attempts = stat["attempts"] or 1
+        accuracy = round(stat["correct"] / attempts * 100)
+        lowest_accuracy_questions.append({
+            "question_index": stat["question_index"], "prompt": stat["prompt"], "type": stat["type"],
+            "knowledge_tag": stat["knowledge_tag"], "attempts": stat["attempts"], "correct": stat["correct"],
+            "wrong": stat["wrong"], "accuracy": accuracy,
+            "common_wrong_answers": [{"answer": a, "count": c} for a, c in stat["wrong_answers"].most_common(3)],
+        })
+    lowest_accuracy_questions.sort(key=lambda x: (x["accuracy"], -x["wrong"], -x["attempts"]))
+
+    top_weak_tags = []
+    for stat in tag_stats.values():
+        top_weak_tags.append({
+            "knowledge_tag": stat["knowledge_tag"], "wrong_count": stat["wrong_count"],
+            "student_count": len(stat["students"]), "question_indices": sorted(stat["question_indices"]),
+            "sources": sorted(stat["sources"]),
+        })
+    top_weak_tags.sort(key=lambda x: (-x["student_count"], -x["wrong_count"], x["knowledge_tag"]))
+
+    below_threshold_students = []
+    for sub in submissions:
+        score = sub.get("score")
+        if score is not None and float(score) < threshold:
+            sid = str(sub.get("student_id") or "")
+            below_threshold_students.append({
+                "student_id": sid, "score": score, "status": sub.get("status"),
+                "missed_tags": sorted(student_missed_tags.get(sid, set())),
+                "needs_review": sub.get("status") != "graded",
+            })
+    below_threshold_students.sort(key=lambda x: (float(x["score"]), x["student_id"]))
+
+    suggested_reteach_focus = []
+    for tag in top_weak_tags[:3]:
+        q_nums = [i + 1 for i in tag.get("question_indices", [])]
+        q_text = f"，涉及第{'、'.join(str(n) for n in q_nums)}题" if q_nums else ""
+        suggested_reteach_focus.append({
+            "knowledge_tag": tag["knowledge_tag"], "student_count": tag["student_count"],
+            "question_indices": tag.get("question_indices", []),
+            "reason": f"{tag['student_count']} 名学生在该知识点暴露问题{q_text}，建议下节课优先讲评。",
+        })
+
+    return {
+        "submission_rate": {
+            "submitted": submitted_count, "assignee_count": assignee_count,
+            "percent": round(submitted_count / (assignee_count or 1) * 100),
+            "missing_student_ids": [sid for sid in assignee_ids if sid not in submitted_ids],
+        },
+        "average_score": round(sum(score_values) / len(score_values), 1) if score_values else None,
+        "graded_average_score": round(sum(graded_scores) / len(graded_scores), 1) if graded_scores else None,
+        "pending_review_count": sum(1 for s in submissions if s.get("status") == "partial"),
+        "lowest_accuracy_questions": lowest_accuracy_questions[:5],
+        "top_weak_tags": top_weak_tags[:5],
+        "below_threshold_students": below_threshold_students,
+        "suggested_reteach_focus": suggested_reteach_focus,
+    }
+
+
+def _compact_insights(insights: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "pending_review_count": insights.get("pending_review_count", 0),
+        "top_weak_tags": (insights.get("top_weak_tags") or [])[:3],
+        "lowest_accuracy_question": (insights.get("lowest_accuracy_questions") or [None])[0],
+        "below_threshold_count": len(insights.get("below_threshold_students") or []),
+    }
+
+
 def list_teacher_assignments(teacher_id: str) -> list[dict[str, Any]]:
-    """教师作业列表，附带每份作业的完成率与平均分。"""
+    """教师作业列表，附带每份作业的完成率、平均分与讲评洞察摘要。"""
     _ensure_tables()
     with get_connection() as conn:
         rows = conn.execute(
             text("SELECT * FROM assignments WHERE teacher_id = :tid ORDER BY created_at DESC"),
             {"tid": teacher_id},
         ).mappings().fetchall()
-        assignments = [_row_to_assignment(r, include_questions=False) for r in rows]
-        for item in assignments:
+        assignments = []
+        for row in rows:
+            full_item = _row_to_assignment(row, include_questions=True)
             subs = conn.execute(
-                text("SELECT score, status FROM assignment_submissions WHERE assignment_id = :aid"),
-                {"aid": item["id"]},
+                text("SELECT * FROM assignment_submissions WHERE assignment_id = :aid"),
+                {"aid": full_item["id"]},
             ).mappings().fetchall()
-            assignee_count = len(item["assignee_ids"]) or 1
-            item["submitted_count"] = len(subs)
+            submissions = [_submission_from_row(s) for s in subs]
+            insights = compute_assignment_insights(full_item, submissions)
+            item = _row_to_assignment(row, include_questions=False)
+            item["submitted_count"] = len(submissions)
             item["assignee_count"] = len(item["assignee_ids"])
-            item["completion_rate"] = round(len(subs) / assignee_count * 100)
-            scored = [s["score"] for s in subs if s["score"] is not None]
-            item["average_score"] = round(sum(scored) / len(scored), 1) if scored else None
+            item["completion_rate"] = insights["submission_rate"]["percent"]
+            item["average_score"] = insights["average_score"]
+            item.update(_compact_insights(insights))
+            assignments.append(item)
     return assignments
 
 
@@ -149,16 +303,8 @@ def get_assignment_submissions(teacher_id: str, assignment_id: str) -> dict[str,
             text("SELECT * FROM assignment_submissions WHERE assignment_id = :aid ORDER BY submitted_at"),
             {"aid": assignment_id},
         ).mappings().fetchall()
-    submissions = [
-        {
-            "student_id": s["student_id"], "score": s["score"], "status": s["status"],
-            "submitted_at": s["submitted_at"], "answers": json.loads(s["answers_json"] or "[]"),
-            "teacher_feedback": s.get("teacher_feedback") if hasattr(s, "get") else None,
-            "reviewed_at": s.get("reviewed_at") if hasattr(s, "get") else None,
-        }
-        for s in subs
-    ]
-    return {"assignment": assignment, "submissions": submissions}
+    submissions = [_submission_from_row(s) for s in subs]
+    return {"assignment": assignment, "submissions": submissions, "insights": compute_assignment_insights(assignment, submissions)}
 
 
 def review_assignment_submission(
