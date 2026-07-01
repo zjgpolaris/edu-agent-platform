@@ -384,9 +384,10 @@ frontend/
 | GET | `/api/teacher/students/{student_id}/profile` | 学生档案 |
 | GET | `/api/teacher/students/{student_id}/events` | 学生学习事件 |
 | GET | `/api/teacher/class-analytics` | 班级学情分析 |
+| POST | `/api/teacher/assignments/generate-questions` | AI 出题：按知识点批量 RAG 取材并生成单选题 / 判断题 / 简答题草稿，供教师修改确认 |
 | POST | `/api/teacher/assignments` | 创建作业（客观题+主观题），指定学生 |
 | GET | `/api/teacher/assignments` | 教师作业列表，含完成率与平均分 |
-| GET | `/api/teacher/assignments/{assignment_id}/submissions` | 查看一份作业的题目与所有学生提交明细 |
+| GET | `/api/teacher/assignments/{assignment_id}/submissions` | 查看一份作业的题目与所有学生提交明细（分数、每题答对/错、学生答案与正确答案） |
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
 
@@ -666,6 +667,9 @@ frontend/
 - 批改审核
 - 教学建议生成
 - 教师资料库
+- 教师布置作业工作流：AI 按知识点 RAG 出题（单选 / 判断 / 简答）→ 教师修改确认 → 发放给指定学生
+- 作业提交详情下钻：教师可查看每个学生的分数、每题答对/错、学生答案与正确答案
+- 作业错题回流：学生提交客观题后，答错题目的 `knowledge_tag` 自动写入错题本，答对的知识点尝试从错题本移除，供 AutoTutor 后续规划使用
 - 基于错题本和学生画像聚合班级高频薄弱点
 - 教师首页前置本轮讲评重点，班级学情页展示薄弱点人数占比
 - 教学建议生成基于高频薄弱点人数和占比，输出讲评步骤、课堂活动、重点知识点和分层作业建议
