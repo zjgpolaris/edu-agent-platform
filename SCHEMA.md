@@ -373,6 +373,8 @@ frontend/
 | POST | `/api/students/{student_id}/review/submit` | 提交复习答题结果 |
 | GET | `/api/students/{student_id}/mastery-overview` | 知识点掌握度总览 + 连续打卡天数 |
 | GET | `/api/student/{student_id}/learning-report` | 学习成长报告：汇总 SM-2 复习进度、作业批改趋势、每日活跃度、错题统计、AutoTutor 会话数（`?days=14`） |
+| GET | `/api/student/{student_id}/assignments` | 学生待办/已完成作业列表（含提交状态与分数） |
+| POST | `/api/student/{student_id}/assignments/{assignment_id}/submit` | 学生提交作答，自动批改客观题，主观题标记待评阅 |
 
 ### 教师端
 
@@ -382,6 +384,9 @@ frontend/
 | GET | `/api/teacher/students/{student_id}/profile` | 学生档案 |
 | GET | `/api/teacher/students/{student_id}/events` | 学生学习事件 |
 | GET | `/api/teacher/class-analytics` | 班级学情分析 |
+| POST | `/api/teacher/assignments` | 创建作业（客观题+主观题），指定学生 |
+| GET | `/api/teacher/assignments` | 教师作业列表，含完成率与平均分 |
+| GET | `/api/teacher/assignments/{assignment_id}/submissions` | 查看一份作业的题目与所有学生提交明细 |
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
 
@@ -683,6 +688,7 @@ frontend/
 | `homework_grading_smoke.py` | 作业批改测试 |
 | `learning_closure_smoke.py` | 作业-错题-复习-学情闭环测试 |
 | `teacher_features_smoke.py` | 教师功能测试，已接入 `run_core_evals.py`，覆盖班级学情、教师资料库、教学建议 schema 与教师审核结果同步 learning event / weakpoints |
+| `assignment_smoke.py` | 教师布置作业工作流测试（创建/列表/学生待办/提交自动批改/查重/权限），8 例，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
 | `trajectory_eval.py` | 学习助手工具调用轨迹准确率，已接入 `run_core_evals.py`（CORE/QUICK） |
 | `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中），已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
@@ -795,6 +801,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-06-29 | 1.12.0 | RAG 从本地 BGE/Chroma 迁移到 OpenAI-compatible 托管 embedding（默认 Jina）+ PostgreSQL pgvector，新增 rag_documents 表与 build_pgvector_index.py 离线建索引脚本 |
 | 2026-06-30 | 1.13.0 | 新增生产 RAG 健康检查端点与显式 production smoke，验证托管 embedding + Postgres/pgvector + rag_documents 索引链路；补齐 CI 后端验证入口并让 RAG 依赖评测在无 sources 时跳过 |
 | 2026-07-01 | 1.14.0 | 新增学生学习成长报告：后端 `GET /api/student/{id}/learning-report`（汇总 SM-2、作业批改、活跃度、AutoTutor、错题本）；前端 `/student/report` 页面含热图+柱状图+作业趋势+错题排行；侧边栏与移动导航新增「成长报告」入口 |
+| 2026-07-01 | 1.15.0 | 新增教师布置作业工作流：`assignments`/`assignment_submissions` 表；5 个 API（教师创建/列表/提交明细，学生待办/提交）；客观题自动批改+主观题待评阅；前端 `/teacher/assignments` 出题页 + `/student/assignments` 作业本；新增 `assignment_smoke.py`（8 例） |
 
 ---
 

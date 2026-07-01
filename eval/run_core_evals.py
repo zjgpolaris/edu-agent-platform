@@ -64,6 +64,7 @@ SMOKE_SUITES = [
     "learning_closure_smoke",
     "teacher_features_smoke",
     "review_system_smoke",
+    "assignment_smoke",
     "tool_registry_smoke",
     "guardrails_smoke",
     "trace_smoke",
@@ -82,6 +83,7 @@ SUITE_FILES = {
     "learning_closure_smoke": EVAL_DIR / "learning_closure_smoke.py",
     "teacher_features_smoke": EVAL_DIR / "teacher_features_smoke.py",
     "review_system_smoke": EVAL_DIR / "review_system_smoke.py",
+    "assignment_smoke": EVAL_DIR / "assignment_smoke.py",
     "tool_registry_smoke": EVAL_DIR / "tool_registry_smoke.py",
     "guardrails_smoke": EVAL_DIR / "guardrails_smoke.py",
     "ragas_eval": EVAL_DIR / "ragas_eval.py",
@@ -166,6 +168,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     "review_system_smoke": {
         "label": "复习系统 Smoke",
         "category": "student",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "assignment_smoke": {
+        "label": "布置作业工作流 Smoke",
+        "category": "teacher",
         "kind": "smoke",
         "priority": "p0",
     },

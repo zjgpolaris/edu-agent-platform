@@ -194,3 +194,31 @@ review_sessions = Table(
     Column("created_at", Text, nullable=False),
     Index("idx_review_sessions_student_date", "student_id", "date", unique=True),
 )
+
+assignments = Table(
+    "assignments", metadata,
+    Column("id", Text, primary_key=True),
+    Column("teacher_id", Text, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("subject", Text),
+    Column("grade", Text),
+    Column("questions_json", Text, nullable=False),
+    Column("assignee_ids_json", Text, nullable=False),
+    Column("due_date", Text),
+    Column("created_at", Text, nullable=False),
+    Index("idx_assignments_teacher", "teacher_id", "created_at"),
+)
+
+assignment_submissions = Table(
+    "assignment_submissions", metadata,
+    Column("id", Text, primary_key=True),
+    Column("assignment_id", Text, nullable=False),
+    Column("student_id", Text, nullable=False),
+    Column("answers_json", Text, nullable=False),
+    Column("score", Float),
+    Column("status", Text, nullable=False, server_default="submitted"),
+    Column("submitted_at", Text, nullable=False),
+    Index("idx_assignment_submissions_assignment", "assignment_id"),
+    Index("idx_assignment_submissions_student", "student_id", "assignment_id", unique=True),
+)
+

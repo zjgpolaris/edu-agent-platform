@@ -34,6 +34,7 @@ const studentNav: NavItem[] = [
   },
   {
     label: "我的学情", icon: "析", children: [
+      { label: "我的作业", href: "/student/assignments", icon: "业" },
       { label: "今日复习", href: "/student/review", icon: "复" },
       { label: "学情分析", href: "/student/dashboard", icon: "析" },
       { label: "成长报告", href: "/student/report", icon: "报" },
@@ -48,6 +49,7 @@ const teacherNav: NavItem[] = [
   { label: "班级总览", href: "/teacher", icon: "班" },
   {
     label: "批改工作台", icon: "批", children: [
+      { label: "布置作业", href: "/teacher/assignments", icon: "业" },
       { label: "作文批改", href: "/teacher/grading?tab=essay", icon: "文" },
       { label: "拍照批改", href: "/teacher/grading?tab=homework", icon: "拍" },
     ],
@@ -221,6 +223,7 @@ const STUDENT_MOBILE_NAV = [
   { href: "/student/review", icon: "复", label: "复习" },
 ];
 const STUDENT_MORE_NAV = [
+  { href: "/student/assignments", icon: "业", label: "我的作业" },
   { href: "/student/history/chat", icon: "人", label: "历史对话" },
   { href: "/student/history/games", icon: "弈", label: "历史游戏" },
   { href: "/student/textbook", icon: "册", label: "教材学习" },
@@ -237,6 +240,7 @@ const TEACHER_MOBILE_NAV = [
   { href: "/teacher/class-analytics", icon: "析", label: "学情" },
 ];
 const TEACHER_MORE_NAV = [
+  { href: "/teacher/assignments", icon: "业", label: "布置作业" },
   { href: "/teacher/materials", icon: "生", label: "资料生成" },
   { href: "/teacher/resources", icon: "库", label: "资源库" },
   { href: "/eval", icon: "测", label: "Eval" },

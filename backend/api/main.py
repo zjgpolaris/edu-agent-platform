@@ -2721,3 +2721,107 @@ async def student_learning_report(
         return report
 
     return await run_in_threadpool(_fetch)
+
+
+# ── 教师布置作业工作流 ──────────────────────────────────────────────────────────
+
+from services.assignment_service import (
+    create_assignment as _create_assignment,
+    get_assignment_submissions as _get_assignment_submissions,
+    list_student_assignments as _list_student_assignments,
+    list_teacher_assignments as _list_teacher_assignments,
+    submit_assignment as _submit_assignment,
+)
+
+
+class AssignmentQuestion(BaseModel):
+    type: str = "single_choice"
+    prompt: str
+    options: list[str] | None = None
+    answer: Any | None = None
+    knowledge_tag: str | None = None
+
+
+class CreateAssignmentRequest(BaseModel):
+    title: str
+    questions: list[AssignmentQuestion]
+    assignee_ids: list[str]
+    subject: str | None = None
+    grade: str | None = None
+    due_date: str | None = None
+
+
+class SubmitAssignmentRequest(BaseModel):
+    answers: list[Any]
+
+
+@app.post("/api/teacher/assignments")
+async def teacher_create_assignment(req: CreateAssignmentRequest, actor: Actor = Depends(require_auth)):
+    require_teacher_actor(actor)
+    try:
+        return await run_in_threadpool(
+            _create_assignment,
+            actor.actor_id,
+            req.title,
+            [q.model_dump() for q in req.questions],
+            req.assignee_ids,
+            req.subject,
+            req.grade,
+            req.due_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/teacher/assignments")
+async def teacher_list_assignments(actor: Actor = Depends(require_auth)):
+    require_teacher_actor(actor)
+    return {"assignments": await run_in_threadpool(_list_teacher_assignments, actor.actor_id)}
+
+
+@app.get("/api/teacher/assignments/{assignment_id}/submissions")
+async def teacher_assignment_submissions(assignment_id: str, actor: Actor = Depends(require_auth)):
+    require_teacher_actor(actor)
+    try:
+        return await run_in_threadpool(_get_assignment_submissions, actor.actor_id, assignment_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
+
+@app.get("/api/student/{student_id}/assignments")
+async def student_list_assignments(student_id: str, actor: Actor = Depends(require_auth)):
+    assert_student_access(actor, student_id)
+    return {"assignments": await run_in_threadpool(_list_student_assignments, student_id)}
+
+
+@app.post("/api/student/{student_id}/assignments/{assignment_id}/submit")
+async def student_submit_assignment(
+    student_id: str,
+    assignment_id: str,
+    req: SubmitAssignmentRequest,
+    actor: Actor = Depends(require_auth),
+):
+    assert_student_access(actor, student_id)
+    try:
+        result = await run_in_threadpool(_submit_assignment, student_id, assignment_id, req.answers)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    record_event_if_student(
+        student_id,
+        feature="assignment",
+        event_type="assignment_submitted",
+        score=result.get("score"),
+        success=result.get("status") == "graded",
+        metadata={
+            "assignment_id": assignment_id,
+            "objective_correct": result.get("objective_correct"),
+            "objective_total": result.get("objective_total"),
+        },
+    )
+    return result
