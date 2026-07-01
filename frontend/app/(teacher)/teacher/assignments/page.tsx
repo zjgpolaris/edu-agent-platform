@@ -12,6 +12,23 @@ type DraftQuestion = {
   options: string[];
   answer: string;
   knowledge_tag: string;
+  reference_answer?: string;
+};
+type WeakTag = { knowledge_tag: string; wrong_count?: number; student_count: number; question_indices?: number[]; sources?: string[] };
+type LowAccuracyQuestion = {
+  question_index: number; prompt: string; type: string; knowledge_tag?: string | null;
+  attempts: number; correct: number; wrong: number; accuracy: number;
+  common_wrong_answers?: Array<{ answer: string; count: number }>;
+};
+type AssignmentInsights = {
+  submission_rate: { submitted: number; assignee_count: number; percent: number; missing_student_ids: string[] };
+  average_score: number | null;
+  graded_average_score: number | null;
+  pending_review_count: number;
+  lowest_accuracy_questions: LowAccuracyQuestion[];
+  top_weak_tags: WeakTag[];
+  below_threshold_students: Array<{ student_id: string; score: number; status: string; missed_tags: string[]; needs_review: boolean }>;
+  suggested_reteach_focus: Array<{ knowledge_tag: string; student_count: number; question_indices: number[]; reason: string }>;
 };
 type AssignmentSummary = {
   id: string;
@@ -22,12 +39,17 @@ type AssignmentSummary = {
   completion_rate: number;
   average_score: number | null;
   created_at: string;
+  pending_review_count?: number;
+  top_weak_tags?: WeakTag[];
+  lowest_accuracy_question?: LowAccuracyQuestion | null;
+  below_threshold_count?: number;
 };
 type GradedAnswer = { question_index: number; student_answer: unknown; is_correct: boolean | null; correct_answer: unknown };
 type Submission = { student_id: string; score: number | null; status: string; submitted_at: string; answers: GradedAnswer[]; teacher_feedback?: string | null; reviewed_at?: string | null };
 type AssignmentDetail = {
-  assignment: { id: string; title: string; subject: string | null; questions: Array<{ prompt: string; type: string; knowledge_tag: string | null }> };
+  assignment: { id: string; title: string; subject: string | null; questions: Array<{ prompt: string; type: string; knowledge_tag: string | null; reference_answer?: string | null }> };
   submissions: Submission[];
+  insights?: AssignmentInsights;
 };
 
 const blankQuestion = (): DraftQuestion => ({
@@ -141,7 +163,7 @@ export default function TeacherAssignmentsPage() {
           return { type: "true_false", prompt: q.prompt, options: [], answer: q.answer || "正确", knowledge_tag: q.knowledge_tag };
         }
         if (q.type === "subjective") {
-          return { type: "subjective", prompt: q.prompt, options: [], answer: "", knowledge_tag: q.knowledge_tag };
+          return { type: "subjective", prompt: q.prompt, options: [], answer: "", knowledge_tag: q.knowledge_tag, reference_answer: q.explanation || "" };
         }
         return {
           type: "single_choice",
@@ -183,6 +205,7 @@ export default function TeacherAssignmentsPage() {
         options: q.type === "single_choice" ? q.options.filter((o) => o.trim()) : null,
         answer: q.type === "subjective" ? null : q.answer,
         knowledge_tag: q.knowledge_tag.trim() || null,
+        reference_answer: q.reference_answer?.trim() || null,
       }));
     if (payloadQuestions.length === 0) { setError("请至少填写一道题"); return; }
 
@@ -290,6 +313,7 @@ export default function TeacherAssignmentsPage() {
                             {ans.is_correct == null && ans.student_answer != null && (
                               <span className="tasg-ans-detail subjective-answer">答：{String(ans.student_answer).slice(0, 60)}</span>
                             )}
+                            {q?.reference_answer && <span className="tasg-ans-detail subjective-answer">参考：{q.reference_answer.slice(0, 60)}</span>}
                             {q?.knowledge_tag && <span className="tasg-ans-tag">{q.knowledge_tag}</span>}
                           </div>
                         );
@@ -421,7 +445,14 @@ export default function TeacherAssignmentsPage() {
                     </select>
                   </label>
                 )}
-                {q.type === "subjective" && <p className="tasg-hint">主观题由老师提交后人工评阅</p>}
+                {q.type === "subjective" && (
+                  <div className="tasg-opts">
+                    <p className="tasg-hint">主观题由老师提交后人工评阅</p>
+                    <textarea className="tasg-input tasg-ref-answer" placeholder="参考答案要点（可选，仅教师端可见）"
+                      value={q.reference_answer || ""}
+                      onChange={(e) => updateQuestion(i, { reference_answer: e.target.value })} />
+                  </div>
+                )}
               </div>
             ))}
             <button className="tasg-add" onClick={() => setQuestions((qs) => [...qs, blankQuestion()])}>+ 添加题目</button>

@@ -386,8 +386,8 @@ frontend/
 | GET | `/api/teacher/class-analytics` | 班级学情分析 |
 | POST | `/api/teacher/assignments/generate-questions` | AI 出题：按知识点批量 RAG 取材并生成单选题 / 判断题 / 简答题草稿，供教师修改确认 |
 | POST | `/api/teacher/assignments` | 创建作业（客观题+主观题），指定学生 |
-| GET | `/api/teacher/assignments` | 教师作业列表，含完成率与平均分 |
-| GET | `/api/teacher/assignments/{assignment_id}/submissions` | 查看一份作业的题目与所有学生提交明细（分数、每题答对/错、学生答案与正确答案） |
+| GET | `/api/teacher/assignments` | 教师作业列表，含完成率、平均分与讲评洞察摘要（待评阅数、薄弱知识点、低正确率题） |
+| GET | `/api/teacher/assignments/{assignment_id}/submissions` | 查看一份作业的题目、所有学生提交明细与 `insights` 讲评洞察（提交率、薄弱点、低正确率题、低分学生） |
 | POST | `/api/teacher/assignments/{assignment_id}/review` | 教师人工评阅学生提交：填写分数与反馈，将 `partial` / 待评阅提交置为 `graded` |
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
@@ -421,7 +421,7 @@ frontend/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/health` | 轻量服务健康检查，不触发 LLM/RAG，供 Render 等部署平台使用 |
-| GET | `/api/debug/llm/health` | LLM 健康检查，会实际调用 fast 模型，仅用于模型连通性诊断 |
+| GET | `/api/debug/llm/health` | LLM 健康检查默认浅检查不调用模型；显式 `?deep=true` 才实际调用 fast 模型做连通性诊断 |
 | GET | `/api/debug/rag/health` | 生产 RAG 健康检查：验证 PostgreSQL/pgvector、`rag_documents`、embedding API 与直接向量查询 |
 | GET | `/api/traces/{trace_id}` | 获取 Agent 执行轨迹 |
 
@@ -837,7 +837,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-06-30 | 1.13.0 | 新增生产 RAG 健康检查端点与显式 production smoke，验证托管 embedding + Postgres/pgvector + rag_documents 索引链路；补齐 CI 后端验证入口并让 RAG 依赖评测在无 sources 时跳过 |
 | 2026-07-01 | 1.14.0 | 新增学生学习成长报告：后端 `GET /api/student/{id}/learning-report`（汇总 SM-2、作业批改、活跃度、AutoTutor、错题本）；前端 `/student/report` 页面含热图+柱状图+作业趋势+错题排行；侧边栏与移动导航新增「成长报告」入口 |
 | 2026-07-01 | 1.15.0 | 新增教师布置作业工作流：`assignments`/`assignment_submissions` 表；5 个 API（教师创建/列表/提交明细，学生待办/提交）；客观题自动批改+主观题待评阅；前端 `/teacher/assignments` 出题页 + `/student/assignments` 作业本；新增 `assignment_smoke.py`（8 例） |
-| 2026-07-01 | 1.15.1 | 修复 `assignment_submissions` 兼容旧 SQLite 的列补齐逻辑；新增 `/api/health` 轻量健康检查并改用它作为 Render/keep-alive 探针，避免 LLM 配额耗尽导致部署健康检查失败 |
+| 2026-07-01 | 1.15.1 | 修复 `assignment_submissions` 兼容旧 SQLite 的列补齐逻辑；新增 `/api/health` 轻量健康检查并改用它作为 Render/keep-alive 探针；`/api/debug/llm/health` 默认改为浅检查，显式 `?deep=true` 才调用模型，避免旧探针因 LLM 配额耗尽导致部署健康检查失败 |
 
 ---
 
