@@ -53,6 +53,7 @@ export default function TeacherAssignmentsPage() {
   // AI 出题
   const [aiKps, setAiKps] = useState("");
   const [aiDifficulty, setAiDifficulty] = useState("medium");
+  const [aiType, setAiType] = useState("single_choice");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState("");
 
@@ -100,23 +101,31 @@ export default function TeacherAssignmentsPage() {
       const res = await fetch(`${API}/api/teacher/assignments/generate-questions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders(user!.token!) },
-        body: JSON.stringify({ knowledge_points: kps, difficulty: aiDifficulty, subject }),
+        body: JSON.stringify({ knowledge_points: kps, difficulty: aiDifficulty, question_type: aiType, subject }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `HTTP ${res.status}`);
       }
       const generated: Array<{
-        knowledge_tag: string; prompt: string;
+        knowledge_tag: string; type: string; prompt: string;
         options: string[]; answer: string; explanation: string;
       }> = await res.json();
-      const newQs: DraftQuestion[] = generated.map((q) => ({
-        type: "single_choice",
-        prompt: q.prompt,
-        options: q.options.length === 4 ? q.options : [...q.options, ...Array(4 - q.options.length).fill("")],
-        answer: q.answer,
-        knowledge_tag: q.knowledge_tag,
-      }));
+      const newQs: DraftQuestion[] = generated.map((q) => {
+        if (q.type === "true_false") {
+          return { type: "true_false", prompt: q.prompt, options: [], answer: q.answer || "正确", knowledge_tag: q.knowledge_tag };
+        }
+        if (q.type === "subjective") {
+          return { type: "subjective", prompt: q.prompt, options: [], answer: "", knowledge_tag: q.knowledge_tag };
+        }
+        return {
+          type: "single_choice",
+          prompt: q.prompt,
+          options: q.options.length === 4 ? q.options : [...q.options, ...Array(4 - q.options.length).fill("")],
+          answer: q.answer,
+          knowledge_tag: q.knowledge_tag,
+        };
+      });
       // 追加到现有题目后（去掉全空占位题）
       setQuestions((prev) => {
         const nonEmpty = prev.filter((q) => q.prompt.trim());
@@ -294,6 +303,14 @@ export default function TeacherAssignmentsPage() {
                 rows={3}
               />
               <div className="tasg-ai-row">
+                <label className="tasg-answer">
+                  题型
+                  <select className="tasg-select" value={aiType} onChange={(e) => setAiType(e.target.value)}>
+                    <option value="single_choice">单选题</option>
+                    <option value="true_false">判断题</option>
+                    <option value="subjective">简答题</option>
+                  </select>
+                </label>
                 <label className="tasg-answer">
                   难度
                   <select className="tasg-select" value={aiDifficulty} onChange={(e) => setAiDifficulty(e.target.value)}>

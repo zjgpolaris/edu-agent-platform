@@ -2758,6 +2758,7 @@ class SubmitAssignmentRequest(BaseModel):
 class GenerateQuestionsRequest(BaseModel):
     knowledge_points: list[str]          # 每个知识点生成一道题
     difficulty: str = "medium"           # easy | medium | hard
+    question_type: str = "single_choice"  # single_choice | true_false | subjective
     subject: str = "历史"
 
 
@@ -2770,20 +2771,81 @@ class GeneratedQuestion(BaseModel):
     explanation: str
 
 
+def _gen_true_false(kp: str, difficulty: str, sources: list) -> dict:
+    """生成一道判断题。"""
+    from structured_output import invoke_structured
+    from security.prompt_injection import build_untrusted_context_block
+    from pydantic import BaseModel as _BM
+
+    class _TF(_BM):
+        statement: str
+        answer: str      # 正确 | 错误
+        explanation: str
+
+    context = build_untrusted_context_block(sources[:3], title="史料") if sources else ""
+    prompt = [
+        {"role": "system", "content": (
+            "你是初中历史教师，根据史料为指定知识点出一道判断题。"
+            "只输出 JSON：{\"statement\":\"陈述句\",\"answer\":\"正确\",\"explanation\":\"1-2句解析\"}。"
+            "answer 只能是「正确」或「错误」。"
+        )},
+        {"role": "user", "content": f"知识点：{kp}\n难度：{difficulty}\n{context}".strip()},
+    ]
+    try:
+        r = invoke_structured(llm_fast, prompt, model=_TF, fallback=None)
+    except Exception:
+        r = None
+    if not r:
+        return {"prompt": f"关于「{kp}」的说法是否正确？", "answer": "正确", "explanation": ""}
+    ans = "错误" if "错" in (r.answer or "") else "正确"
+    return {"prompt": r.statement.strip(), "answer": ans, "explanation": r.explanation.strip()}
+
+
+def _gen_subjective(kp: str, difficulty: str, sources: list) -> dict:
+    """生成一道简答题（含参考答案）。"""
+    from structured_output import invoke_structured
+    from security.prompt_injection import build_untrusted_context_block
+    from pydantic import BaseModel as _BM
+
+    class _SUBJ(_BM):
+        question: str
+        reference_answer: str
+
+    context = build_untrusted_context_block(sources[:3], title="史料") if sources else ""
+    prompt = [
+        {"role": "system", "content": (
+            "你是初中历史教师，根据史料为指定知识点出一道简答题。"
+            "只输出 JSON：{\"question\":\"题干\",\"reference_answer\":\"参考答案要点\"}。"
+        )},
+        {"role": "user", "content": f"知识点：{kp}\n难度：{difficulty}\n{context}".strip()},
+    ]
+    try:
+        r = invoke_structured(llm_fast, prompt, model=_SUBJ, fallback=None)
+    except Exception:
+        r = None
+    if not r:
+        return {"prompt": f"请简述「{kp}」的历史意义。", "answer": "", "explanation": ""}
+    return {"prompt": r.question.strip(), "answer": "", "explanation": r.reference_answer.strip()}
+
+
 @app.post("/api/teacher/assignments/generate-questions", response_model=list[GeneratedQuestion])
 async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor = Depends(require_auth)):
-    """AI 出题：给定知识点列表，每个知识点 RAG 取材后出一道单选题，供教师审阅修改。"""
+    """AI 出题：给定知识点列表，每个知识点 RAG 取材后按指定题型出一道题，供教师审阅修改。"""
     require_teacher_actor(actor)
     if not req.knowledge_points:
         raise HTTPException(status_code=400, detail="knowledge_points 不能为空")
     if len(req.knowledge_points) > 20:
         raise HTTPException(status_code=400, detail="单次最多生成 20 道题")
+    qtype = req.question_type if req.question_type in {"single_choice", "true_false", "subjective"} else "single_choice"
 
     from agents.auto_tutor import _generate_question as _at_gen_question
     from tools.registry import run_tool
     from tools.base import ToolExecutionContext
 
     ctx = ToolExecutionContext(actor_id=actor.actor_id, session_id=f"gen-{actor.actor_id}")
+
+    def _strip(o: str) -> str:
+        return o[3:].strip() if len(o) > 2 and o[1] == "." else o.strip()
 
     async def _gen_one(kp: str) -> GeneratedQuestion:
         try:
@@ -2794,16 +2856,20 @@ async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor
             sources = raw if isinstance(raw, list) else []
         except Exception:
             sources = []
+
+        if qtype == "true_false":
+            q = await run_in_threadpool(_gen_true_false, kp, req.difficulty, sources)
+            return GeneratedQuestion(knowledge_tag=kp, type="true_false", prompt=q["prompt"],
+                                     options=[], answer=q["answer"], explanation=q["explanation"])
+        if qtype == "subjective":
+            q = await run_in_threadpool(_gen_subjective, kp, req.difficulty, sources)
+            return GeneratedQuestion(knowledge_tag=kp, type="subjective", prompt=q["prompt"],
+                                     options=[], answer="", explanation=q["explanation"])
+        # 默认单选题
         q = await run_in_threadpool(_at_gen_question, kp, req.difficulty, sources)
-        opts = q.get("options", [])
-        # 选项可能带 "A. " 前缀，也可能不带，统一去掉前缀让前端自行显示
-        def _strip(o: str) -> str:
-            return o[3:].strip() if len(o) > 2 and o[1] == "." else o.strip()
         return GeneratedQuestion(
-            knowledge_tag=kp,
-            type="single_choice",
-            prompt=q.get("question", ""),
-            options=[_strip(o) for o in opts],
+            knowledge_tag=kp, type="single_choice", prompt=q.get("question", ""),
+            options=[_strip(o) for o in q.get("options", [])],
             answer=(q.get("answer", "A") or "A")[:1].upper(),
             explanation=q.get("explanation", ""),
         )
