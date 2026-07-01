@@ -152,21 +152,29 @@ export default function StudentAssignmentsPage() {
                 <p className="asg-q-prompt"><span className="asg-q-num">{i + 1}</span>{q.prompt}</p>
                 {q.type === "single_choice" && (q.options || []).map((opt, oi) => {
                   const label = String.fromCharCode(65 + oi);
+                  const selected = answers[i] === label;
                   return (
-                    <label key={oi} className={`asg-opt${answers[i] === label ? " sel" : ""}`}>
-                      <input type="radio" name={`q${i}`} checked={answers[i] === label}
+                    <label key={oi} className={`asg-opt${selected ? " sel" : ""}`}>
+                      <input type="radio" name={`q${i}`} checked={selected}
                         onChange={() => setAnswers({ ...answers, [i]: label })} />
-                      <span className="asg-opt-label">{label}</span>{opt}
+                      <span className="asg-opt-badge">{label}</span>
+                      <span className="asg-opt-text">{opt}</span>
+                      <span className="asg-opt-dot" />
                     </label>
                   );
                 })}
-                {q.type === "true_false" && ["正确", "错误"].map((opt) => (
-                  <label key={opt} className={`asg-opt${answers[i] === opt ? " sel" : ""}`}>
-                    <input type="radio" name={`q${i}`} checked={answers[i] === opt}
-                      onChange={() => setAnswers({ ...answers, [i]: opt })} />
-                    {opt}
-                  </label>
-                ))}
+                {q.type === "true_false" && ["正确", "错误"].map((opt, oi) => {
+                  const selected = answers[i] === opt;
+                  return (
+                    <label key={opt} className={`asg-opt${selected ? " sel" : ""}`}>
+                      <input type="radio" name={`q${i}`} checked={selected}
+                        onChange={() => setAnswers({ ...answers, [i]: opt })} />
+                      <span className="asg-opt-badge">{["✓","✗"][oi]}</span>
+                      <span className="asg-opt-text">{opt}</span>
+                      <span className="asg-opt-dot" />
+                    </label>
+                  );
+                })}
                 {!OBJECTIVE.has(q.type) && (
                   <textarea className="asg-textarea" placeholder="在此作答…"
                     value={(answers[i] as string) || ""}
@@ -224,24 +232,52 @@ const CSS = `
 .asg-score { font-size:18px; font-weight:700; color:var(--jade,#2d6a4f); white-space:nowrap; }
 .asg-back { background:none; border:none; color:var(--muted,#7a7068); font-size:13px; cursor:pointer; padding:0 0 16px; }
 .asg-quiz-title { font-size:20px; font-weight:700; margin:0 0 20px; }
-.asg-q { background:#fff; border:1px solid #e5e0d5; border-radius:10px; padding:16px 18px; margin-bottom:14px; }
-.asg-q-prompt { font-size:15px; font-weight:600; margin:0 0 12px; display:flex; gap:8px; }
-.asg-q-num { background:var(--ink,#1a1612); color:#fff; border-radius:50%; width:22px; height:22px;
-  display:inline-flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
-.asg-opt { display:flex; align-items:center; gap:8px; padding:9px 12px; border:1px solid #e5e0d5;
-  border-radius:7px; margin-bottom:7px; cursor:pointer; font-size:14px; transition:background .12s; }
-.asg-opt:hover { background:#f9f6f0; }
-.asg-opt.sel { background:#f0ebe0; border-color:var(--cinnabar,#b7422b); }
-.asg-opt-label { font-weight:700; color:var(--cinnabar,#b7422b); }
-.asg-textarea { width:100%; min-height:80px; border:1px solid #e5e0d5; border-radius:7px; padding:10px;
-  font-family:inherit; font-size:14px; resize:vertical; }
-.asg-submit { width:100%; background:var(--cinnabar,#b7422b); color:#fff; border:none; border-radius:9px;
-  padding:13px; font-size:15px; font-weight:600; cursor:pointer; margin-top:8px; }
-.asg-submit:disabled { opacity:.6; cursor:not-allowed; }
-.asg-result { text-align:center; padding:40px 20px; }
-.asg-result-seal { width:64px; height:64px; margin:0 auto 20px; background:var(--jade,#2d6a4f); color:#fff;
-  border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; }
+
+/* 题目卡片 */
+.asg-q { background:#fff; border:1px solid #e5e0d5; border-radius:12px; padding:20px 20px 14px; margin-bottom:16px; }
+.asg-q-prompt { font-size:15px; font-weight:600; margin:0 0 14px; display:flex; gap:10px; line-height:1.55; }
+.asg-q-num { background:var(--ink,#1a1612); color:#fff; border-radius:50%; width:24px; height:24px; min-width:24px;
+  display:inline-flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; margin-top:1px; }
+
+/* 选项行 — 隐藏原生radio，整行可点 */
+.asg-opt { display:flex; align-items:center; gap:12px; padding:11px 14px; border:1.5px solid #e5e0d5;
+  border-radius:9px; margin-bottom:8px; cursor:pointer; font-size:14px; transition:all .15s;
+  background:#faf8f5; user-select:none; }
+.asg-opt input[type=radio] { display:none; }
+.asg-opt:hover { border-color:#c8b89a; background:#f5f0e8; }
+.asg-opt.sel { background:#fdf1ee; border-color:var(--cinnabar,#b7422b); }
+
+/* 字母徽章 */
+.asg-opt-badge { width:26px; height:26px; min-width:26px; border-radius:6px; display:flex; align-items:center;
+  justify-content:center; font-size:12px; font-weight:700; background:#ede8e0;
+  color:var(--muted,#7a7068); transition:all .15s; flex-shrink:0; }
+.asg-opt.sel .asg-opt-badge { background:var(--cinnabar,#b7422b); color:#fff; }
+
+/* 选项文字 */
+.asg-opt-text { flex:1; line-height:1.45; color:var(--ink,#1a1612); }
+
+/* 右侧选中指示圆 */
+.asg-opt-dot { width:16px; height:16px; min-width:16px; border-radius:50%; border:2px solid #d0c8be;
+  margin-left:auto; transition:all .15s; flex-shrink:0; }
+.asg-opt.sel .asg-opt-dot { border-color:var(--cinnabar,#b7422b); background:var(--cinnabar,#b7422b);
+  box-shadow:0 0 0 3px rgba(183,66,43,.15); }
+
+.asg-textarea { width:100%; min-height:80px; border:1.5px solid #e5e0d5; border-radius:9px; padding:10px 12px;
+  font-family:inherit; font-size:14px; resize:vertical; background:#faf8f5; }
+.asg-textarea:focus { outline:none; border-color:var(--cinnabar,#b7422b); }
+
+.asg-submit { width:100%; background:var(--cinnabar,#b7422b); color:#fff; border:none; border-radius:10px;
+  padding:14px; font-size:15px; font-weight:600; cursor:pointer; margin-top:12px;
+  transition:opacity .15s, transform .1s; letter-spacing:.02em; }
+.asg-submit:hover:not(:disabled) { opacity:.9; transform:translateY(-1px); }
+.asg-submit:disabled { opacity:.55; cursor:not-allowed; }
+
+/* 结果面板 */
+.asg-result { text-align:center; padding:48px 20px; }
+.asg-result-seal { width:72px; height:72px; margin:0 auto 20px; background:var(--jade,#2d6a4f); color:#fff;
+  border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:30px;
+  box-shadow:0 4px 16px rgba(45,106,79,.25); }
 .asg-result-title { font-size:20px; font-weight:700; margin:0 0 8px; }
-.asg-result-score { font-size:36px; font-weight:700; color:var(--jade,#2d6a4f); margin:0 0 8px; }
-.asg-result-note { font-size:13px; color:var(--muted,#7a7068); margin:0 0 24px; }
+.asg-result-score { font-size:40px; font-weight:700; color:var(--jade,#2d6a4f); margin:0 0 8px; letter-spacing:-.02em; }
+.asg-result-note { font-size:13px; color:var(--muted,#7a7068); margin:0 0 28px; }
 `;
