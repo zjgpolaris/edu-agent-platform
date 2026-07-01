@@ -2755,6 +2755,68 @@ class SubmitAssignmentRequest(BaseModel):
     answers: list[Any]
 
 
+class GenerateQuestionsRequest(BaseModel):
+    knowledge_points: list[str]          # 每个知识点生成一道题
+    difficulty: str = "medium"           # easy | medium | hard
+    subject: str = "历史"
+
+
+class GeneratedQuestion(BaseModel):
+    knowledge_tag: str
+    type: str = "single_choice"
+    prompt: str
+    options: list[str]
+    answer: str
+    explanation: str
+
+
+@app.post("/api/teacher/assignments/generate-questions", response_model=list[GeneratedQuestion])
+async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor = Depends(require_auth)):
+    """AI 出题：给定知识点列表，每个知识点 RAG 取材后出一道单选题，供教师审阅修改。"""
+    require_teacher_actor(actor)
+    if not req.knowledge_points:
+        raise HTTPException(status_code=400, detail="knowledge_points 不能为空")
+    if len(req.knowledge_points) > 20:
+        raise HTTPException(status_code=400, detail="单次最多生成 20 道题")
+
+    from agents.auto_tutor import _generate_question as _at_gen_question
+    from tools.registry import run_tool
+    from tools.base import ToolExecutionContext
+
+    ctx = ToolExecutionContext(actor_id=actor.actor_id, session_id=f"gen-{actor.actor_id}")
+
+    async def _gen_one(kp: str) -> GeneratedQuestion:
+        try:
+            raw = await run_in_threadpool(
+                run_tool, "search_history_knowledge",
+                {"query": kp, "top_k": 4}, ctx,
+            )
+            sources = raw if isinstance(raw, list) else []
+        except Exception:
+            sources = []
+        q = await run_in_threadpool(_at_gen_question, kp, req.difficulty, sources)
+        opts = q.get("options", [])
+        # 选项可能带 "A. " 前缀，也可能不带，统一去掉前缀让前端自行显示
+        def _strip(o: str) -> str:
+            return o[3:].strip() if len(o) > 2 and o[1] == "." else o.strip()
+        return GeneratedQuestion(
+            knowledge_tag=kp,
+            type="single_choice",
+            prompt=q.get("question", ""),
+            options=[_strip(o) for o in opts],
+            answer=(q.get("answer", "A") or "A")[:1].upper(),
+            explanation=q.get("explanation", ""),
+        )
+
+    import asyncio
+    results = await asyncio.gather(*[_gen_one(kp) for kp in req.knowledge_points], return_exceptions=True)
+    questions = []
+    for r in results:
+        if isinstance(r, GeneratedQuestion):
+            questions.append(r)
+    return questions
+
+
 @app.post("/api/teacher/assignments")
 async def teacher_create_assignment(req: CreateAssignmentRequest, actor: Actor = Depends(require_auth)):
     require_teacher_actor(actor)

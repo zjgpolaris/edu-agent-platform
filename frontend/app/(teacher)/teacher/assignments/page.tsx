@@ -44,6 +44,12 @@ export default function TeacherAssignmentsPage() {
   const [assignees, setAssignees] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // AI 出题
+  const [aiKps, setAiKps] = useState("");          // 知识点，换行分隔
+  const [aiDifficulty, setAiDifficulty] = useState("medium");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState("");
+
   useEffect(() => {
     if (user?.role !== "teacher" && user?.role !== "admin") {
       if (user) setError("仅教师可访问");
@@ -63,6 +69,46 @@ export default function TeacherAssignmentsPage() {
     if (!user?.token) return;
     const res = await fetch(`${API}/api/teacher/assignments`, { headers: authHeaders(user.token) });
     if (res.ok) setAssignments((await res.json()).assignments || []);
+  }
+
+  async function generateWithAI() {
+    setAiError("");
+    const kps = aiKps.split(/[\n,，]+/).map((s) => s.trim()).filter(Boolean);
+    if (kps.length === 0) { setAiError("请输入至少一个知识点"); return; }
+    if (kps.length > 20) { setAiError("最多 20 个知识点"); return; }
+    setAiGenerating(true);
+    try {
+      const res = await fetch(`${API}/api/teacher/assignments/generate-questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders(user!.token!) },
+        body: JSON.stringify({ knowledge_points: kps, difficulty: aiDifficulty, subject }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const generated: Array<{
+        knowledge_tag: string; prompt: string;
+        options: string[]; answer: string; explanation: string;
+      }> = await res.json();
+      const newQs: DraftQuestion[] = generated.map((q) => ({
+        type: "single_choice",
+        prompt: q.prompt,
+        options: q.options.length === 4 ? q.options : [...q.options, ...Array(4 - q.options.length).fill("")],
+        answer: q.answer,
+        knowledge_tag: q.knowledge_tag,
+      }));
+      // 追加到现有题目后（去掉全空占位题）
+      setQuestions((prev) => {
+        const nonEmpty = prev.filter((q) => q.prompt.trim());
+        return [...nonEmpty, ...newQs];
+      });
+      setAiKps("");
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "生成失败");
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   function updateQuestion(i: number, patch: Partial<DraftQuestion>) {
@@ -171,6 +217,33 @@ export default function TeacherAssignmentsPage() {
                 <span className="tasg-label">截止日期（可选）</span>
                 <input className="tasg-input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
               </label>
+            </div>
+
+            {/* AI 出题区 */}
+            <div className="tasg-ai-box">
+              <div className="tasg-label">✨ AI 出题</div>
+              <p className="tasg-ai-hint">输入知识点，AI 自动 RAG 取材并出题，生成后可逐题编辑修改</p>
+              <textarea
+                className="tasg-input tasg-ai-textarea"
+                placeholder={"每行一个知识点，如：\n鸦片战争\n洋务运动\n戊戌变法"}
+                value={aiKps}
+                onChange={(e) => setAiKps(e.target.value)}
+                rows={3}
+              />
+              <div className="tasg-ai-row">
+                <label className="tasg-answer">
+                  难度
+                  <select className="tasg-select" value={aiDifficulty} onChange={(e) => setAiDifficulty(e.target.value)}>
+                    <option value="easy">简单</option>
+                    <option value="medium">适中</option>
+                    <option value="hard">较难</option>
+                  </select>
+                </label>
+                <button className="tasg-ai-btn" onClick={generateWithAI} disabled={aiGenerating}>
+                  {aiGenerating ? "AI 出题中…" : "生成题目"}
+                </button>
+              </div>
+              {aiError && <p className="tasg-error">{aiError}</p>}
             </div>
 
             <div className="tasg-label">题目</div>
@@ -290,4 +363,11 @@ const CSS = `
 .tasg-publish { background:var(--cinnabar,#b7422b); color:#fff; border:none; border-radius:9px; padding:13px;
   font-size:15px; font-weight:600; cursor:pointer; margin-top:8px; }
 .tasg-publish:disabled { opacity:.6; cursor:not-allowed; }
+.tasg-ai-box { background:#f8f4ef; border:1px solid #e5e0d5; border-radius:10px; padding:16px; display:flex; flex-direction:column; gap:10px; }
+.tasg-ai-hint { font-size:12px; color:var(--muted,#7a7068); margin:0; }
+.tasg-ai-textarea { resize:vertical; min-height:72px; }
+.tasg-ai-row { display:flex; align-items:center; gap:12px; }
+.tasg-ai-btn { margin-left:auto; background:var(--cinnabar,#b7422b); color:#fff; border:none; border-radius:8px;
+  padding:9px 20px; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.tasg-ai-btn:disabled { opacity:.6; cursor:not-allowed; }
 `;
