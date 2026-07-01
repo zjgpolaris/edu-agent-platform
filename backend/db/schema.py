@@ -218,6 +218,8 @@ assignment_submissions = Table(
     Column("score", Float),
     Column("status", Text, nullable=False, server_default="submitted"),
     Column("submitted_at", Text, nullable=False),
+    Column("teacher_feedback", Text),
+    Column("reviewed_at", Text),
     Index("idx_assignment_submissions_assignment", "assignment_id"),
     Index("idx_assignment_submissions_student", "student_id", "assignment_id", unique=True),
 )

@@ -525,6 +525,12 @@ async def teacher_teaching_suggestions(req: TeachingSuggestionRequest, actor: Ac
 
 # --- Debug / Health ---
 
+@app.get("/api/health")
+async def api_health():
+    """轻量运行状态检查：不触发 LLM/RAG，供部署平台健康检查使用。"""
+    return {"ok": True, "service": "edu-agent-backend"}
+
+
 class TraceResponse(BaseModel):
     trace_id: str
     events: list[dict]

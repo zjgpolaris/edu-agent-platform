@@ -10,7 +10,7 @@ import json
 import uuid
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from db.engine import get_connection
 from student_profile import now_iso
@@ -43,8 +43,11 @@ def _ensure_tables() -> None:
             teacher_feedback TEXT,
             reviewed_at TEXT,
             UNIQUE(student_id, assignment_id))"""))
-        conn.execute(text("ALTER TABLE assignment_submissions ADD COLUMN IF NOT EXISTS teacher_feedback TEXT"))
-        conn.execute(text("ALTER TABLE assignment_submissions ADD COLUMN IF NOT EXISTS reviewed_at TEXT"))
+        existing_columns = {col["name"] for col in inspect(conn).get_columns("assignment_submissions")}
+        if "teacher_feedback" not in existing_columns:
+            conn.execute(text("ALTER TABLE assignment_submissions ADD COLUMN teacher_feedback TEXT"))
+        if "reviewed_at" not in existing_columns:
+            conn.execute(text("ALTER TABLE assignment_submissions ADD COLUMN reviewed_at TEXT"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_assignment_submissions_assignment ON assignment_submissions(assignment_id)"))
 
 

@@ -420,7 +420,8 @@ frontend/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/debug/llm/health` | LLM 健康检查 |
+| GET | `/api/health` | 轻量服务健康检查，不触发 LLM/RAG，供 Render 等部署平台使用 |
+| GET | `/api/debug/llm/health` | LLM 健康检查，会实际调用 fast 模型，仅用于模型连通性诊断 |
 | GET | `/api/debug/rag/health` | 生产 RAG 健康检查：验证 PostgreSQL/pgvector、`rag_documents`、embedding API 与直接向量查询 |
 | GET | `/api/traces/{trace_id}` | 获取 Agent 执行轨迹 |
 
@@ -580,6 +581,34 @@ frontend/
 | success | INTEGER | 是否成功 |
 | metadata_json | TEXT | 元数据（JSON） |
 | created_at | TEXT | 创建时间 |
+
+#### assignments 表
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT | 作业 ID |
+| teacher_id | TEXT | 创建教师 ID |
+| title | TEXT | 作业标题 |
+| subject | TEXT | 科目 |
+| grade | TEXT | 年级 |
+| questions_json | TEXT | 题目列表（JSON，支持 single_choice / multiple_choice / true_false / subjective） |
+| assignee_ids_json | TEXT | 分配学生 ID 列表（JSON） |
+| due_date | TEXT | 截止时间 |
+| created_at | TEXT | 创建时间 |
+
+#### assignment_submissions 表
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT | 提交 ID |
+| assignment_id | TEXT | 作业 ID |
+| student_id | TEXT | 学生 ID |
+| answers_json | TEXT | 学生答案与自动批改结果（JSON） |
+| score | REAL | 分数；含主观题时为客观题初始得分，人工评阅后覆盖 |
+| status | TEXT | 状态（submitted / partial / graded） |
+| submitted_at | TEXT | 提交时间 |
+| teacher_feedback | TEXT | 教师人工评语 |
+| reviewed_at | TEXT | 人工评阅时间 |
 
 #### 游戏持久化表
 
@@ -808,6 +837,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-06-30 | 1.13.0 | 新增生产 RAG 健康检查端点与显式 production smoke，验证托管 embedding + Postgres/pgvector + rag_documents 索引链路；补齐 CI 后端验证入口并让 RAG 依赖评测在无 sources 时跳过 |
 | 2026-07-01 | 1.14.0 | 新增学生学习成长报告：后端 `GET /api/student/{id}/learning-report`（汇总 SM-2、作业批改、活跃度、AutoTutor、错题本）；前端 `/student/report` 页面含热图+柱状图+作业趋势+错题排行；侧边栏与移动导航新增「成长报告」入口 |
 | 2026-07-01 | 1.15.0 | 新增教师布置作业工作流：`assignments`/`assignment_submissions` 表；5 个 API（教师创建/列表/提交明细，学生待办/提交）；客观题自动批改+主观题待评阅；前端 `/teacher/assignments` 出题页 + `/student/assignments` 作业本；新增 `assignment_smoke.py`（8 例） |
+| 2026-07-01 | 1.15.1 | 修复 `assignment_submissions` 兼容旧 SQLite 的列补齐逻辑；新增 `/api/health` 轻量健康检查并改用它作为 Render/keep-alive 探针，避免 LLM 配额耗尽导致部署健康检查失败 |
 
 ---
 
