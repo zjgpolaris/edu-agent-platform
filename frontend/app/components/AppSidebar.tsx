@@ -36,6 +36,7 @@ const studentNav: NavItem[] = [
     label: "我的学情", icon: "析", children: [
       { label: "今日复习", href: "/student/review", icon: "复" },
       { label: "学情分析", href: "/student/dashboard", icon: "析" },
+      { label: "成长报告", href: "/student/report", icon: "报" },
       { label: "错题本", href: "/student/weakpoints", icon: "错" },
       { label: "智能练习", href: "/student/quiz", icon: "练" },
       { label: "记忆中心", href: "/student/memory", icon: "忆" },
@@ -225,6 +226,7 @@ const STUDENT_MORE_NAV = [
   { href: "/student/textbook", icon: "册", label: "教材学习" },
   { href: "/student/materials", icon: "纸", label: "资料学习" },
   { href: "/student/weakpoints", icon: "错", label: "错题本" },
+  { href: "/student/report", icon: "报", label: "成长报告" },
   { href: "/student/learning-path", icon: "路", label: "学习路径" },
   { href: "/student/memory", icon: "忆", label: "记忆中心" },
   { href: "/student/quiz", icon: "练", label: "智能练习" },

@@ -2572,3 +2572,152 @@ async def review_submit(student_id: str, req: ReviewSubmitRequest, actor: Actor 
 async def student_mastery_overview(student_id: str, actor: Actor = Depends(require_auth)):
     assert_student_access(actor, student_id)
     return await run_in_threadpool(get_mastery_overview, student_id)
+
+
+# ── 学习成长报告 ────────────────────────────────────────────────────────────────
+
+@app.get("/api/student/{student_id}/learning-report")
+async def student_learning_report(
+    student_id: str,
+    days: int = 14,
+    actor: Actor = Depends(require_auth),
+):
+    """学生学习成长报告：汇总 SM-2 复习、作业批改趋势、活跃度、错题统计。"""
+    assert_student_access(actor, student_id)
+
+    def _fetch() -> dict:
+        import json as _json
+        from datetime import date as _d, timedelta as _td
+        from db.engine import get_connection
+        from sqlalchemy import text
+        from services.weakpoint_service import get_weakpoints as _get_wps
+
+        today = _d.today()
+        period = max(7, min(int(days), 90))
+        since = (today - _td(days=period)).isoformat()
+        report: dict = {
+            "student_id": student_id,
+            "generated_at": today.isoformat(),
+            "period_days": period,
+        }
+
+        with get_connection() as conn:
+            # 1. 档案：掌握率 + 练习均分
+            p = conn.execute(
+                text(
+                    "SELECT weak_topics_json, strong_topics_json, "
+                    "quiz_stats_json, game_stats_json "
+                    "FROM student_profiles WHERE student_id = :sid"
+                ),
+                {"sid": student_id},
+            ).mappings().fetchone()
+            if p:
+                weak = _json.loads(p["weak_topics_json"] or "[]")
+                strong = _json.loads(p["strong_topics_json"] or "[]")
+                total = len(weak) + len(strong)
+                qs = _json.loads(p["quiz_stats_json"] or "{}")
+                gs = _json.loads(p["game_stats_json"] or "{}")
+                report.update(
+                    mastery_pct=round(len(strong) / total * 100) if total else None,
+                    weak_topic_count=len(weak),
+                    strong_topic_count=len(strong),
+                    quiz_avg_score=qs.get("average_score"),
+                    quiz_attempts=qs.get("attempts", 0),
+                    game_avg_score=gs.get("average_score"),
+                )
+            else:
+                report.update(
+                    mastery_pct=None, weak_topic_count=0, strong_topic_count=0,
+                    quiz_avg_score=None, quiz_attempts=0, game_avg_score=None,
+                )
+
+            # 2. SM-2 复习进度（按天）
+            rv_rows = conn.execute(
+                text(
+                    "SELECT date, completed, total FROM review_sessions "
+                    "WHERE student_id = :sid AND date >= :since ORDER BY date"
+                ),
+                {"sid": student_id, "since": since},
+            ).mappings().fetchall()
+            review_by_day = {r["date"]: {"completed": r["completed"], "total": r["total"]} for r in rv_rows}
+            done = sum(r["completed"] for r in rv_rows)
+            total_tasks = sum(r["total"] for r in rv_rows)
+            report.update(
+                review_by_day=review_by_day,
+                review_completed_total=done,
+                review_tasks_total=total_tasks,
+                review_completion_rate=round(done / total_tasks * 100) if total_tasks else None,
+            )
+
+            # 3. 作业批改分数趋势（最近 10 次）
+            hw_rows = conn.execute(
+                text(
+                    "SELECT created_at, teacher_score, grade_result_json "
+                    "FROM homework_reviews WHERE student_id = :sid "
+                    "ORDER BY created_at DESC LIMIT 10"
+                ),
+                {"sid": student_id},
+            ).mappings().fetchall()
+            hw_trend = []
+            for r in reversed(hw_rows):
+                score = r["teacher_score"]
+                if score is None:
+                    try:
+                        result = _json.loads(r["grade_result_json"] or "{}")
+                        score = result.get("total_score") or result.get("score")
+                    except Exception:
+                        pass
+                hw_trend.append({
+                    "date": (r["created_at"] or "")[:10],
+                    "score": round(float(score), 1) if score is not None else None,
+                })
+            valid_scores = [h["score"] for h in hw_trend if h["score"] is not None]
+            report.update(
+                homework_trend=hw_trend,
+                homework_count=len(hw_trend),
+                homework_avg_score=round(sum(valid_scores) / len(valid_scores), 1) if valid_scores else None,
+            )
+
+            # 4. 每日学习活跃度 + 连续打卡 streak
+            ev_rows = conn.execute(
+                text(
+                    "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS cnt "
+                    "FROM learning_events WHERE student_id = :sid AND created_at >= :since "
+                    "GROUP BY day ORDER BY day"
+                ),
+                {"sid": student_id, "since": since},
+            ).mappings().fetchall()
+            activity_by_day = {r["day"]: int(r["cnt"]) for r in ev_rows}
+            streak, check = 0, today
+            while check.isoformat() in activity_by_day:
+                streak += 1
+                check -= _td(days=1)
+            report.update(
+                activity_by_day=activity_by_day,
+                active_days=len(activity_by_day),
+                streak_days=streak,
+            )
+
+            # 5. AutoTutor 完成会话数
+            t_row = conn.execute(
+                text(
+                    "SELECT COUNT(*) AS cnt FROM learning_events "
+                    "WHERE student_id = :sid AND feature = 'auto_tutor' "
+                    "AND event_type = 'session_complete'"
+                ),
+                {"sid": student_id},
+            ).mappings().fetchone()
+            report["autotutor_sessions"] = int(t_row["cnt"]) if t_row else 0
+
+        # 6. 错题本（在 get_connection 块外调用，避免嵌套连接）
+        wps = _get_wps(student_id)
+        report.update(
+            weakpoint_count=len(wps),
+            top_weakpoints=[
+                {"tag": w["knowledge_tag"], "count": w["wrong_count"]}
+                for w in wps[:5]
+            ],
+        )
+        return report
+
+    return await run_in_threadpool(_fetch)

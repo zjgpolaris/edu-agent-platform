@@ -372,6 +372,7 @@ frontend/
 | GET | `/api/students/{student_id}/review/today` | 获取今日自适应复习任务（无则生成） |
 | POST | `/api/students/{student_id}/review/submit` | 提交复习答题结果 |
 | GET | `/api/students/{student_id}/mastery-overview` | 知识点掌握度总览 + 连续打卡天数 |
+| GET | `/api/student/{student_id}/learning-report` | 学习成长报告：汇总 SM-2 复习进度、作业批改趋势、每日活跃度、错题统计、AutoTutor 会话数（`?days=14`） |
 
 ### 教师端
 
@@ -793,6 +794,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-06-29 | 1.11.0 | AutoTutor 上线部署配置：render.yaml + vercel.json + .dockerignore + 前端 standalone 构建 + CORS 经 FRONTEND_ORIGIN/*.vercel.app 放行；新增部署文档 |
 | 2026-06-29 | 1.12.0 | RAG 从本地 BGE/Chroma 迁移到 OpenAI-compatible 托管 embedding（默认 Jina）+ PostgreSQL pgvector，新增 rag_documents 表与 build_pgvector_index.py 离线建索引脚本 |
 | 2026-06-30 | 1.13.0 | 新增生产 RAG 健康检查端点与显式 production smoke，验证托管 embedding + Postgres/pgvector + rag_documents 索引链路；补齐 CI 后端验证入口并让 RAG 依赖评测在无 sources 时跳过 |
+| 2026-07-01 | 1.14.0 | 新增学生学习成长报告：后端 `GET /api/student/{id}/learning-report`（汇总 SM-2、作业批改、活跃度、AutoTutor、错题本）；前端 `/student/report` 页面含热图+柱状图+作业趋势+错题排行；侧边栏与移动导航新增「成长报告」入口 |
 
 ---
 
