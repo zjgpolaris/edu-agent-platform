@@ -847,6 +847,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-01 | 1.15.0 | 新增教师布置作业工作流：`assignments`/`assignment_submissions` 表；5 个 API（教师创建/列表/提交明细，学生待办/提交）；客观题自动批改+主观题待评阅；前端 `/teacher/assignments` 出题页 + `/student/assignments` 作业本；新增 `assignment_smoke.py`（8 例） |
 | 2026-07-01 | 1.15.1 | 修复 `assignment_submissions` 兼容旧 SQLite 的列补齐逻辑；新增 `/api/health` 轻量健康检查并改用它作为 Render/keep-alive 探针；`/api/debug/llm/health` 默认改为浅检查，显式 `?deep=true` 才调用模型，避免旧探针因 LLM 配额耗尽导致部署健康检查失败 |
 | 2026-07-02 | 1.16.0 | 补齐学生「学习路径」页 `/student/learning-path`（此前仅移动端「更多」入口存在但页面缺失致 404）：前端调用已有 `GET /api/students/{id}/learning-path`，渲染掌握度概览、按错题掌握度排序的优先攻克时间线（进度条 + `correct_streak` 连对进度）、推荐行动列表、去复习/针对性辅导（透传 `?focus=` 到 AutoTutor）联动 CTA 与空态；桌面侧边栏「我的学情」分组新增该入口。后端零改动 |
+| 2026-07-02 | 1.16.1 | 教师作业讲评视图呈现每题高频错误选项：`compute_assignment_insights` 早已计算 `common_wrong_answers`（学生最常错选的干扰项及人数），此前前端仅声明类型未渲染，现于「低正确率题」卡片下追加「最多错选『X』· N人」提示，直接点出班级共性误区，辅助讲评。后端零改动 |
 
 ---
 

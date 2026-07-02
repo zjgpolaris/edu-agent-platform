@@ -339,9 +339,17 @@ export default function TeacherAssignmentsPage() {
                       </div>
                       <div className="tasg-insight-card">
                         <span className="tasg-insight-title">低正确率题</span>
-                        {detail.insights.lowest_accuracy_questions.length === 0 ? <p className="tasg-empty compact">暂无客观题统计</p> : detail.insights.lowest_accuracy_questions.slice(0, 3).map((q) => (
-                          <p key={q.question_index} className="tasg-insight-line">第{q.question_index + 1}题 · {q.accuracy}%：{q.prompt.slice(0, 34)}</p>
-                        ))}
+                        {detail.insights.lowest_accuracy_questions.length === 0 ? <p className="tasg-empty compact">暂无客观题统计</p> : detail.insights.lowest_accuracy_questions.slice(0, 3).map((q) => {
+                          const topWrong = q.common_wrong_answers?.[0];
+                          return (
+                            <div key={q.question_index} className="tasg-insight-qitem">
+                              <p className="tasg-insight-line">第{q.question_index + 1}题 · {q.accuracy}%：{q.prompt.slice(0, 34)}</p>
+                              {topWrong && (
+                                <p className="tasg-insight-wrong">最多错选「{topWrong.answer}」· {topWrong.count}人</p>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                     {detail.insights.below_threshold_students.length > 0 && (
@@ -647,6 +655,8 @@ const CSS = `
 .tasg-insight-card { background:#fff; border:1px solid #efe4d2; border-radius:9px; padding:10px 12px; }
 .tasg-insight-title { display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--cinnabar,#b7422b); }
 .tasg-insight-line { font-size:12px; line-height:1.55; margin:4px 0; color:var(--ink,#1a1612); }
+.tasg-insight-qitem { margin:5px 0; }
+.tasg-insight-wrong { font-size:11px; color:var(--cinnabar,#b7422b); margin:1px 0 4px 10px; opacity:.85; }
 .tasg-empty.compact { padding:0; margin:0; }
 .tasg-focus-students { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .tasg-focus-chip { font-size:11px; background:#fdf1ee; color:var(--cinnabar,#b7422b); border-radius:12px; padding:3px 8px; }
