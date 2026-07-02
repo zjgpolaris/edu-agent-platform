@@ -12,7 +12,10 @@ type NavItem = {
   href?: string;
   icon: string;
   children?: NavItem[];
+  badgeKey?: string;
 };
+
+type Badges = Record<string, number>;
 
 const studentNav: NavItem[] = [
   { label: "今日学习", href: "/student", icon: "⌂" },
@@ -34,8 +37,8 @@ const studentNav: NavItem[] = [
   },
   {
     label: "我的学情", icon: "析", children: [
-      { label: "我的作业", href: "/student/assignments", icon: "业" },
-      { label: "今日复习", href: "/student/review", icon: "复" },
+      { label: "我的作业", href: "/student/assignments", icon: "业", badgeKey: "pending_assignments" },
+      { label: "今日复习", href: "/student/review", icon: "复", badgeKey: "pending_review" },
       { label: "学情分析", href: "/student/dashboard", icon: "析" },
       { label: "成长报告", href: "/student/report", icon: "报" },
       { label: "错题本", href: "/student/weakpoints", icon: "错" },
@@ -49,7 +52,7 @@ const teacherNav: NavItem[] = [
   { label: "班级总览", href: "/teacher", icon: "班" },
   {
     label: "批改工作台", icon: "批", children: [
-      { label: "布置作业", href: "/teacher/assignments", icon: "业" },
+      { label: "布置作业", href: "/teacher/assignments", icon: "业", badgeKey: "pending_review" },
       { label: "作文批改", href: "/teacher/grading?tab=essay", icon: "文" },
       { label: "拍照批改", href: "/teacher/grading?tab=homework", icon: "拍" },
     ],
@@ -68,7 +71,21 @@ const teacherNav: NavItem[] = [
   },
 ];
 
-function NavGroup({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function navBadgeCount(item: NavItem, badges: Badges): number {
+  let n = item.badgeKey ? (badges[item.badgeKey] || 0) : 0;
+  if (item.children) {
+    for (const c of item.children) n += navBadgeCount(c, badges);
+  }
+  return n;
+}
+
+function Badge({ count, collapsed }: { count: number; collapsed: boolean }) {
+  if (count <= 0) return null;
+  if (collapsed) return <span className="sidebar-badge-dot" aria-label={`${count} 项待处理`} />;
+  return <span className="sidebar-badge">{count > 99 ? "99+" : count}</span>;
+}
+
+function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boolean; badges: Badges }) {
   const pathname = usePathname();
   const isChildActive = item.children?.some(
     (c) => c.href && pathname.startsWith(c.href.split("?")[0])
@@ -94,14 +111,17 @@ function NavGroup({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
     const active = item.href === "/student" || item.href === "/teacher"
       ? pathname === item.href
       : item.href && pathname.startsWith(item.href.split("?")[0]);
+    const count = navBadgeCount(item, badges);
     return (
       <Link href={item.href!} className={`sidebar-item${active ? " active" : ""}`} title={collapsed ? item.label : undefined}>
-        <span className="sidebar-icon">{item.icon}</span>
+        <span className="sidebar-icon">{item.icon}{collapsed && <Badge count={count} collapsed />}</span>
         {!collapsed && <span className="sidebar-label">{item.label}</span>}
+        {!collapsed && <Badge count={count} collapsed={false} />}
       </Link>
     );
   }
 
+  const groupCount = navBadgeCount(item, badges);
   return (
     <div className="sidebar-group">
       <button
@@ -109,10 +129,11 @@ function NavGroup({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
         onClick={toggleGroup}
         title={collapsed ? item.label : undefined}
       >
-        <span className="sidebar-icon">{item.icon}</span>
+        <span className="sidebar-icon">{item.icon}{collapsed && <Badge count={groupCount} collapsed />}</span>
         {!collapsed && (
           <>
             <span className="sidebar-label">{item.label}</span>
+            {!open && <Badge count={groupCount} collapsed={false} />}
             <span className="sidebar-chevron">{open ? "▾" : "▸"}</span>
           </>
         )}
@@ -121,6 +142,7 @@ function NavGroup({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
         <div className="sidebar-children">
           {item.children.map((child) => {
             const active = child.href && pathname.startsWith(child.href.split("?")[0]);
+            const count = navBadgeCount(child, badges);
             return (
               <Link
                 key={child.href}
@@ -130,6 +152,7 @@ function NavGroup({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
               >
                 <span className="sidebar-icon">{child.icon}</span>
                 <span className="sidebar-label">{child.label}</span>
+                <Badge count={count} collapsed={false} />
               </Link>
             );
           })}
@@ -142,6 +165,7 @@ function NavGroup({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
 export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
   const [collapsed, setCollapsed] = useState(false);
   const [recentTopic, setRecentTopic] = useState("");
+  const [badges, setBadges] = useState<Badges>({});
   const { user, logout } = useAuth();
   const router = useRouter();
 
@@ -156,6 +180,25 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { const t = d?.profile?.recent_topics?.[0]; if (t) setRecentTopic(t); })
       .catch(() => {});
+  }, [role, user?.actorId, user?.token]);
+
+  // 通知徽标：按角色拉取待处理事项数，60s 轮询一次
+  useEffect(() => {
+    if (!user?.token) return;
+    let cancelled = false;
+    const url = role === "teacher"
+      ? `${API}/api/teacher/badges`
+      : (user.actorId ? `${API}/api/student/${user.actorId}/badges` : null);
+    if (!url) return;
+    const fetchBadges = () => {
+      fetch(url, { headers: authHeaders(user.token) })
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => { if (!cancelled && d && typeof d === "object") setBadges(d as Badges); })
+        .catch(() => {});
+    };
+    fetchBadges();
+    const timer = setInterval(fetchBadges, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [role, user?.actorId, user?.token]);
 
   function toggle() {
@@ -199,7 +242,7 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
       )}
       <nav className="sidebar-nav" aria-label={roleLabel}>
         {nav.map((item) => (
-          <NavGroup key={item.label} item={item} collapsed={collapsed} />
+          <NavGroup key={item.label} item={item} collapsed={collapsed} badges={badges} />
         ))}
       </nav>
       <div className="sidebar-footer">
@@ -216,13 +259,15 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
   );
 }
 
-const STUDENT_MOBILE_NAV = [
+type MobileNavItem = { href: string; icon: string; label: string; badgeKey?: string };
+
+const STUDENT_MOBILE_NAV: MobileNavItem[] = [
   { href: "/student", icon: "主", label: "首页" },
   { href: "/student/auto-tutor", icon: "辅", label: "辅导" },
   { href: "/student/assistant", icon: "问", label: "助手" },
-  { href: "/student/review", icon: "复", label: "复习" },
+  { href: "/student/review", icon: "复", label: "复习", badgeKey: "pending_review" },
 ];
-const STUDENT_MORE_NAV = [
+const STUDENT_MORE_NAV: MobileNavItem[] = [
   { href: "/student/assignments", icon: "业", label: "我的作业" },
   { href: "/student/history/chat", icon: "人", label: "历史对话" },
   { href: "/student/history/games", icon: "弈", label: "历史游戏" },
@@ -234,23 +279,49 @@ const STUDENT_MORE_NAV = [
   { href: "/student/memory", icon: "忆", label: "记忆中心" },
   { href: "/student/quiz", icon: "练", label: "智能练习" },
 ];
-const TEACHER_MOBILE_NAV = [
+const TEACHER_MOBILE_NAV: MobileNavItem[] = [
   { href: "/teacher", icon: "班", label: "总览" },
   { href: "/teacher/grading", icon: "批", label: "批改" },
   { href: "/teacher/class-analytics", icon: "析", label: "学情" },
 ];
-const TEACHER_MORE_NAV = [
-  { href: "/teacher/assignments", icon: "业", label: "布置作业" },
+const TEACHER_MORE_NAV: MobileNavItem[] = [
+  { href: "/teacher/assignments", icon: "业", label: "布置作业", badgeKey: "pending_review" },
   { href: "/teacher/materials", icon: "生", label: "资料生成" },
   { href: "/teacher/resources", icon: "库", label: "资源库" },
   { href: "/eval", icon: "测", label: "Eval" },
 ];
 
+function badgeOf(badges: Badges, item: { badgeKey?: string }): number {
+  return item.badgeKey ? (badges[item.badgeKey] || 0) : 0;
+}
+
 export function MobileBottomNav({ role }: { role: "student" | "teacher" }) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [badges, setBadges] = useState<Badges>({});
   const items = role === "teacher" ? TEACHER_MOBILE_NAV : STUDENT_MOBILE_NAV;
   const moreItems = role === "teacher" ? TEACHER_MORE_NAV : STUDENT_MORE_NAV;
+
+  useEffect(() => {
+    if (!user?.token) return;
+    let cancelled = false;
+    const url = role === "teacher"
+      ? `${API}/api/teacher/badges`
+      : (user.actorId ? `${API}/api/student/${user.actorId}/badges` : null);
+    if (!url) return;
+    const run = () => {
+      fetch(url, { headers: authHeaders(user.token) })
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => { if (!cancelled && d && typeof d === "object") setBadges(d as Badges); })
+        .catch(() => {});
+    };
+    run();
+    const timer = setInterval(run, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [role, user?.actorId, user?.token]);
+
+  const moreCount = moreItems.reduce((s, it) => s + badgeOf(badges, it), 0);
 
   return (
     <>
@@ -273,15 +344,16 @@ export function MobileBottomNav({ role }: { role: "student" | "teacher" }) {
           const active = item.href === "/student" || item.href === "/teacher"
             ? pathname === item.href
             : pathname.startsWith(item.href);
+          const count = badgeOf(badges, item);
           return (
             <Link key={item.href} href={item.href} className={`mbn-item${active ? " active" : ""}`}>
-              <span className="mbn-icon">{item.icon}</span>
+              <span className="mbn-icon">{item.icon}{count > 0 && <span className="sidebar-badge-dot" />}</span>
               <span className="mbn-label">{item.label}</span>
             </Link>
           );
         })}
         <button type="button" className="mbn-item" onClick={() => setMenuOpen(true)}>
-          <span className="mbn-icon">≡</span>
+          <span className="mbn-icon">≡{moreCount > 0 && <span className="sidebar-badge-dot" />}</span>
           <span className="mbn-label">更多</span>
         </button>
       </nav>

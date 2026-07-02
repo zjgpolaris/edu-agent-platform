@@ -13,6 +13,7 @@ type DraftQuestion = {
   answer: string;
   knowledge_tag: string;
   reference_answer?: string;
+  quality?: { level: string; issues: string[] };
 };
 type WeakTag = { knowledge_tag: string; wrong_count?: number; student_count: number; question_indices?: number[]; sources?: string[] };
 type LowAccuracyQuestion = {
@@ -76,6 +77,7 @@ export default function TeacherAssignmentsPage() {
   const [aiKps, setAiKps] = useState("");
   const [aiDifficulty, setAiDifficulty] = useState("medium");
   const [aiType, setAiType] = useState("single_choice");
+  const [aiSemantic, setAiSemantic] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState("");
 
@@ -137,6 +139,26 @@ export default function TeacherAssignmentsPage() {
       setError(e instanceof Error ? e.message : "评阅失败");
     } finally { setReviewing(null); }
   }
+  async function copyInsightOutline() {
+    if (!detail?.insights) return;
+    const i = detail.insights;
+    const lines = [
+      `作业讲评提纲：${detail.assignment.title}`,
+      `提交情况：${i.submission_rate.submitted}/${i.submission_rate.assignee_count}（${i.submission_rate.percent}%），均分 ${i.average_score ?? "—"}`,
+      `待评阅：${i.pending_review_count}，低分学生：${i.below_threshold_students.length}`,
+      "",
+      "讲评重点：",
+      ...(i.suggested_reteach_focus.length ? i.suggested_reteach_focus.map((x, idx) => `${idx + 1}. ${x.knowledge_tag}：${x.reason}`) : ["暂无明显集中薄弱点"]),
+      "",
+      "低正确率题：",
+      ...(i.lowest_accuracy_questions.slice(0, 3).map((q) => `第${q.question_index + 1}题（${q.accuracy}%）：${q.prompt}`)),
+      "",
+      "需关注学生：",
+      ...(i.below_threshold_students.length ? i.below_threshold_students.map((s) => `${s.student_id}：${s.score}分，薄弱点 ${s.missed_tags.join("、") || "—"}`) : ["暂无"]),
+    ];
+    await navigator.clipboard?.writeText(lines.join("\n"));
+    setMsg("讲评提纲已复制 ✓");
+  }
 
   async function generateWithAI() {
     setAiError("");
@@ -148,7 +170,7 @@ export default function TeacherAssignmentsPage() {
       const res = await fetch(`${API}/api/teacher/assignments/generate-questions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders(user!.token!) },
-        body: JSON.stringify({ knowledge_points: kps, difficulty: aiDifficulty, question_type: aiType, subject }),
+        body: JSON.stringify({ knowledge_points: kps, difficulty: aiDifficulty, question_type: aiType, subject, semantic_check: aiSemantic }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -157,13 +179,14 @@ export default function TeacherAssignmentsPage() {
       const generated: Array<{
         knowledge_tag: string; type: string; prompt: string;
         options: string[]; answer: string; explanation: string;
+        quality?: { level: string; issues: string[] };
       }> = await res.json();
       const newQs: DraftQuestion[] = generated.map((q) => {
         if (q.type === "true_false") {
-          return { type: "true_false", prompt: q.prompt, options: [], answer: q.answer || "正确", knowledge_tag: q.knowledge_tag };
+          return { type: "true_false", prompt: q.prompt, options: [], answer: q.answer || "正确", knowledge_tag: q.knowledge_tag, quality: q.quality };
         }
         if (q.type === "subjective") {
-          return { type: "subjective", prompt: q.prompt, options: [], answer: "", knowledge_tag: q.knowledge_tag, reference_answer: q.explanation || "" };
+          return { type: "subjective", prompt: q.prompt, options: [], answer: "", knowledge_tag: q.knowledge_tag, reference_answer: q.explanation || "", quality: q.quality };
         }
         return {
           type: "single_choice",
@@ -171,6 +194,7 @@ export default function TeacherAssignmentsPage() {
           options: q.options.length === 4 ? q.options : [...q.options, ...Array(4 - q.options.length).fill("")],
           answer: q.answer,
           knowledge_tag: q.knowledge_tag,
+          quality: q.quality,
         };
       });
       // 追加到现有题目后（去掉全空占位题）
@@ -258,6 +282,12 @@ export default function TeacherAssignmentsPage() {
                 <div className="tasg-row-main">
                   <span className="tasg-row-title">{a.title}</span>
                   <span className="tasg-row-meta">{a.subject || "—"} · {a.assignee_count} 名学生</span>
+                  <div className="tasg-row-insights">
+                    {!!a.pending_review_count && <span className="tasg-chip warn">待评阅 {a.pending_review_count}</span>}
+                    {(a.top_weak_tags || []).slice(0, 2).map((t) => <span key={t.knowledge_tag} className="tasg-chip">{t.knowledge_tag} {t.student_count}人</span>)}
+                    {a.lowest_accuracy_question && <span className="tasg-chip">第{a.lowest_accuracy_question.question_index + 1}题 {a.lowest_accuracy_question.accuracy}%</span>}
+                    {!!a.below_threshold_count && <span className="tasg-chip danger">低分 {a.below_threshold_count}人</span>}
+                  </div>
                 </div>
                 <div className="tasg-row-stats">
                   <div className="tasg-stat">
@@ -288,6 +318,42 @@ export default function TeacherAssignmentsPage() {
               <>
                 <h2 className="tasg-detail-title">{detail.assignment.title}</h2>
                 <p className="tasg-detail-sub">{detail.submissions.length} 人已提交</p>
+                {detail.insights && (
+                  <div className="tasg-insight-panel">
+                    <div className="tasg-insight-head">
+                      <span className="tasg-label">讲评洞察</span>
+                      <button className="tasg-copy-btn" onClick={copyInsightOutline}>复制讲评提纲</button>
+                    </div>
+                    <div className="tasg-insight-metrics">
+                      <div className="tasg-insight-metric"><b>{detail.insights.submission_rate.percent}%</b><span>提交率</span></div>
+                      <div className="tasg-insight-metric"><b>{detail.insights.average_score ?? "—"}</b><span>均分</span></div>
+                      <div className="tasg-insight-metric"><b>{detail.insights.pending_review_count}</b><span>待评阅</span></div>
+                      <div className="tasg-insight-metric"><b>{detail.insights.below_threshold_students.length}</b><span>低分学生</span></div>
+                    </div>
+                    <div className="tasg-insight-grid">
+                      <div className="tasg-insight-card">
+                        <span className="tasg-insight-title">讲评优先级</span>
+                        {detail.insights.suggested_reteach_focus.length === 0 ? <p className="tasg-empty compact">暂无集中薄弱点</p> : detail.insights.suggested_reteach_focus.map((x) => (
+                          <p key={x.knowledge_tag} className="tasg-insight-line"><b>{x.knowledge_tag}</b>：{x.reason}</p>
+                        ))}
+                      </div>
+                      <div className="tasg-insight-card">
+                        <span className="tasg-insight-title">低正确率题</span>
+                        {detail.insights.lowest_accuracy_questions.length === 0 ? <p className="tasg-empty compact">暂无客观题统计</p> : detail.insights.lowest_accuracy_questions.slice(0, 3).map((q) => (
+                          <p key={q.question_index} className="tasg-insight-line">第{q.question_index + 1}题 · {q.accuracy}%：{q.prompt.slice(0, 34)}</p>
+                        ))}
+                      </div>
+                    </div>
+                    {detail.insights.below_threshold_students.length > 0 && (
+                      <div className="tasg-focus-students">
+                        <span className="tasg-insight-title">需关注学生</span>
+                        {detail.insights.below_threshold_students.slice(0, 5).map((s) => (
+                          <span key={s.student_id} className="tasg-focus-chip">{s.student_id} · {s.score}分{s.missed_tags.length ? ` · ${s.missed_tags.join("、")}` : ""}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {detail.submissions.length === 0 ? (
                   <p className="tasg-empty">暂无学生提交</p>
                 ) : detail.submissions.map((sub) => (
@@ -401,6 +467,10 @@ export default function TeacherAssignmentsPage() {
                   {aiGenerating ? "AI 出题中…" : "生成题目"}
                 </button>
               </div>
+              <label className="tasg-ai-semantic">
+                <input type="checkbox" checked={aiSemantic} onChange={(e) => setAiSemantic(e.target.checked)} />
+                <span>深度质检（AI 复核题目语义，较慢）</span>
+              </label>
               {aiError && <p className="tasg-error">{aiError}</p>}
             </div>
 
@@ -419,6 +489,14 @@ export default function TeacherAssignmentsPage() {
                   )}
                 </div>
                 <input className="tasg-input" placeholder="题干" value={q.prompt} onChange={(e) => updateQuestion(i, { prompt: e.target.value })} />
+                {q.quality && q.quality.level !== "ok" && (
+                  <div className={`tasg-quality tasg-quality-${q.quality.level}`}>
+                    <span className="tasg-quality-tag">
+                      {q.quality.level === "error" ? "⚠ 需修正" : "可优化"}
+                    </span>
+                    <span className="tasg-quality-issues">{q.quality.issues.join("；")}</span>
+                  </div>
+                )}
                 {q.type === "single_choice" && (
                   <div className="tasg-opts">
                     {q.options.map((opt, oi) => (
@@ -498,6 +576,10 @@ const CSS = `
 .tasg-row-main { display:flex; flex-direction:column; gap:4px; }
 .tasg-row-title { font-size:15px; font-weight:600; }
 .tasg-row-meta { font-size:12px; color:var(--muted,#7a7068); }
+.tasg-row-insights { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.tasg-chip { font-size:11px; background:#f0ebe0; color:var(--muted,#7a7068); border-radius:12px; padding:2px 8px; }
+.tasg-chip.warn { background:#fff3d8; color:#8a5a00; }
+.tasg-chip.danger { background:#fdf1ee; color:var(--cinnabar,#b7422b); }
 .tasg-row-stats { display:flex; gap:18px; }
 .tasg-stat { display:flex; flex-direction:column; align-items:center; }
 .tasg-stat-val { font-size:17px; font-weight:700; }
@@ -518,6 +600,14 @@ const CSS = `
 .tasg-opt-key { font-weight:700; color:var(--cinnabar,#b7422b); width:18px; }
 .tasg-answer { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; }
 .tasg-hint { font-size:12px; color:var(--muted,#7a7068); margin:0; }
+.tasg-quality { display:flex; align-items:baseline; gap:8px; font-size:12px; padding:6px 10px; border-radius:7px; flex-wrap:wrap; }
+.tasg-quality-error { background:#fdecea; border:1px solid #f5c2bc; }
+.tasg-quality-warn { background:#fdf6e3; border:1px solid #efdca6; }
+.tasg-quality-tag { font-weight:700; white-space:nowrap; }
+.tasg-quality-error .tasg-quality-tag { color:#c0392b; }
+.tasg-quality-warn .tasg-quality-tag { color:#b0862b; }
+.tasg-quality-issues { color:var(--ink,#4a4038); }
+.tasg-ref-answer { min-height:64px; resize:vertical; }
 .tasg-add { align-self:flex-start; background:#f0ebe0; border:1px dashed #c8b89a; border-radius:7px;
   padding:8px 16px; font-size:13px; cursor:pointer; color:var(--ink,#1a1612); }
 .tasg-students { display:flex; flex-wrap:wrap; gap:8px; }
@@ -535,6 +625,8 @@ const CSS = `
 .tasg-ai-btn { margin-left:auto; background:var(--cinnabar,#b7422b); color:#fff; border:none; border-radius:8px;
   padding:9px 20px; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }
 .tasg-ai-btn:disabled { opacity:.6; cursor:not-allowed; }
+.tasg-ai-semantic { display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12px; color:var(--muted,#7a7068); cursor:pointer; }
+.tasg-ai-semantic input { cursor:pointer; }
 /* 列表行可点击 */
 .tasg-row-link { cursor:pointer; transition:border-color .15s, transform .1s; }
 .tasg-row-link:hover { border-color:var(--cinnabar,#b7422b); transform:translateX(2px); }
@@ -544,6 +636,20 @@ const CSS = `
 .tasg-detail { margin-top:24px; border-top:1px solid #e5e0d5; padding-top:20px; }
 .tasg-detail-title { font-size:20px; font-weight:700; margin:0 0 4px; }
 .tasg-detail-sub { font-size:13px; color:var(--muted,#7a7068); margin:0 0 16px; }
+.tasg-insight-panel { background:#fffaf3; border:1px solid #e5d4b8; border-radius:12px; padding:14px 16px; margin:0 0 16px; display:flex; flex-direction:column; gap:12px; }
+.tasg-insight-head { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.tasg-copy-btn { border:1px solid #d8c5a5; background:#fff; border-radius:7px; padding:6px 10px; font-size:12px; cursor:pointer; color:var(--ink,#1a1612); }
+.tasg-insight-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.tasg-insight-metric { background:#fff; border:1px solid #efe4d2; border-radius:9px; padding:10px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.tasg-insight-metric b { font-size:18px; }
+.tasg-insight-metric span { font-size:11px; color:var(--muted,#7a7068); }
+.tasg-insight-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.tasg-insight-card { background:#fff; border:1px solid #efe4d2; border-radius:9px; padding:10px 12px; }
+.tasg-insight-title { display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--cinnabar,#b7422b); }
+.tasg-insight-line { font-size:12px; line-height:1.55; margin:4px 0; color:var(--ink,#1a1612); }
+.tasg-empty.compact { padding:0; margin:0; }
+.tasg-focus-students { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.tasg-focus-chip { font-size:11px; background:#fdf1ee; color:var(--cinnabar,#b7422b); border-radius:12px; padding:3px 8px; }
 .tasg-sub-card { background:#fff; border:1px solid #e5e0d5; border-radius:10px; padding:14px 16px; margin-bottom:12px; }
 .tasg-sub-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
 .tasg-sub-student { font-size:14px; font-weight:600; }

@@ -141,7 +141,7 @@ backend/
 │
 ├── services/                  # 业务服务
 │   ├── batch_essay_service.py     # 批量作文批改
-│   └── weakpoint_service.py       # 错题本服务
+│   └── weakpoint_service.py       # 错题本服务（掌握度证据计数：答错强化，连续答对达阈值才移除）
 │
 ├── textbook_learning/         # 教材学习
 │   ├── schema.py                   # 数据模型
@@ -314,7 +314,7 @@ frontend/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/autotutor/start` | 启动一节自主辅导课：读画像/错题本→自主规划→出首题，返回 session_id + 计划 + trace_id |
+| POST | `/api/autotutor/start` | 启动一节自主辅导课：读画像/错题本→自主规划→出首题，返回 session_id + 计划 + trace_id。可选 `focus_tags`（如来自作业错题）会被提到教学计划最前 |
 | POST | `/api/autotutor/answer` | 提交当前题作答，驱动 judge→（答错则 reflect→re_plan）/ next_step / finalize |
 | GET | `/api/autotutor/session/{session_id}` | 拉取会话当前状态（计划、当前题、反思记录、runtime steps、trace_id） |
 
@@ -371,7 +371,7 @@ frontend/
 | DELETE | `/api/student/{student_id}/weakpoints` | 清空错题本 |
 | GET | `/api/students/{student_id}/review/today` | 获取今日自适应复习任务（无则生成） |
 | POST | `/api/students/{student_id}/review/submit` | 提交复习答题结果 |
-| GET | `/api/students/{student_id}/mastery-overview` | 知识点掌握度总览 + 连续打卡天数 |
+| GET | `/api/students/{student_id}/mastery-overview` | 知识点掌握度总览 + 连续打卡天数（strength 纳入 correct_streak 加成） |
 | GET | `/api/student/{student_id}/learning-report` | 学习成长报告：汇总 SM-2 复习进度、作业批改趋势、每日活跃度、错题统计、AutoTutor 会话数（`?days=14`） |
 | GET | `/api/student/{student_id}/assignments` | 学生待办/已完成作业列表（含提交状态与分数） |
 | POST | `/api/student/{student_id}/assignments/{assignment_id}/submit` | 学生提交作答，自动批改客观题，主观题标记待评阅 |
@@ -384,11 +384,13 @@ frontend/
 | GET | `/api/teacher/students/{student_id}/profile` | 学生档案 |
 | GET | `/api/teacher/students/{student_id}/events` | 学生学习事件 |
 | GET | `/api/teacher/class-analytics` | 班级学情分析 |
-| POST | `/api/teacher/assignments/generate-questions` | AI 出题：按知识点批量 RAG 取材并生成单选题 / 判断题 / 简答题草稿，供教师修改确认 |
+| POST | `/api/teacher/assignments/generate-questions` | AI 出题：按知识点批量 RAG 取材并生成单选题 / 判断题 / 简答题草稿，供教师修改确认；每题附带确定性结构质检结果 `quality`（level: ok/warn/error + issues），教师端以徽标标注需修正/可优化的题；可选 `semantic_check=true` 追加 LLM 语义质检（答案是否自洽、题干歧义、干扰项合理性），问题以「语义：」前缀并入 issues，失败/无凭证时优雅降级 |
 | POST | `/api/teacher/assignments` | 创建作业（客观题+主观题），指定学生 |
 | GET | `/api/teacher/assignments` | 教师作业列表，含完成率、平均分与讲评洞察摘要（待评阅数、薄弱知识点、低正确率题） |
 | GET | `/api/teacher/assignments/{assignment_id}/submissions` | 查看一份作业的题目、所有学生提交明细与 `insights` 讲评洞察（提交率、薄弱点、低正确率题、低分学生） |
 | POST | `/api/teacher/assignments/{assignment_id}/review` | 教师人工评阅学生提交：填写分数与反馈，将 `partial` / 待评阅提交置为 `graded` |
+| GET | `/api/teacher/badges` | 教师侧边栏通知徽标：`{pending_review, below_threshold}`（复用作业列表聚合，前端 60s 轮询） |
+| GET | `/api/student/{student_id}/badges` | 学生侧边栏通知徽标：`{pending_assignments, due_soon, pending_review}`（未提交作业/临近到期/今日复习待完成，前端 60s 轮询） |
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
 
@@ -699,8 +701,11 @@ frontend/
 - 教师资料库
 - 教师布置作业工作流：AI 按知识点 RAG 出题（单选 / 判断 / 简答）→ 教师修改确认 → 发放给指定学生
 - 作业提交详情下钻：教师可查看每个学生的分数、每题答对/错、学生答案与正确答案
+- 作业讲评闭环洞察：聚合提交率、待评阅数、低正确率题、薄弱知识点、低分学生与 deterministic 讲评重点
 - 教师人工评阅：对含简答题的 `partial` 提交录入 0-100 分与反馈，并将提交状态更新为 `graded`
+- 错题本掌握度模型：`weakpoints` 表含 `correct_streak`，答错（`record_weakpoint`）强化并清零连对计数，答对（`record_correct_evidence`）累积证据、连续答对达阈值（默认 2）才移出错题本；作业/AutoTutor/教材/复习四处答对统一走此逻辑，取代旧的"答对即删"；错题本页手动删除仍为硬删除
 - 作业错题回流：学生提交客观题后，答错题目的 `knowledge_tag` 自动写入错题本；教师人工评阅主观题后，低分主观题知识点也会写入错题本，供 AutoTutor 后续规划使用
+- 作业错题-复习-辅导数据闭环：`submit_assignment` 返回 `wrong_tags`，学生结果页展示答错知识点并提供「今日复习」「AutoTutor 辅导」入口；答错知识点会追加到已存在的今日复习 session（`merge_new_weakpoints_to_today`，标 `pending_generate` 占位），学生打开复习页时 `get_today_session(hydrate=True)` 按需生成占位题的真题并落库（徽标轮询用 `hydrate=False` 只计数、不触发 LLM）；从作业跳转 AutoTutor 时经 `focus_tags` 把该知识点提到教学计划最前
 - 基于错题本和学生画像聚合班级高频薄弱点
 - 教师首页前置本轮讲评重点，班级学情页展示薄弱点人数占比
 - 教学建议生成基于高频薄弱点人数和占比，输出讲评步骤、课堂活动、重点知识点和分层作业建议
@@ -718,15 +723,18 @@ frontend/
 | `tool_registry_smoke.py` | 工具注册表测试 |
 | `learning_assistant_smoke.py` | 学习助手测试 |
 | `guardrails_smoke.py` | 防护机制测试 |
-| `weakpoints_smoke.py` | 错题本测试 |
+| `weakpoints_smoke.py` | 错题本测试（含掌握度模型：连续答对才移除、答错重置连对、未跟踪 tag no-op），8 例 |
 | `student_profile_smoke.py` | 学生档案测试 |
 | `homework_grading_smoke.py` | 作业批改测试 |
 | `learning_closure_smoke.py` | 作业-错题-复习-学情闭环测试 |
 | `teacher_features_smoke.py` | 教师功能测试，已接入 `run_core_evals.py`，覆盖班级学情、教师资料库、教学建议 schema 与教师审核结果同步 learning event / weakpoints |
-| `assignment_smoke.py` | 教师布置作业工作流测试（创建/列表/学生待办/提交自动批改/查重/权限），8 例，已接入 `run_core_evals.py`（SMOKE） |
+| `assignment_smoke.py` | 教师布置作业工作流测试（创建/列表/学生待办/提交自动批改/查重/权限/人工评阅/讲评洞察），12 例，已接入 `run_core_evals.py`（SMOKE） |
+| `assignment_review_loop_smoke.py` | 作业错题→薄弱点→今日复习→AutoTutor 数据闭环测试（wrong_tags 返回、复习 session 追加、focus_tags 优先规划），5 例，已接入 `run_core_evals.py`（SMOKE） |
+| `question_quality_smoke.py` | AI 出题质检测试：结构质检（选项数/答案合法性/题干为空/判断题答案/简答参考答案）+ LLM 语义质检合并（stub LLM：检出/降级/merge 取最高 level），15 例离线，已接入 `run_core_evals.py`（SMOKE） |
+| `notification_badges_smoke.py` | 通知徽标聚合测试（教师待评阅/低分学生统计、学生未提交/到期统计），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
 | `trajectory_eval.py` | 学习助手工具调用轨迹准确率，已接入 `run_core_evals.py`（CORE/QUICK） |
-| `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中），已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
+| `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中、focus_tags 优先规划、连错降难度、空错题本兜底），7 例，已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
 | `production_rag_health_smoke.py` | 生产 RAG HTTP smoke，显式通过 `API_BASE` 指向线上后端，不进入默认本地 smoke/core 套件 |
 | `tool_permission_smoke.py` | 工具权限确认测试 |
 

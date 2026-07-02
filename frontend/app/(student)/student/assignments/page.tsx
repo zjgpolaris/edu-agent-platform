@@ -29,6 +29,8 @@ type SubmitResult = {
   objective_correct: number;
   objective_total: number;
   has_subjective: boolean;
+  wrong_tags: string[];     // 答错知识点列表，用于引导复习
+  correct_tags: string[];
 };
 
 const OBJECTIVE = new Set(["single_choice", "multiple_choice", "true_false"]);
@@ -199,6 +201,33 @@ export default function StudentAssignmentsPage() {
             </h2>
             {result.score != null && <p className="asg-result-score">{result.score} 分</p>}
             {result.has_subjective && <p className="asg-result-note">主观题已提交，等待老师评阅</p>}
+
+            {/* 薄弱知识点反馈 */}
+            {result.wrong_tags?.length > 0 && (
+              <div className="asg-weakfeed">
+                <p className="asg-weakfeed-label">本次答错知识点</p>
+                <div className="asg-weakfeed-tags">
+                  {result.wrong_tags.map((tag) => (
+                    <span key={tag} className="asg-weak-chip">{tag}</span>
+                  ))}
+                </div>
+                <p className="asg-weakfeed-hint">
+                  这些知识点已加入今日复习，建议课后巩固。
+                </p>
+                <div className="asg-result-ctas">
+                  <a href="/student/review" className="asg-cta-btn asg-cta-review">
+                    今日复习 →
+                  </a>
+                  <a
+                    href={`/student/auto-tutor?focus=${encodeURIComponent(result.wrong_tags[0])}`}
+                    className="asg-cta-btn asg-cta-tutor"
+                  >
+                    AutoTutor 辅导
+                  </a>
+                </div>
+              </div>
+            )}
+
             <button className="asg-submit" onClick={() => { setActive(null); setResult(null); }}>返回作业本</button>
           </section>
         )}
@@ -279,5 +308,15 @@ const CSS = `
   box-shadow:0 4px 16px rgba(45,106,79,.25); }
 .asg-result-title { font-size:20px; font-weight:700; margin:0 0 8px; }
 .asg-result-score { font-size:40px; font-weight:700; color:var(--jade,#2d6a4f); margin:0 0 8px; letter-spacing:-.02em; }
-.asg-result-note { font-size:13px; color:var(--muted,#7a7068); margin:0 0 28px; }
+.asg-result-note { font-size:13px; color:var(--muted,#7a7068); margin:0 0 16px; }
+.asg-weakfeed { background:var(--parchment,#faf7f2); border:1px solid var(--border,#e8e0d0); border-radius:12px; padding:16px 18px; margin:0 0 24px; text-align:left; }
+.asg-weakfeed-label { font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--cinnabar,#b7422b); margin:0 0 10px; text-transform:uppercase; }
+.asg-weakfeed-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.asg-weak-chip { font-size:12px; background:#fff0ed; color:var(--cinnabar,#b7422b); border:1px solid #f0c4bc; border-radius:20px; padding:3px 10px; font-weight:500; }
+.asg-weakfeed-hint { font-size:12px; color:var(--muted,#7a7068); margin:0 0 14px; line-height:1.5; }
+.asg-result-ctas { display:flex; gap:10px; }
+.asg-cta-btn { flex:1; display:block; text-align:center; padding:10px 14px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; transition:opacity .15s,transform .15s; }
+.asg-cta-btn:hover { opacity:.88; transform:translateY(-1px); }
+.asg-cta-review { background:var(--jade,#2d6a4f); color:#fff; }
+.asg-cta-tutor { background:var(--gold,#b08d2b); color:#fff; }
 `;

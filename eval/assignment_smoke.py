@@ -21,6 +21,7 @@ from services.assignment_service import (
     get_assignment_submissions,
     list_student_assignments,
     list_teacher_assignments,
+    review_assignment_submission,
     submit_assignment,
 )
 
@@ -31,8 +32,8 @@ STUDENT_B = "smoke-stu-b"
 QUESTIONS = [
     {"type": "single_choice", "prompt": "鸦片战争爆发于哪一年？",
      "options": ["1840", "1842", "1856", "1860"], "answer": "A", "knowledge_tag": "鸦片战争"},
-    {"type": "true_false", "prompt": "《南京条约》割让了香港岛。", "answer": "正确"},
-    {"type": "subjective", "prompt": "简述鸦片战争的历史影响。", "answer": None},
+    {"type": "true_false", "prompt": "《南京条约》割让了香港岛。", "answer": "正确", "knowledge_tag": "南京条约"},
+    {"type": "subjective", "prompt": "简述鸦片战争的历史影响。", "answer": None, "knowledge_tag": "鸦片战争影响", "reference_answer": "中国开始沦为半殖民地半封建社会。"},
 ]
 
 _state: dict = {}
@@ -111,10 +112,49 @@ def teacher_sees_submissions() -> None:
     assert len(data["submissions"]) == 2
     scores = sorted(s["score"] for s in data["submissions"])
     assert scores == [50.0, 100.0]
+    assert "insights" in data
     # 完成率更新
     lst = list_teacher_assignments(TEACHER)
     assert lst[0]["completion_rate"] == 100
     assert lst[0]["submitted_count"] == 2
+
+
+def assignment_insights_detects_weak_tags() -> None:
+    data = get_assignment_submissions(TEACHER, _state["aid"])
+    tags = data["insights"]["top_weak_tags"]
+    assert tags[0]["knowledge_tag"] == "鸦片战争"
+    assert tags[0]["student_count"] == 1
+
+
+def assignment_insights_detects_low_accuracy_questions() -> None:
+    data = get_assignment_submissions(TEACHER, _state["aid"])
+    q = data["insights"]["lowest_accuracy_questions"][0]
+    assert q["question_index"] == 0
+    assert q["accuracy"] == 50
+
+
+def assignment_insights_tracks_pending_review_count() -> None:
+    data = get_assignment_submissions(TEACHER, _state["aid"])
+    assert data["insights"]["pending_review_count"] == 2
+    review = review_assignment_submission(TEACHER, _state["aid"], STUDENT_A, 88, "回答较完整")
+    assert review["status"] == "graded"
+    data = get_assignment_submissions(TEACHER, _state["aid"])
+    assert data["insights"]["pending_review_count"] == 1
+    sub_a = next(s for s in data["submissions"] if s["student_id"] == STUDENT_A)
+    assert sub_a["teacher_feedback"] == "回答较完整"
+    assert sub_a["reviewed_at"]
+
+
+def assignment_insights_detects_below_threshold_students() -> None:
+    review_assignment_submission(TEACHER, _state["aid"], STUDENT_B, 45, "需补充影响分析")
+    data = get_assignment_submissions(TEACHER, _state["aid"])
+    low = data["insights"]["below_threshold_students"]
+    assert low[0]["student_id"] == STUDENT_B
+    assert "鸦片战争" in low[0]["missed_tags"]
+    assert "鸦片战争影响" in low[0]["missed_tags"]
+    lst = list_teacher_assignments(TEACHER)
+    assert lst[0]["pending_review_count"] == 0
+    assert lst[0]["below_threshold_count"] == 1
 
 
 def permission_guard() -> None:
@@ -134,6 +174,10 @@ if __name__ == "__main__":
         ("submit_partial_wrong", submit_partial_wrong),
         ("duplicate_submit_blocked", duplicate_submit_blocked),
         ("teacher_sees_submissions", teacher_sees_submissions),
+        ("assignment_insights_detects_weak_tags", assignment_insights_detects_weak_tags),
+        ("assignment_insights_detects_low_accuracy_questions", assignment_insights_detects_low_accuracy_questions),
+        ("assignment_insights_tracks_pending_review_count", assignment_insights_tracks_pending_review_count),
+        ("assignment_insights_detects_below_threshold_students", assignment_insights_detects_below_threshold_students),
         ("permission_guard", permission_guard),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)

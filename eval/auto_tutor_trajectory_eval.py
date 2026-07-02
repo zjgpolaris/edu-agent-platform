@@ -126,7 +126,7 @@ def case_correct_answer_no_spurious_replan() -> tuple[bool, str, dict]:
 
 
 def case_closure_writes_memory_and_review() -> tuple[bool, str, dict]:
-    """闭环命中：课后写 memory + 错题进复习池 / 已掌握移出错题本。"""
+    """闭环命中：课后写 memory + 掌握证据累积（掌握度模型：单次答对记 evidence，未必立即移除）。"""
     sid = "traj-closure"
     _seed(sid, ["分封制", "甲骨文"])
     st = at.start_session(sid, grade="七年级上册", actor_role="student")
@@ -143,12 +143,85 @@ def case_closure_writes_memory_and_review() -> tuple[bool, str, dict]:
     mems = list_memory_entries(sid, memory_type="review_goal")
     if not any(m.source_feature == "auto_tutor" for m in mems):
         return False, "no auto_tutor review_goal memory written", detail
-    # 全部答对 → 已掌握应从错题本移除
-    remaining = {w["knowledge_tag"] for w in get_weakpoints(sid)}
+    # 掌握度模型：全部答对 → 掌握点应累积 correct_streak（>=1），或已达阈值被移除
+    wps = {w["knowledge_tag"]: w.get("correct_streak", 0) for w in get_weakpoints(sid)}
     mastered = {p["source_tag"] or p["knowledge_point"] for p in st["lesson_plan"] if p["status"] == "mastered"}
-    detail["remaining_weakpoints"] = list(remaining)
-    if mastered & remaining:
-        return False, f"mastered points still in weakpoints: {mastered & remaining}", detail
+    detail["remaining_weakpoints"] = wps
+    detail["mastered"] = list(mastered)
+    if not mastered:
+        return False, "no step reached mastered status", detail
+    for tag in mastered:
+        # 已移除（达阈值）或仍在但连对计数>=1 都算证据生效
+        if tag in wps and wps[tag] < 1:
+            return False, f"mastered point '{tag}' did not accumulate correct evidence", detail
+    return True, "ok", detail
+
+
+def case_focus_tags_prioritized_in_plan() -> tuple[bool, str, dict]:
+    """focus_tags（作业错题引导）应把指定知识点排到计划最前。
+
+    回归护栏：此前 focus_tags 只重排 weakpoints 列表，LLM 规划按 wrong_count 排序会忽略它，
+    导致 focus_tags 在 LLM 可用时失效。现已在 plan prompt 显式 pin。
+    """
+    sid = "traj-focus"
+    _seed(sid, ["科举制", "安史之乱", "贞观之治"])
+    focus = "安史之乱"
+    st = at.start_session(sid, grade="七年级下册", actor_role="student", focus_tags=[focus])
+    plan = st["lesson_plan"]
+    detail = {"plan": [p["knowledge_point"] for p in plan], "focus": focus,
+              "first_source_tag": plan[0].get("source_tag") if plan else None}
+    if not plan:
+        return False, "plan empty", detail
+    first = plan[0]
+    hit = (first.get("source_tag") == focus) or (focus in (first.get("knowledge_point") or ""))
+    if not hit:
+        return False, "focus tag not prioritized as first step", detail
+    return True, "ok", detail
+
+
+def case_repeated_wrong_downgrades_difficulty() -> tuple[bool, str, dict]:
+    """连续答错应触发难度下调（reflect→re_plan 中 hard/medium 逐步降级）。"""
+    sid = "traj-downgrade"
+    _seed(sid, ["鸦片战争", "洋务运动"])
+    st = at.start_session(sid, grade="八年级上册", actor_role="student")
+    sess = st["session_id"]
+    diffs: list[str] = []
+    guard = 0
+    st_cur = st
+    # 对当前步连续答错两次，观察难度是否下调
+    start_diff = st["lesson_plan"][st["current_step_index"]]["difficulty"]
+    while guard < 3 and st_cur["status"] == "awaiting_answer":
+        guard += 1
+        idx = st_cur["current_step_index"]
+        wrong = _wrong_letter(_correct_letter(sess))
+        st_cur = at.submit_answer(sess, wrong, actor_role="student")
+        cur_idx = min(idx, len(st_cur["lesson_plan"]) - 1)
+        diffs.append(st_cur["lesson_plan"][cur_idx]["difficulty"])
+    detail = {"start_difficulty": start_diff, "difficulties_after_wrong": diffs, "replans": st_cur["replans"]}
+    if st_cur["replans"] < 1:
+        return False, "no re-plan after wrong answers", detail
+    order = {"easy": 0, "medium": 1, "hard": 2}
+    # 至少出现一次难度不升（下调或维持在 easy），且计划确实被标记 replanned
+    if not any(p["replanned"] for p in st_cur["lesson_plan"]):
+        return False, "no step marked replanned", detail
+    if start_diff != "easy" and diffs and order.get(diffs[0], 2) >= order.get(start_diff, 2):
+        return False, f"difficulty not downgraded after wrong ({start_diff}->{diffs})", detail
+    return True, "ok", detail
+
+
+def case_empty_weakpoints_still_plans() -> tuple[bool, str, dict]:
+    """错题本为空的新学生也应规划出合理（非空、有效难度）的计划。"""
+    sid = "traj-empty"
+    clear_weakpoints(sid)
+    st = at.start_session(sid, grade="七年级上册", actor_role="student")
+    plan = st["lesson_plan"]
+    detail = {"plan": [p["knowledge_point"] for p in plan]}
+    if not plan:
+        return False, "empty weakpoints produced empty plan", detail
+    if not all((p.get("knowledge_point") or "").strip() for p in plan):
+        return False, "plan contains empty knowledge_point", detail
+    if not all(p.get("difficulty") in {"easy", "medium", "hard"} for p in plan):
+        return False, "plan contains invalid difficulty", detail
     return True, "ok", detail
 
 
@@ -157,6 +230,9 @@ CASES = [
     ("wrong_answer_triggers_replan", case_wrong_answer_triggers_replan),
     ("correct_answer_no_spurious_replan", case_correct_answer_no_spurious_replan),
     ("closure_writes_memory_and_review", case_closure_writes_memory_and_review),
+    ("focus_tags_prioritized_in_plan", case_focus_tags_prioritized_in_plan),
+    ("repeated_wrong_downgrades_difficulty", case_repeated_wrong_downgrades_difficulty),
+    ("empty_weakpoints_still_plans", case_empty_weakpoints_still_plans),
 ]
 
 

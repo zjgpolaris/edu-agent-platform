@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { TraceTimeline } from "@/components/TraceTimeline";
+import { useSearchParams } from "next/navigation";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -99,8 +100,9 @@ function formatMeta(value: unknown): string {
   return String(value);
 }
 
-export default function AutoTutorPage() {
+function AutoTutorInner() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const studentId = user?.actorId ?? "";
   const [session, setSession] = useState<SessionState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -108,6 +110,9 @@ export default function AutoTutorPage() {
   const [status, setStatus] = useState("准备就绪");
   const [selected, setSelected] = useState<string | null>(null);
   const traceRef = useRef<HTMLDivElement>(null);
+
+  // 从 URL ?focus=知识点 读取作业跳转带来的聚焦知识点
+  const focusTag = searchParams?.get("focus") ?? null;
 
   const headers = useMemo(
     () => ({ "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) }),
@@ -121,10 +126,12 @@ export default function AutoTutorPage() {
     setSelected(null);
     setStatus("Agent 正在读取你的画像与错题本，规划本节课……");
     try {
+      const body: Record<string, unknown> = { student_id: studentId };
+      if (focusTag) body.focus_tags = [focusTag];
       const res = await fetch(`${apiBaseUrl}/api/autotutor/start`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ student_id: studentId }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`启动失败：${res.status}`);
       const data = (await res.json()) as SessionState;
@@ -136,7 +143,7 @@ export default function AutoTutorPage() {
     } finally {
       setLoading(false);
     }
-  }, [studentId, loading, headers]);
+  }, [studentId, loading, headers, focusTag]);
 
   async function answer(letter: string) {
     if (!session || loading || session.status !== "awaiting_answer") return;
@@ -203,9 +210,16 @@ export default function AutoTutorPage() {
               : "点击下方按钮，让 agent 现场为你规划一节课。"}
           </p>
           {!session && (
-            <button type="button" className="learning-tool-action" onClick={() => void start()} disabled={loading || !studentId}>
-              {loading ? "规划中…" : "开始本节课"}
-            </button>
+            <>
+              {focusTag && (
+                <p style={{ fontSize: 12, color: "var(--jade-dark,#2f6f4f)", margin: "4px 0 8px" }}>
+                  将优先讲解你作业中答错的「{focusTag}」
+                </p>
+              )}
+              <button type="button" className="learning-tool-action" onClick={() => void start()} disabled={loading || !studentId}>
+                {loading ? "规划中…" : "开始本节课"}
+              </button>
+            </>
           )}
         </div>
       </section>
@@ -343,5 +357,13 @@ export default function AutoTutorPage() {
         </aside>
       </section>
     </main>
+  );
+}
+
+export default function AutoTutorPage() {
+  return (
+    <Suspense fallback={null}>
+      <AutoTutorInner />
+    </Suspense>
   );
 }
