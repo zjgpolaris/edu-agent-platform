@@ -307,12 +307,22 @@ def list_teacher_assignments(teacher_id: str) -> list[dict[str, Any]]:
             ).mappings().fetchall()
             submissions = [_submission_from_row(s) for s in subs]
             insights = compute_assignment_insights(full_item, submissions)
+            flag_rows = conn.execute(
+                text("SELECT question_index FROM question_review_flags WHERE assignment_id = :aid"),
+                {"aid": full_item["id"]},
+            ).mappings().fetchall()
+            reviewed_idx = {int(r["question_index"]) for r in flag_rows}
+            open_blind_spots = sum(
+                1 for b in insights.get("quality_blind_spots") or []
+                if b["question_index"] not in reviewed_idx
+            )
             item = _row_to_assignment(row, include_questions=False)
             item["submitted_count"] = len(submissions)
             item["assignee_count"] = len(item["assignee_ids"])
             item["completion_rate"] = insights["submission_rate"]["percent"]
             item["average_score"] = insights["average_score"]
             item.update(_compact_insights(insights))
+            item["open_blind_spot_count"] = open_blind_spots
             assignments.append(item)
     return assignments
 
@@ -510,6 +520,7 @@ def get_teacher_badges(teacher_id: str) -> dict[str, int]:
     return {
         "pending_review": sum(int(a.get("pending_review_count") or 0) for a in assignments),
         "below_threshold": sum(int(a.get("below_threshold_count") or 0) for a in assignments),
+        "blind_spots_to_review": sum(int(a.get("open_blind_spot_count") or 0) for a in assignments),
     }
 
 

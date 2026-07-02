@@ -390,7 +390,7 @@ frontend/
 | GET | `/api/teacher/assignments/{assignment_id}/submissions` | 查看一份作业的题目、所有学生提交明细与 `insights` 讲评洞察（提交率、薄弱点、低正确率题及高频错误选项、质检盲区、低分学生），并返回 `review_flags`（题目复核判定）与 `open_blind_spot_count`（未复核盲区数） |
 | POST | `/api/teacher/assignments/{assignment_id}/review` | 教师人工评阅学生提交：填写分数与反馈，将 `partial` / 待评阅提交置为 `graded` |
 | POST | `/api/teacher/assignments/{assignment_id}/questions/{question_index}/review-flag` | 教师复核质检盲区题：`verdict` = `bad_question`（题目有问题）/ `not_mastered`（学生没掌握），UPSERT 到 `question_review_flags` |
-| GET | `/api/teacher/badges` | 教师侧边栏通知徽标：`{pending_review, below_threshold}`（复用作业列表聚合，前端 60s 轮询） |
+| GET | `/api/teacher/badges` | 教师侧边栏通知徽标：`{pending_review, below_threshold, blind_spots_to_review}`（复用作业列表聚合，`blind_spots_to_review`＝各作业未复核质检盲区数之和，前端 60s 轮询；「布置作业」入口显示 pending_review + blind_spots_to_review 之和） |
 | GET | `/api/student/{student_id}/badges` | 学生侧边栏通知徽标：`{pending_assignments, due_soon, pending_review}`（未提交作业/临近到期/今日复习待完成，前端 60s 轮询） |
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
@@ -746,7 +746,7 @@ frontend/
 | `assignment_smoke.py` | 教师布置作业工作流测试（创建/列表/学生待办/提交自动批改/查重/权限/人工评阅/讲评洞察/质检盲区命中与排除/盲区教师复核 UPSERT 与校验），16 例，已接入 `run_core_evals.py`（SMOKE） |
 | `assignment_review_loop_smoke.py` | 作业错题→薄弱点→今日复习→AutoTutor 数据闭环测试（wrong_tags 返回、复习 session 追加、focus_tags 优先规划），5 例，已接入 `run_core_evals.py`（SMOKE） |
 | `question_quality_smoke.py` | AI 出题质检测试：结构质检（选项数/答案合法性/题干为空/判断题答案/简答参考答案）+ LLM 语义质检合并（stub LLM：检出/降级/merge 取最高 level），15 例离线，已接入 `run_core_evals.py`（SMOKE） |
-| `notification_badges_smoke.py` | 通知徽标聚合测试（教师待评阅/低分学生统计、学生未提交/到期统计），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
+| `notification_badges_smoke.py` | 通知徽标聚合测试（教师待评阅/低分学生/未复核质检盲区统计与复核清零、学生未提交/到期统计），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
 | `trajectory_eval.py` | 学习助手工具调用轨迹准确率，已接入 `run_core_evals.py`（CORE/QUICK） |
 | `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中、focus_tags 优先规划、连错降难度、空错题本兜底），7 例，已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
@@ -865,6 +865,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-02 | 1.16.1 | 教师作业讲评视图呈现每题高频错误选项：`compute_assignment_insights` 早已计算 `common_wrong_answers`（学生最常错选的干扰项及人数），此前前端仅声明类型未渲染，现于「低正确率题」卡片下追加「最多错选『X』· N人」提示，直接点出班级共性误区，辅助讲评。后端零改动 |
 | 2026-07-02 | 1.16.2 | 质检有效性回路：AI 出题的 `quality` 质检结论此前建作业时被 Pydantic 静默丢弃，现 `AssignmentQuestion` 保留 `quality` 并随 `questions_json` 持久化；`compute_assignment_insights` 新增 `quality_blind_spots`（AI 判为合格 ok/未查、但真实正确率 <40% 且作答样本 ≥3 的客观题 = 质检盲区），`_compact_insights` 加 `quality_blind_spot_count`；教师端「低正确率题」命中盲区的题追加「⚠ 质检盲区」徽标提示复核题目本身；`assignment_smoke.py` 加盲区命中/排除用例（12→14 例） |
 | 2026-07-02 | 1.16.3 | 质检盲区教师复核：新增 `question_review_flags` 表与 `POST /api/teacher/assignments/{id}/questions/{index}/review-flag` 端点，教师对盲区题给判定（`bad_question` 题目有问题 / `not_mastered` 学生没掌握，UPSERT）；`get_assignment_submissions` 返回加 `review_flags` 与 `open_blind_spot_count`；教师端盲区题加「题目有问题 / 学生没掌握」按钮，判定后徽标相应变为「已标记题目问题」或「学生未掌握」；`assignment_smoke.py` 加复核命中/UPSERT/校验用例（14→16 例） |
+| 2026-07-02 | 1.16.4 | 未复核质检盲区接入教师通知徽标：`list_teacher_assignments` 每份加 `open_blind_spot_count`（盲区扣除已复核），`get_teacher_badges` 加 `blind_spots_to_review` 汇总；侧边栏 `navBadgeCount`/`badgeOf` 支持 `badgeKeys` 多键求和，「布置作业」入口显示 `pending_review + blind_spots_to_review`，教师无需进详情页即可被提醒去复核盲区；`notification_badges_smoke.py` 加盲区计数/复核清零用例（6→7 例） |
 
 ---
 

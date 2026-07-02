@@ -20,6 +20,7 @@ from services.assignment_service import (
     create_assignment,
     get_student_badges,
     get_teacher_badges,
+    record_question_review_flag,
     review_assignment_submission,
     submit_assignment,
 )
@@ -49,7 +50,7 @@ def run_case(name: str, fn) -> bool:
 
 def teacher_badges_zero_initially() -> None:
     b = get_teacher_badges(TEACHER)
-    assert b == {"pending_review": 0, "below_threshold": 0}, b
+    assert b == {"pending_review": 0, "below_threshold": 0, "blind_spots_to_review": 0}, b
 
 
 def pending_review_counts_partial_submissions() -> None:
@@ -74,7 +75,7 @@ def review_reduces_pending_and_tracks_below_threshold() -> None:
 
 
 def teacher_isolation() -> None:
-    assert get_teacher_badges("other-teacher") == {"pending_review": 0, "below_threshold": 0}
+    assert get_teacher_badges("other-teacher") == {"pending_review": 0, "below_threshold": 0, "blind_spots_to_review": 0}
 
 
 def student_badges_pending_and_due_soon() -> None:
@@ -96,6 +97,24 @@ def student_badges_exclude_submitted() -> None:
     assert b1["pending_assignments"] == 0 and b1["due_soon"] == 0, b1
 
 
+def teacher_badge_counts_open_blind_spots_then_review_clears() -> None:
+    # 独立教师隔离盲区计数：一道 quality=ok 的客观题 + 3 名学生多数答错 → 1 个未复核盲区
+    bt = "badge-teacher-blind"
+    q = [{"type": "single_choice", "prompt": "盲区题", "options": ["A", "B", "C", "D"],
+          "answer": "A", "knowledge_tag": "盲区点", "quality": {"level": "ok", "issues": []}}]
+    stus = ["bb-1", "bb-2", "bb-3"]
+    a = create_assignment(bt, "盲区卷", q, stus)
+    submit_assignment("bb-1", a["id"], ["A"])   # 对
+    submit_assignment("bb-2", a["id"], ["C"])   # 错
+    submit_assignment("bb-3", a["id"], ["D"])   # 错  → 正确率 33% <40，样本 3
+    b = get_teacher_badges(bt)
+    assert b["blind_spots_to_review"] == 1, b
+    # 教师复核该题 → 未复核盲区归零
+    record_question_review_flag(bt, a["id"], 0, "bad_question")
+    b2 = get_teacher_badges(bt)
+    assert b2["blind_spots_to_review"] == 0, b2
+
+
 if __name__ == "__main__":
     cases = [
         ("teacher_badges_zero_initially", teacher_badges_zero_initially),
@@ -104,6 +123,7 @@ if __name__ == "__main__":
         ("teacher_isolation", teacher_isolation),
         ("student_badges_pending_and_due_soon", student_badges_pending_and_due_soon),
         ("student_badges_exclude_submitted", student_badges_exclude_submitted),
+        ("teacher_badge_counts_open_blind_spots_then_review_clears", teacher_badge_counts_open_blind_spots_then_review_clears),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)
     print(f"notification_badges_smoke={passed}/{len(cases)}")

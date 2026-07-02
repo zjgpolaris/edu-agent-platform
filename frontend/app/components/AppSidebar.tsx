@@ -13,6 +13,7 @@ type NavItem = {
   icon: string;
   children?: NavItem[];
   badgeKey?: string;
+  badgeKeys?: string[];
 };
 
 type Badges = Record<string, number>;
@@ -53,7 +54,7 @@ const teacherNav: NavItem[] = [
   { label: "班级总览", href: "/teacher", icon: "班" },
   {
     label: "批改工作台", icon: "批", children: [
-      { label: "布置作业", href: "/teacher/assignments", icon: "业", badgeKey: "pending_review" },
+      { label: "布置作业", href: "/teacher/assignments", icon: "业", badgeKeys: ["pending_review", "blind_spots_to_review"] },
       { label: "作文批改", href: "/teacher/grading?tab=essay", icon: "文" },
       { label: "拍照批改", href: "/teacher/grading?tab=homework", icon: "拍" },
     ],
@@ -74,6 +75,9 @@ const teacherNav: NavItem[] = [
 
 function navBadgeCount(item: NavItem, badges: Badges): number {
   let n = item.badgeKey ? (badges[item.badgeKey] || 0) : 0;
+  if (item.badgeKeys) {
+    for (const k of item.badgeKeys) n += badges[k] || 0;
+  }
   if (item.children) {
     for (const c of item.children) n += navBadgeCount(c, badges);
   }
@@ -260,7 +264,7 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
   );
 }
 
-type MobileNavItem = { href: string; icon: string; label: string; badgeKey?: string };
+type MobileNavItem = { href: string; icon: string; label: string; badgeKey?: string; badgeKeys?: string[] };
 
 const STUDENT_MOBILE_NAV: MobileNavItem[] = [
   { href: "/student", icon: "主", label: "首页" },
@@ -286,14 +290,18 @@ const TEACHER_MOBILE_NAV: MobileNavItem[] = [
   { href: "/teacher/class-analytics", icon: "析", label: "学情" },
 ];
 const TEACHER_MORE_NAV: MobileNavItem[] = [
-  { href: "/teacher/assignments", icon: "业", label: "布置作业", badgeKey: "pending_review" },
+  { href: "/teacher/assignments", icon: "业", label: "布置作业", badgeKeys: ["pending_review", "blind_spots_to_review"] },
   { href: "/teacher/materials", icon: "生", label: "资料生成" },
   { href: "/teacher/resources", icon: "库", label: "资源库" },
   { href: "/eval", icon: "测", label: "Eval" },
 ];
 
-function badgeOf(badges: Badges, item: { badgeKey?: string }): number {
-  return item.badgeKey ? (badges[item.badgeKey] || 0) : 0;
+function badgeOf(badges: Badges, item: { badgeKey?: string; badgeKeys?: string[] }): number {
+  let n = item.badgeKey ? (badges[item.badgeKey] || 0) : 0;
+  if (item.badgeKeys) {
+    for (const k of item.badgeKeys) n += badges[k] || 0;
+  }
+  return n;
 }
 
 export function MobileBottomNav({ role }: { role: "student" | "teacher" }) {
