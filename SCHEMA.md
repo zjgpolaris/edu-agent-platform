@@ -728,7 +728,7 @@ frontend/
 | `homework_grading_smoke.py` | 作业批改测试 |
 | `learning_closure_smoke.py` | 作业-错题-复习-学情闭环测试 |
 | `teacher_features_smoke.py` | 教师功能测试，已接入 `run_core_evals.py`，覆盖班级学情、教师资料库、教学建议 schema 与教师审核结果同步 learning event / weakpoints |
-| `assignment_smoke.py` | 教师布置作业工作流测试（创建/列表/学生待办/提交自动批改/查重/权限/人工评阅/讲评洞察），12 例，已接入 `run_core_evals.py`（SMOKE） |
+| `assignment_smoke.py` | 教师布置作业工作流测试（创建/列表/学生待办/提交自动批改/查重/权限/人工评阅/讲评洞察/质检盲区命中与排除），14 例，已接入 `run_core_evals.py`（SMOKE） |
 | `assignment_review_loop_smoke.py` | 作业错题→薄弱点→今日复习→AutoTutor 数据闭环测试（wrong_tags 返回、复习 session 追加、focus_tags 优先规划），5 例，已接入 `run_core_evals.py`（SMOKE） |
 | `question_quality_smoke.py` | AI 出题质检测试：结构质检（选项数/答案合法性/题干为空/判断题答案/简答参考答案）+ LLM 语义质检合并（stub LLM：检出/降级/merge 取最高 level），15 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `notification_badges_smoke.py` | 通知徽标聚合测试（教师待评阅/低分学生统计、学生未提交/到期统计），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
@@ -848,6 +848,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-01 | 1.15.1 | 修复 `assignment_submissions` 兼容旧 SQLite 的列补齐逻辑；新增 `/api/health` 轻量健康检查并改用它作为 Render/keep-alive 探针；`/api/debug/llm/health` 默认改为浅检查，显式 `?deep=true` 才调用模型，避免旧探针因 LLM 配额耗尽导致部署健康检查失败 |
 | 2026-07-02 | 1.16.0 | 补齐学生「学习路径」页 `/student/learning-path`（此前仅移动端「更多」入口存在但页面缺失致 404）：前端调用已有 `GET /api/students/{id}/learning-path`，渲染掌握度概览、按错题掌握度排序的优先攻克时间线（进度条 + `correct_streak` 连对进度）、推荐行动列表、去复习/针对性辅导（透传 `?focus=` 到 AutoTutor）联动 CTA 与空态；桌面侧边栏「我的学情」分组新增该入口。后端零改动 |
 | 2026-07-02 | 1.16.1 | 教师作业讲评视图呈现每题高频错误选项：`compute_assignment_insights` 早已计算 `common_wrong_answers`（学生最常错选的干扰项及人数），此前前端仅声明类型未渲染，现于「低正确率题」卡片下追加「最多错选『X』· N人」提示，直接点出班级共性误区，辅助讲评。后端零改动 |
+| 2026-07-02 | 1.16.2 | 质检有效性回路：AI 出题的 `quality` 质检结论此前建作业时被 Pydantic 静默丢弃，现 `AssignmentQuestion` 保留 `quality` 并随 `questions_json` 持久化；`compute_assignment_insights` 新增 `quality_blind_spots`（AI 判为合格 ok/未查、但真实正确率 <40% 且作答样本 ≥3 的客观题 = 质检盲区），`_compact_insights` 加 `quality_blind_spot_count`；教师端「低正确率题」命中盲区的题追加「⚠ 质检盲区」徽标提示复核题目本身；`assignment_smoke.py` 加盲区命中/排除用例（12→14 例） |
 
 ---
 

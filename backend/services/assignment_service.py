@@ -19,6 +19,10 @@ from student_profile import now_iso
 # 自动判分支持的客观题型
 OBJECTIVE_TYPES = {"single_choice", "multiple_choice", "true_false"}
 
+# 质检有效性回路：AI 判为合格但真实正确率异常低的客观题 = 质检盲区
+BLIND_SPOT_ACCURACY = 40        # 正确率低于此值视为异常低（%）
+BLIND_SPOT_MIN_ATTEMPTS = 3     # 作答样本 ≥ 此值才有统计意义
+
 
 def _ensure_tables() -> None:
     with get_connection() as conn:
@@ -195,13 +199,28 @@ def compute_assignment_insights(
     for stat in q_stats.values():
         attempts = stat["attempts"] or 1
         accuracy = round(stat["correct"] / attempts * 100)
+        q = _question(stat["question_index"])
+        predicted_level = (q.get("quality") or {}).get("level")
         lowest_accuracy_questions.append({
             "question_index": stat["question_index"], "prompt": stat["prompt"], "type": stat["type"],
             "knowledge_tag": stat["knowledge_tag"], "attempts": stat["attempts"], "correct": stat["correct"],
-            "wrong": stat["wrong"], "accuracy": accuracy,
+            "wrong": stat["wrong"], "accuracy": accuracy, "predicted_level": predicted_level,
             "common_wrong_answers": [{"answer": a, "count": c} for a, c in stat["wrong_answers"].most_common(3)],
         })
     lowest_accuracy_questions.sort(key=lambda x: (x["accuracy"], -x["wrong"], -x["attempts"]))
+
+    # 质检盲区：AI 判为合格（ok/未查）但真实正确率异常低且样本足够的客观题
+    quality_blind_spots = [
+        {
+            "question_index": q["question_index"], "prompt": q["prompt"],
+            "accuracy": q["accuracy"], "attempts": q["attempts"],
+            "predicted_level": q["predicted_level"],
+        }
+        for q in lowest_accuracy_questions
+        if q["predicted_level"] in (None, "ok")
+        and q["accuracy"] < BLIND_SPOT_ACCURACY
+        and q["attempts"] >= BLIND_SPOT_MIN_ATTEMPTS
+    ][:5]
 
     top_weak_tags = []
     for stat in tag_stats.values():
@@ -244,6 +263,7 @@ def compute_assignment_insights(
         "graded_average_score": round(sum(graded_scores) / len(graded_scores), 1) if graded_scores else None,
         "pending_review_count": sum(1 for s in submissions if s.get("status") == "partial"),
         "lowest_accuracy_questions": lowest_accuracy_questions[:5],
+        "quality_blind_spots": quality_blind_spots,
         "top_weak_tags": top_weak_tags[:5],
         "below_threshold_students": below_threshold_students,
         "suggested_reteach_focus": suggested_reteach_focus,
@@ -255,6 +275,7 @@ def _compact_insights(insights: dict[str, Any]) -> dict[str, Any]:
         "pending_review_count": insights.get("pending_review_count", 0),
         "top_weak_tags": (insights.get("top_weak_tags") or [])[:3],
         "lowest_accuracy_question": (insights.get("lowest_accuracy_questions") or [None])[0],
+        "quality_blind_spot_count": len(insights.get("quality_blind_spots") or []),
         "below_threshold_count": len(insights.get("below_threshold_students") or []),
     }
 

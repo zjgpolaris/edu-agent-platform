@@ -2755,6 +2755,7 @@ class AssignmentQuestion(BaseModel):
     answer: Any | None = None
     knowledge_tag: str | None = None
     reference_answer: str | None = None
+    quality: dict | None = None  # AI 出题质检结论 {"level","issues"}，随作业持久化以支持质检有效性回路
 
 
 class CreateAssignmentRequest(BaseModel):

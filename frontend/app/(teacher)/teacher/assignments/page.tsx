@@ -19,14 +19,17 @@ type WeakTag = { knowledge_tag: string; wrong_count?: number; student_count: num
 type LowAccuracyQuestion = {
   question_index: number; prompt: string; type: string; knowledge_tag?: string | null;
   attempts: number; correct: number; wrong: number; accuracy: number;
+  predicted_level?: string | null;
   common_wrong_answers?: Array<{ answer: string; count: number }>;
 };
+type QualityBlindSpot = { question_index: number; prompt: string; accuracy: number; attempts: number; predicted_level?: string | null };
 type AssignmentInsights = {
   submission_rate: { submitted: number; assignee_count: number; percent: number; missing_student_ids: string[] };
   average_score: number | null;
   graded_average_score: number | null;
   pending_review_count: number;
   lowest_accuracy_questions: LowAccuracyQuestion[];
+  quality_blind_spots?: QualityBlindSpot[];
   top_weak_tags: WeakTag[];
   below_threshold_students: Array<{ student_id: string; score: number; status: string; missed_tags: string[]; needs_review: boolean }>;
   suggested_reteach_focus: Array<{ knowledge_tag: string; student_count: number; question_indices: number[]; reason: string }>;
@@ -230,6 +233,7 @@ export default function TeacherAssignmentsPage() {
         answer: q.type === "subjective" ? null : q.answer,
         knowledge_tag: q.knowledge_tag.trim() || null,
         reference_answer: q.reference_answer?.trim() || null,
+        quality: q.quality ?? null,
       }));
     if (payloadQuestions.length === 0) { setError("请至少填写一道题"); return; }
 
@@ -339,17 +343,24 @@ export default function TeacherAssignmentsPage() {
                       </div>
                       <div className="tasg-insight-card">
                         <span className="tasg-insight-title">低正确率题</span>
-                        {detail.insights.lowest_accuracy_questions.length === 0 ? <p className="tasg-empty compact">暂无客观题统计</p> : detail.insights.lowest_accuracy_questions.slice(0, 3).map((q) => {
-                          const topWrong = q.common_wrong_answers?.[0];
-                          return (
-                            <div key={q.question_index} className="tasg-insight-qitem">
-                              <p className="tasg-insight-line">第{q.question_index + 1}题 · {q.accuracy}%：{q.prompt.slice(0, 34)}</p>
-                              {topWrong && (
-                                <p className="tasg-insight-wrong">最多错选「{topWrong.answer}」· {topWrong.count}人</p>
-                              )}
-                            </div>
-                          );
-                        })}
+                        {detail.insights.lowest_accuracy_questions.length === 0 ? <p className="tasg-empty compact">暂无客观题统计</p> : (() => {
+                          const blindIdx = new Set((detail.insights.quality_blind_spots || []).map((b) => b.question_index));
+                          return detail.insights.lowest_accuracy_questions.slice(0, 3).map((q) => {
+                            const topWrong = q.common_wrong_answers?.[0];
+                            const isBlind = blindIdx.has(q.question_index);
+                            return (
+                              <div key={q.question_index} className="tasg-insight-qitem">
+                                <p className="tasg-insight-line">
+                                  第{q.question_index + 1}题 · {q.accuracy}%：{q.prompt.slice(0, 34)}
+                                  {isBlind && <span className="tasg-blindspot" title="AI 质检判为合格，但真实正确率异常低，建议复核题目本身">⚠ 质检盲区</span>}
+                                </p>
+                                {topWrong && (
+                                  <p className="tasg-insight-wrong">最多错选「{topWrong.answer}」· {topWrong.count}人</p>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
                       </div>
                     </div>
                     {detail.insights.below_threshold_students.length > 0 && (
@@ -657,6 +668,7 @@ const CSS = `
 .tasg-insight-line { font-size:12px; line-height:1.55; margin:4px 0; color:var(--ink,#1a1612); }
 .tasg-insight-qitem { margin:5px 0; }
 .tasg-insight-wrong { font-size:11px; color:var(--cinnabar,#b7422b); margin:1px 0 4px 10px; opacity:.85; }
+.tasg-blindspot { display:inline-block; margin-left:6px; padding:0 6px; font-size:10px; font-weight:700; line-height:16px; border-radius:8px; color:#fff; background:var(--cinnabar,#b7422b); vertical-align:middle; }
 .tasg-empty.compact { padding:0; margin:0; }
 .tasg-focus-students { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .tasg-focus-chip { font-size:11px; background:#fdf1ee; color:var(--cinnabar,#b7422b); border-radius:12px; padding:3px 8px; }
