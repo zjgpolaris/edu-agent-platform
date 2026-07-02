@@ -22,6 +22,7 @@ from services.assignment_service import (
     get_assignment_submissions,
     list_student_assignments,
     list_teacher_assignments,
+    record_question_review_flag,
     review_assignment_submission,
     submit_assignment,
 )
@@ -158,6 +159,39 @@ def assignment_insights_detects_below_threshold_students() -> None:
     assert lst[0]["below_threshold_count"] == 1
 
 
+def record_review_flag_bad_question() -> None:
+    record_question_review_flag(TEACHER, _state["aid"], 0, "bad_question", note="选项有歧义")
+    data = get_assignment_submissions(TEACHER, _state["aid"])
+    flags = data["review_flags"]
+    assert flags["0"]["verdict"] == "bad_question", flags
+    assert flags["0"]["note"] == "选项有歧义"
+
+
+def record_review_flag_upsert_and_validate() -> None:
+    # upsert：not_mastered 覆盖 bad_question
+    record_question_review_flag(TEACHER, _state["aid"], 0, "not_mastered")
+    data = get_assignment_submissions(TEACHER, _state["aid"])
+    assert data["review_flags"]["0"]["verdict"] == "not_mastered"
+    # 非法 verdict
+    try:
+        record_question_review_flag(TEACHER, _state["aid"], 1, "nonsense")
+        raise AssertionError("expected ValueError")
+    except ValueError:
+        pass
+    # 越界 index
+    try:
+        record_question_review_flag(TEACHER, _state["aid"], 99, "bad_question")
+        raise AssertionError("expected LookupError")
+    except LookupError:
+        pass
+    # 非归属 teacher
+    try:
+        record_question_review_flag("other-teacher", _state["aid"], 1, "bad_question")
+        raise AssertionError("expected PermissionError")
+    except PermissionError:
+        pass
+
+
 def permission_guard() -> None:
     try:
         get_assignment_submissions("other-teacher", _state["aid"])
@@ -220,6 +254,8 @@ if __name__ == "__main__":
         ("assignment_insights_detects_below_threshold_students", assignment_insights_detects_below_threshold_students),
         ("insights_flags_quality_blind_spot", insights_flags_quality_blind_spot),
         ("insights_excludes_prewarned_and_underanswered", insights_excludes_prewarned_and_underanswered),
+        ("record_review_flag_bad_question", record_review_flag_bad_question),
+        ("record_review_flag_upsert_and_validate", record_review_flag_upsert_and_validate),
         ("permission_guard", permission_guard),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)

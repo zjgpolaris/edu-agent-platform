@@ -2743,6 +2743,7 @@ from services.assignment_service import (
     get_teacher_badges as _get_teacher_badges,
     list_student_assignments as _list_student_assignments,
     list_teacher_assignments as _list_teacher_assignments,
+    record_question_review_flag as _record_question_review_flag,
     review_assignment_submission as _review_assignment_submission,
     submit_assignment as _submit_assignment,
 )
@@ -2775,6 +2776,11 @@ class ReviewSubmissionRequest(BaseModel):
     student_id: str
     score: float
     feedback: str | None = None
+
+
+class QuestionReviewFlagRequest(BaseModel):
+    verdict: str                    # bad_question | not_mastered
+    note: str | None = None
 
 
 class GenerateQuestionsRequest(BaseModel):
@@ -2985,6 +2991,32 @@ async def teacher_review_assignment_submission(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/teacher/assignments/{assignment_id}/questions/{question_index}/review-flag")
+async def teacher_flag_question_review(
+    assignment_id: str,
+    question_index: int,
+    req: QuestionReviewFlagRequest,
+    actor: Actor = Depends(require_auth),
+):
+    """教师对一道质检盲区题给出复核判定（题目有问题 / 学生没掌握）。"""
+    require_teacher_actor(actor)
+    try:
+        return await run_in_threadpool(
+            _record_question_review_flag,
+            actor.actor_id,
+            assignment_id,
+            question_index,
+            req.verdict,
+            req.note,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
 
 
 @app.get("/api/student/{student_id}/assignments")

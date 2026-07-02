@@ -54,6 +54,16 @@ def _ensure_tables() -> None:
         if "reviewed_at" not in existing_columns:
             conn.execute(text("ALTER TABLE assignment_submissions ADD COLUMN reviewed_at TEXT"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_assignment_submissions_assignment ON assignment_submissions(assignment_id)"))
+        conn.execute(text("""CREATE TABLE IF NOT EXISTS question_review_flags (
+            id TEXT PRIMARY KEY,
+            assignment_id TEXT NOT NULL,
+            question_index INTEGER NOT NULL,
+            teacher_id TEXT NOT NULL,
+            verdict TEXT NOT NULL,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(assignment_id, question_index))"""))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_qrf_assignment ON question_review_flags(assignment_id)"))
 
 
 def _normalize_answer(value: Any) -> Any:
@@ -325,7 +335,87 @@ def get_assignment_submissions(teacher_id: str, assignment_id: str) -> dict[str,
             {"aid": assignment_id},
         ).mappings().fetchall()
     submissions = [_submission_from_row(s) for s in subs]
-    return {"assignment": assignment, "submissions": submissions, "insights": compute_assignment_insights(assignment, submissions)}
+    insights = compute_assignment_insights(assignment, submissions)
+    review_flags = get_question_review_flags(assignment_id)
+    reviewed_idx = set(review_flags.keys())
+    open_blind_spot_count = sum(
+        1 for b in insights.get("quality_blind_spots") or []
+        if b["question_index"] not in reviewed_idx
+    )
+    return {
+        "assignment": assignment,
+        "submissions": submissions,
+        "insights": insights,
+        "review_flags": {str(k): v for k, v in review_flags.items()},
+        "open_blind_spot_count": open_blind_spot_count,
+    }
+
+
+VALID_REVIEW_VERDICTS = {"bad_question", "not_mastered"}
+
+
+def get_question_review_flags(assignment_id: str) -> dict[int, dict[str, Any]]:
+    """返回一份作业已复核的题目标记，按 question_index 索引。"""
+    _ensure_tables()
+    with get_connection() as conn:
+        rows = conn.execute(
+            text("SELECT question_index, verdict, note, created_at FROM question_review_flags WHERE assignment_id = :aid"),
+            {"aid": assignment_id},
+        ).mappings().fetchall()
+    return {
+        int(r["question_index"]): {"verdict": r["verdict"], "note": r["note"], "created_at": r["created_at"]}
+        for r in rows
+    }
+
+
+def record_question_review_flag(
+    teacher_id: str,
+    assignment_id: str,
+    question_index: int,
+    verdict: str,
+    note: str | None = None,
+) -> dict[str, Any]:
+    """教师对一道（盲区）题给出复核判定：bad_question=题目有问题，not_mastered=学生没掌握。"""
+    _ensure_tables()
+    verdict = (verdict or "").strip()
+    if verdict not in VALID_REVIEW_VERDICTS:
+        raise ValueError("verdict 必须是 bad_question 或 not_mastered")
+    try:
+        q_idx = int(question_index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("question_index 必须是整数") from exc
+
+    with get_connection() as conn:
+        row = conn.execute(
+            text("SELECT teacher_id, questions_json FROM assignments WHERE id = :aid"),
+            {"aid": assignment_id},
+        ).mappings().fetchone()
+        if not row:
+            raise LookupError("作业不存在")
+        if row["teacher_id"] != teacher_id:
+            raise PermissionError("无权复核此作业")
+        question_count = len(json.loads(row["questions_json"] or "[]"))
+        if q_idx < 0 or q_idx >= question_count:
+            raise LookupError("题目序号越界")
+
+        created_at = now_iso()
+        flag_id = f"qrf_{uuid.uuid4().hex[:12]}"
+        # UPSERT：先删同 (assignment, index) 再插，避免方言差异
+        conn.execute(
+            text("DELETE FROM question_review_flags WHERE assignment_id = :aid AND question_index = :qi"),
+            {"aid": assignment_id, "qi": q_idx},
+        )
+        conn.execute(
+            text("""INSERT INTO question_review_flags
+                (id, assignment_id, question_index, teacher_id, verdict, note, created_at)
+                VALUES (:id, :aid, :qi, :tid, :verdict, :note, :created_at)"""),
+            {"id": flag_id, "aid": assignment_id, "qi": q_idx, "tid": teacher_id,
+             "verdict": verdict, "note": (note or "").strip() or None, "created_at": created_at},
+        )
+    return {
+        "assignment_id": assignment_id, "question_index": q_idx,
+        "verdict": verdict, "note": (note or "").strip() or None, "created_at": created_at,
+    }
 
 
 def review_assignment_submission(

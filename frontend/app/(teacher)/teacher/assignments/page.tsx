@@ -50,10 +50,13 @@ type AssignmentSummary = {
 };
 type GradedAnswer = { question_index: number; student_answer: unknown; is_correct: boolean | null; correct_answer: unknown };
 type Submission = { student_id: string; score: number | null; status: string; submitted_at: string; answers: GradedAnswer[]; teacher_feedback?: string | null; reviewed_at?: string | null };
+type ReviewFlag = { verdict: string; note?: string | null; created_at: string };
 type AssignmentDetail = {
   assignment: { id: string; title: string; subject: string | null; questions: Array<{ prompt: string; type: string; knowledge_tag: string | null; reference_answer?: string | null }> };
   submissions: Submission[];
   insights?: AssignmentInsights;
+  review_flags?: Record<string, ReviewFlag>;
+  open_blind_spot_count?: number;
 };
 
 const blankQuestion = (): DraftQuestion => ({
@@ -89,6 +92,7 @@ export default function TeacherAssignmentsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, { score: string; feedback: string }>>({});
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [flagging, setFlagging] = useState<number | null>(null);
 
   useEffect(() => {
     if (user?.role !== "teacher" && user?.role !== "admin") {
@@ -141,6 +145,25 @@ export default function TeacherAssignmentsPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "评阅失败");
     } finally { setReviewing(null); }
+  }
+  async function flagQuestion(questionIndex: number, verdict: "bad_question" | "not_mastered") {
+    if (!user?.token || !detail) return;
+    setFlagging(questionIndex); setError("");
+    try {
+      const res = await fetch(`${API}/api/teacher/assignments/${detail.assignment.id}/questions/${questionIndex}/review-flag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+        body: JSON.stringify({ verdict }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      await loadDetail(detail.assignment.id);
+      setMsg(verdict === "bad_question" ? "已标记题目问题 ✓" : "已确认学生未掌握 ✓");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "标记失败");
+    } finally { setFlagging(null); }
   }
   async function copyInsightOutline() {
     if (!detail?.insights) return;
@@ -345,17 +368,29 @@ export default function TeacherAssignmentsPage() {
                         <span className="tasg-insight-title">低正确率题</span>
                         {detail.insights.lowest_accuracy_questions.length === 0 ? <p className="tasg-empty compact">暂无客观题统计</p> : (() => {
                           const blindIdx = new Set((detail.insights.quality_blind_spots || []).map((b) => b.question_index));
+                          const flags = detail.review_flags || {};
                           return detail.insights.lowest_accuracy_questions.slice(0, 3).map((q) => {
                             const topWrong = q.common_wrong_answers?.[0];
                             const isBlind = blindIdx.has(q.question_index);
+                            const flag = flags[String(q.question_index)];
                             return (
                               <div key={q.question_index} className="tasg-insight-qitem">
                                 <p className="tasg-insight-line">
                                   第{q.question_index + 1}题 · {q.accuracy}%：{q.prompt.slice(0, 34)}
-                                  {isBlind && <span className="tasg-blindspot" title="AI 质检判为合格，但真实正确率异常低，建议复核题目本身">⚠ 质检盲区</span>}
+                                  {isBlind && !flag && <span className="tasg-blindspot" title="AI 质检判为合格，但真实正确率异常低，建议复核题目本身">⚠ 质检盲区</span>}
+                                  {flag?.verdict === "bad_question" && <span className="tasg-blindspot done" title="教师已标记：题目本身有问题">已标记题目问题</span>}
+                                  {flag?.verdict === "not_mastered" && <span className="tasg-blindspot muted" title="教师已确认：题目无误，学生未掌握">学生未掌握</span>}
                                 </p>
                                 {topWrong && (
                                   <p className="tasg-insight-wrong">最多错选「{topWrong.answer}」· {topWrong.count}人</p>
+                                )}
+                                {isBlind && !flag && (
+                                  <div className="tasg-blindspot-actions">
+                                    <button type="button" disabled={flagging === q.question_index}
+                                      onClick={() => flagQuestion(q.question_index, "bad_question")}>题目有问题</button>
+                                    <button type="button" disabled={flagging === q.question_index}
+                                      onClick={() => flagQuestion(q.question_index, "not_mastered")}>学生没掌握</button>
+                                  </div>
                                 )}
                               </div>
                             );
@@ -669,6 +704,12 @@ const CSS = `
 .tasg-insight-qitem { margin:5px 0; }
 .tasg-insight-wrong { font-size:11px; color:var(--cinnabar,#b7422b); margin:1px 0 4px 10px; opacity:.85; }
 .tasg-blindspot { display:inline-block; margin-left:6px; padding:0 6px; font-size:10px; font-weight:700; line-height:16px; border-radius:8px; color:#fff; background:var(--cinnabar,#b7422b); vertical-align:middle; }
+.tasg-blindspot.done { background:#8a5a2b; }
+.tasg-blindspot.muted { background:transparent; color:var(--muted,#8a8178); font-weight:600; border:1px solid var(--border,#e0d8cc); }
+.tasg-blindspot-actions { display:flex; gap:8px; margin:2px 0 6px 10px; }
+.tasg-blindspot-actions button { font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid var(--border,#e0d8cc); background:var(--paper,#fff); color:var(--ink,#1a1612); cursor:pointer; }
+.tasg-blindspot-actions button:hover:not(:disabled) { border-color:var(--cinnabar,#b7422b); color:var(--cinnabar,#b7422b); }
+.tasg-blindspot-actions button:disabled { opacity:.5; cursor:default; }
 .tasg-empty.compact { padding:0; margin:0; }
 .tasg-focus-students { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .tasg-focus-chip { font-size:11px; background:#fdf1ee; color:var(--cinnabar,#b7422b); border-radius:12px; padding:3px 8px; }
