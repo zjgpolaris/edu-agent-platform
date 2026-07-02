@@ -28,7 +28,7 @@ from llm_config import llm_fast, llm_quality
 from security.prompt_injection import build_untrusted_context_block
 from structured_output import invoke_structured
 from student_profile import LearningEvent, get_student_profile, try_record_learning_event
-from services.weakpoint_service import delete_weakpoint, get_weakpoints, record_weakpoint
+from services.weakpoint_service import delete_weakpoint, get_weakpoints, record_correct_evidence, record_weakpoint
 from tools.base import ToolExecutionContext
 from tools.registry import run_tool
 from trace_store import current_trace_id, emit_trace_event, set_trace_id
@@ -237,7 +237,7 @@ def _match_source_tag(knowledge_point: str, candidate_tags: list[str]) -> str | 
     return best
 
 
-def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], profile: Any) -> list[LessonStep]:
+def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], profile: Any, focus_tags: list[str] | None = None) -> list[LessonStep]:
     weak_topics = list(getattr(profile, "weak_topics", []) or [])
     recent_topics = list(getattr(profile, "recent_topics", []) or [])
     fallback_steps = _fallback_plan(weakpoints, weak_topics, recent_topics)
@@ -245,6 +245,10 @@ def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], prof
     weak_summary = "、".join(
         f"{w['knowledge_tag']}(错{w['wrong_count']}次)" for w in weakpoints[:8]
     ) or "（错题本为空）"
+    focus_line = (
+        f"\n本节课必须优先讲解（来自学生刚做错的作业）：{('、'.join(focus_tags))}，把它们排在计划最前。"
+        if focus_tags else ""
+    )
     prompt = [
         {
             "role": "system",
@@ -263,6 +267,7 @@ def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], prof
                 f"错题本薄弱点：{weak_summary}\n"
                 f"画像薄弱主题：{('、'.join(weak_topics[:6]) or '无')}\n"
                 f"近期学习主题：{('、'.join(recent_topics[:6]) or '无')}\n"
+                f"{focus_line}\n"
                 "请生成本节课计划。"
             ),
         },
@@ -575,8 +580,8 @@ def _finalize(state: AutoTutorState) -> None:
         )
         try:
             if success:
-                # 已掌握 → 从错题本移除（接入 SM-2：下次复习不再出现）
-                delete_weakpoint(state.student_id, tag)
+                # 答对累积掌握证据，连续答对达阈值才移出错题本（接入 SM-2）
+                record_correct_evidence(state.student_id, tag)
             else:
                 # 仍薄弱 → 记入/强化错题本，自动进入今日复习池
                 record_weakpoint(state.student_id, tag, source="auto_tutor")
@@ -669,6 +674,7 @@ def start_session(
     actor_id: str | None = None,
     actor_role: str | None = None,
     trace_id: str | None = None,
+    focus_tags: list[str] | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or current_trace_id() or uuid4().hex
     set_trace_id(trace_id)
@@ -689,9 +695,15 @@ def start_session(
         weakpoints = get_weakpoints(student_id)
     except Exception:
         weakpoints = []
+    # 若调用方指定了 focus_tags（如来自作业错题），将这些 tag 提升到 weakpoints 列表最前面
+    if focus_tags:
+        focus_set = set(focus_tags)
+        existing_tags = {w["knowledge_tag"] for w in weakpoints}
+        extra = [{"knowledge_tag": t, "wrong_count": 1, "last_wrong_at": "", "source": "assignment"} for t in focus_tags if t not in existing_tags]
+        weakpoints = [w for w in weakpoints if w["knowledge_tag"] in focus_set] + extra + [w for w in weakpoints if w["knowledge_tag"] not in focus_set]
     if not state.grade:
         state.grade = getattr(profile, "grade", None)
-    state.lesson_plan = _generate_plan(state, weakpoints, profile)
+    state.lesson_plan = _generate_plan(state, weakpoints, profile, focus_tags=focus_tags)
     _emit(
         state,
         "plan",

@@ -186,6 +186,7 @@ class ToolConfirmationCancelRequest(BaseModel):
 class AutoTutorStartRequest(BaseModel):
     student_id: str = Field(min_length=1, max_length=128)
     grade: str | None = None
+    focus_tags: list[str] | None = None  # 作业错题引导：优先讲解这些知识点
 
 
 class AutoTutorAnswerRequest(BaseModel):
@@ -1815,6 +1816,7 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
             actor_id=actor.actor_id,
             actor_role=actor_role,
             trace_id=trace_id,
+            focus_tags=req.focus_tags or None,
         )
 
 
@@ -2737,6 +2739,8 @@ async def student_learning_report(
 from services.assignment_service import (
     create_assignment as _create_assignment,
     get_assignment_submissions as _get_assignment_submissions,
+    get_student_badges as _get_student_badges,
+    get_teacher_badges as _get_teacher_badges,
     list_student_assignments as _list_student_assignments,
     list_teacher_assignments as _list_teacher_assignments,
     review_assignment_submission as _review_assignment_submission,
@@ -2777,6 +2781,7 @@ class GenerateQuestionsRequest(BaseModel):
     difficulty: str = "medium"           # easy | medium | hard
     question_type: str = "single_choice"  # single_choice | true_false | subjective
     subject: str = "历史"
+    semantic_check: bool = False         # 是否额外做 LLM 语义质检（较慢，opt-in）
 
 
 class GeneratedQuestion(BaseModel):
@@ -2786,6 +2791,7 @@ class GeneratedQuestion(BaseModel):
     options: list[str]
     answer: str
     explanation: str
+    quality: dict | None = None  # 确定性结构质检结果 {"level","issues"}
 
 
 def _gen_true_false(kp: str, difficulty: str, sources: list) -> dict:
@@ -2858,11 +2864,25 @@ async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor
     from agents.auto_tutor import _generate_question as _at_gen_question
     from tools.registry import run_tool
     from tools.base import ToolExecutionContext
+    from services.question_quality import check_question, check_question_semantic, merge_quality
 
     ctx = ToolExecutionContext(actor_id=actor.actor_id, session_id=f"gen-{actor.actor_id}")
 
     def _strip(o: str) -> str:
         return o[3:].strip() if len(o) > 2 and o[1] == "." else o.strip()
+
+    def _with_quality(gq: GeneratedQuestion) -> GeneratedQuestion:
+        q_dict = gq.model_dump()
+        structural = check_question(q_dict)
+        if req.semantic_check:
+            try:
+                semantic = check_question_semantic(q_dict, llm=llm_fast)
+                gq.quality = merge_quality(structural, semantic)
+            except Exception:
+                gq.quality = structural  # 语义质检失败不阻断出题
+        else:
+            gq.quality = structural
+        return gq
 
     async def _gen_one(kp: str) -> GeneratedQuestion:
         try:
@@ -2876,20 +2896,20 @@ async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor
 
         if qtype == "true_false":
             q = await run_in_threadpool(_gen_true_false, kp, req.difficulty, sources)
-            return GeneratedQuestion(knowledge_tag=kp, type="true_false", prompt=q["prompt"],
-                                     options=[], answer=q["answer"], explanation=q["explanation"])
+            return await run_in_threadpool(_with_quality, GeneratedQuestion(knowledge_tag=kp, type="true_false", prompt=q["prompt"],
+                                     options=[], answer=q["answer"], explanation=q["explanation"]))
         if qtype == "subjective":
             q = await run_in_threadpool(_gen_subjective, kp, req.difficulty, sources)
-            return GeneratedQuestion(knowledge_tag=kp, type="subjective", prompt=q["prompt"],
-                                     options=[], answer="", explanation=q["explanation"])
+            return await run_in_threadpool(_with_quality, GeneratedQuestion(knowledge_tag=kp, type="subjective", prompt=q["prompt"],
+                                     options=[], answer="", explanation=q["explanation"]))
         # 默认单选题
         q = await run_in_threadpool(_at_gen_question, kp, req.difficulty, sources)
-        return GeneratedQuestion(
+        return await run_in_threadpool(_with_quality, GeneratedQuestion(
             knowledge_tag=kp, type="single_choice", prompt=q.get("question", ""),
             options=[_strip(o) for o in q.get("options", [])],
             answer=(q.get("answer", "A") or "A")[:1].upper(),
             explanation=q.get("explanation", ""),
-        )
+        ))
 
     import asyncio
     results = await asyncio.gather(*[_gen_one(kp) for kp in req.knowledge_points], return_exceptions=True)
@@ -2922,6 +2942,13 @@ async def teacher_create_assignment(req: CreateAssignmentRequest, actor: Actor =
 async def teacher_list_assignments(actor: Actor = Depends(require_auth)):
     require_teacher_actor(actor)
     return {"assignments": await run_in_threadpool(_list_teacher_assignments, actor.actor_id)}
+
+
+@app.get("/api/teacher/badges")
+async def teacher_badges(actor: Actor = Depends(require_auth)):
+    """教师侧边栏通知徽标：待评阅、低分学生数。"""
+    require_teacher_actor(actor)
+    return await run_in_threadpool(_get_teacher_badges, actor.actor_id)
 
 
 @app.get("/api/teacher/assignments/{assignment_id}/submissions")
@@ -2963,6 +2990,30 @@ async def teacher_review_assignment_submission(
 async def student_list_assignments(student_id: str, actor: Actor = Depends(require_auth)):
     assert_student_access(actor, student_id)
     return {"assignments": await run_in_threadpool(_list_student_assignments, student_id)}
+
+
+def _student_badges_sync(student_id: str) -> dict:
+    """学生徽标：未提交/临近作业 + 今日复习待完成数（不创建 session）。"""
+    from datetime import date as _d
+    from services.review_service import get_today_session
+    today = _d.today().isoformat()
+    badges = _get_student_badges(student_id, today)
+    pending_review = 0
+    try:
+        session = get_today_session(student_id, today, hydrate=False)
+        if session:
+            pending_review = max(0, int(session.get("total", 0)) - int(session.get("completed", 0)))
+    except Exception:
+        pending_review = 0
+    badges["pending_review"] = pending_review
+    return badges
+
+
+@app.get("/api/student/{student_id}/badges")
+async def student_badges(student_id: str, actor: Actor = Depends(require_auth)):
+    """学生侧边栏通知徽标：未提交作业、临近到期、今日复习待完成。"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(_student_badges_sync, student_id)
 
 
 @app.post("/api/student/{student_id}/assignments/{assignment_id}/submit")

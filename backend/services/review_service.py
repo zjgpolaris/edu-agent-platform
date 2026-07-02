@@ -62,7 +62,12 @@ def _generate_question(tag: str) -> dict[str, Any]:
     return {**data, "tag": tag, "done": False, "correct": None}
 
 
-def get_today_session(student_id: str, today: str) -> dict | None:
+def get_today_session(student_id: str, today: str, *, hydrate: bool = True) -> dict | None:
+    """读取今日复习 session。
+
+    hydrate=True（默认，复习页）：把作业错题追加的 pending_generate 占位题按需生成真题。
+    hydrate=False（徽标轮询等只需计数的场景）：不触发 LLM 生成，直接返回占位题。
+    """
     _ensure_table()
     with get_connection() as conn:
         row = conn.execute(
@@ -71,7 +76,35 @@ def get_today_session(student_id: str, today: str) -> dict | None:
         ).mappings().fetchone()
     if not row:
         return None
-    return {"date": today, "completed": row["completed"], "total": row["total"], "tasks": json.loads(row["tasks_json"])}
+    tasks = json.loads(row["tasks_json"])
+    if hydrate:
+        tasks = _hydrate_pending_tasks(student_id, today, tasks)
+    return {"date": today, "completed": row["completed"], "total": row["total"], "tasks": tasks}
+
+
+def _hydrate_pending_tasks(student_id: str, today: str, tasks: list[dict]) -> list[dict]:
+    """为标了 pending_generate 的占位任务（来自作业错题追加）按需生成真实题目并落库。
+
+    只对未作答的占位题生成，避免每次读取都重复调用 LLM。
+    """
+    pending = [t for t in tasks if t.get("pending_generate") and not t.get("done")]
+    if not pending:
+        return tasks
+    for t in pending:
+        generated = _generate_question(t.get("tag", ""))
+        t.update(
+            question=generated.get("question", t.get("question", "")),
+            options=generated.get("options", []),
+            answer=generated.get("answer", ""),
+            explanation=generated.get("explanation", ""),
+        )
+        t.pop("pending_generate", None)
+    with get_connection() as conn:
+        conn.execute(
+            text("UPDATE review_sessions SET tasks_json=:tasks WHERE student_id=:sid AND date=:date"),
+            {"tasks": json.dumps(tasks, ensure_ascii=False), "sid": student_id, "date": today},
+        )
+    return tasks
 
 
 def create_today_session(student_id: str, today: str) -> dict:
@@ -88,6 +121,38 @@ def create_today_session(student_id: str, today: str) -> dict:
              "tasks": json.dumps(tasks, ensure_ascii=False), "total": len(tasks), "ts": now_iso()},
         )
     return {"date": today, "completed": 0, "total": len(tasks), "tasks": tasks}
+
+
+def merge_new_weakpoints_to_today(student_id: str, new_tags: list[str], today: str) -> None:
+    """作业提交后，将新增错误知识点追加到今日复习 session（若 session 已存在）。
+
+    - 若今日 session 不存在：忽略（用户主动打开复习页时会创建）。
+    - 若 session 已存在：只追加尚未在 session 中的 tag，避免重复。
+    - 不调用 LLM，只生成占位任务；题目在用户打开复习页时按需生成即可。
+    """
+    if not new_tags:
+        return
+    _ensure_table()
+    with get_connection() as conn:
+        row = conn.execute(
+            text("SELECT tasks_json, total FROM review_sessions WHERE student_id=:sid AND date=:date"),
+            {"sid": student_id, "date": today},
+        ).mappings().fetchone()
+        if not row:
+            return  # 今日 session 尚未创建，跳过
+        tasks: list[dict] = json.loads(row["tasks_json"])
+        existing_tags = {t.get("tag") for t in tasks}
+        additions = [
+            {"tag": tag, "question": f"关于「{tag}」的复习题", "options": [], "answer": "", "explanation": "", "done": False, "correct": None, "pending_generate": True}
+            for tag in new_tags if tag not in existing_tags
+        ]
+        if not additions:
+            return
+        merged = tasks + additions
+        conn.execute(
+            text("UPDATE review_sessions SET tasks_json=:tasks, total=:total WHERE student_id=:sid AND date=:date"),
+            {"tasks": json.dumps(merged, ensure_ascii=False), "total": len(merged), "sid": student_id, "date": today},
+        )
 
 
 def submit_answer(student_id: str, today: str, task_idx: int, is_correct: bool) -> dict:
@@ -108,6 +173,17 @@ def submit_answer(student_id: str, today: str, task_idx: int, is_correct: bool) 
             text("UPDATE review_sessions SET tasks_json=:tasks, completed=:c WHERE student_id=:sid AND date=:date"),
             {"tasks": json.dumps(tasks, ensure_ascii=False), "c": completed, "sid": student_id, "date": today},
         )
+    # 复习作答回写错题本：答对累积掌握证据，答错强化薄弱点，让复习真正影响掌握度
+    tag = str(tasks[task_idx].get("tag") or "").strip()
+    if tag:
+        try:
+            from services.weakpoint_service import record_correct_evidence, record_weakpoint
+            if is_correct:
+                record_correct_evidence(student_id, tag)
+            else:
+                record_weakpoint(student_id, tag, source="review")
+        except Exception:
+            pass
     return {"completed": completed, "total": len(tasks), "task": tasks[task_idx]}
 
 
@@ -116,8 +192,10 @@ def get_mastery_overview(student_id: str) -> dict:
     weakpoints = get_weakpoints(student_id)
     heatmap = [
         {"tag": w["knowledge_tag"],
-         "strength": round(max(0.1, 1.0 - min(w["wrong_count"] * 0.15, 0.9)), 2),
+         # 强度 = 错误次数惩罚 + 近期连续答对加成（掌握度证据），钳制在 0.1–1.0
+         "strength": round(min(1.0, max(0.1, 1.0 - min(w["wrong_count"] * 0.15, 0.9) + int(w.get("correct_streak") or 0) * 0.2)), 2),
          "wrong_count": w["wrong_count"],
+         "correct_streak": int(w.get("correct_streak") or 0),
          "last_reviewed": w["last_wrong_at"]}
         for w in weakpoints
     ]

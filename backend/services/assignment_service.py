@@ -343,16 +343,16 @@ def review_assignment_submission(
             {"score": score, "feedback": feedback or "", "reviewed_at": reviewed_at, "aid": assignment_id, "sid": student_id},
         )
 
-    # 主观题评阅后按整份作业分数粗粒度回流知识点：低分保留/写入，高分移除。
+    # 主观题评阅后按整份作业分数粗粒度回流知识点：低分强化薄弱点，高分累积掌握证据。
     try:
-        from services.weakpoint_service import delete_weakpoint, record_weakpoint
+        from services.weakpoint_service import record_correct_evidence, record_weakpoint
         questions = json.loads(assignment_row["questions_json"] or "[]")
         tags = [str(q.get("knowledge_tag") or "").strip() for q in questions if q.get("type") == "subjective"]
         for tag in [t for t in tags if t]:
             if score < 60:
                 record_weakpoint(student_id, tag, source="assignment_review")
             else:
-                delete_weakpoint(student_id, tag)
+                record_correct_evidence(student_id, tag)
     except Exception:
         pass
 
@@ -391,6 +391,30 @@ def list_student_assignments(student_id: str) -> list[dict[str, Any]]:
         )
         result.append(item)
     return result
+
+
+def get_teacher_badges(teacher_id: str) -> dict[str, int]:
+    """教师侧边栏徽标：待评阅主观题数、低分学生数（复用列表聚合，确定性）。"""
+    assignments = list_teacher_assignments(teacher_id)
+    return {
+        "pending_review": sum(int(a.get("pending_review_count") or 0) for a in assignments),
+        "below_threshold": sum(int(a.get("below_threshold_count") or 0) for a in assignments),
+    }
+
+
+def get_student_badges(student_id: str, today: str) -> dict[str, int]:
+    """学生侧边栏徽标：未提交作业数、临近/逾期未交数（due_date<=today）。"""
+    assignments = list_student_assignments(student_id)
+    pending = 0
+    due_soon = 0
+    for a in assignments:
+        if a.get("submission") is not None:
+            continue
+        pending += 1
+        due = (a.get("due_date") or "").strip()
+        if due and due <= today:
+            due_soon += 1
+    return {"pending_assignments": pending, "due_soon": due_soon}
 
 
 def submit_assignment(student_id: str, assignment_id: str, answers: list[Any]) -> dict[str, Any]:
@@ -461,15 +485,25 @@ def submit_assignment(student_id: str, assignment_id: str, answers: list[Any]) -
             },
         )
 
-    # ── 错题回流：答错写入薄弱点，答对尝试移除（已掌握）──────────────────
+    # ── 错题回流：答错写入薄弱点，答对累积掌握证据（连对达阈值才移除）──────
     try:
-        from services.weakpoint_service import delete_weakpoint, record_weakpoint
+        from services.weakpoint_service import record_correct_evidence, record_weakpoint
         for tag in wrong_tags:
             record_weakpoint(student_id, tag, source="assignment")
         for tag in correct_tags:
-            delete_weakpoint(student_id, tag)
+            record_correct_evidence(student_id, tag)
     except Exception:
         pass  # 不因错题回流失败而影响提交结果
+    # ──────────────────────────────────────────────────────────────────────
+
+    # ── 今日复习 session 追加新弱点（不阻塞提交）────────────────────────
+    if wrong_tags:
+        try:
+            from services.review_service import merge_new_weakpoints_to_today
+            from datetime import date
+            merge_new_weakpoints_to_today(student_id, wrong_tags, date.today().isoformat())
+        except Exception:
+            pass
     # ──────────────────────────────────────────────────────────────────────
 
     return {
@@ -478,4 +512,6 @@ def submit_assignment(student_id: str, assignment_id: str, answers: list[Any]) -
         "objective_correct": objective_correct, "objective_total": objective_total,
         "has_subjective": has_subjective, "graded_answers": graded_answers,
         "submitted_at": submitted_at,
+        "wrong_tags": wrong_tags,    # 答错知识点，前端用于引导复习
+        "correct_tags": correct_tags,
     }

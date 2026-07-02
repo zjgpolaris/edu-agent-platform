@@ -211,11 +211,11 @@ def submit_quiz_answers(req: TextbookQuizSubmitRequest) -> dict:
             correct_tags.append(matched_item.topic)
 
     if req.student_id:
-        from services.weakpoint_service import record_weakpoint, delete_weakpoint
+        from services.weakpoint_service import record_weakpoint, record_correct_evidence
         for tag in wrong_tags[:3]:
             record_weakpoint(req.student_id, tag, "textbook_guide")
         for tag in correct_tags:
-            delete_weakpoint(req.student_id, tag)
+            record_correct_evidence(req.student_id, tag)
 
     total = len(results)
     correct = sum(1 for r in results if r["is_correct"])
