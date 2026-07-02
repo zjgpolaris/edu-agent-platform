@@ -40,6 +40,7 @@ const studentNav: NavItem[] = [
       { label: "我的作业", href: "/student/assignments", icon: "业", badgeKey: "pending_assignments" },
       { label: "今日复习", href: "/student/review", icon: "复", badgeKey: "pending_review" },
       { label: "学情分析", href: "/student/dashboard", icon: "析" },
+      { label: "学习路径", href: "/student/learning-path", icon: "路" },
       { label: "成长报告", href: "/student/report", icon: "报" },
       { label: "错题本", href: "/student/weakpoints", icon: "错" },
       { label: "智能练习", href: "/student/quiz", icon: "练" },
