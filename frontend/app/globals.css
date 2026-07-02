@@ -10363,10 +10363,35 @@ textarea:focus {
 }
 .sidebar-group-btn { justify-content: flex-start; font-family: inherit; }
 .sidebar-chevron { margin-left: auto; font-size: 10px; color: var(--muted); }
+.sidebar-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #c0392b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.sidebar-group-btn .sidebar-badge { margin-left: auto; margin-right: 6px; }
+.sidebar-badge-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c0392b;
+  border: 1.5px solid var(--surface, #fff);
+}
 .sidebar-icon {
   width: 28px;
   height: 28px;
   min-width: 28px;
+  position: relative;
   border: 1px solid rgba(96, 72, 44, 0.12);
   border-radius: 10px;
   display: inline-flex;
@@ -10445,6 +10470,7 @@ textarea:focus {
 
 .mobile-bottom-nav .mbn-icon {
   width: 28px; height: 28px;
+  position: relative;
   display: grid; place-items: center;
   border-radius: 8px;
   font-size: 14px; font-weight: 900;
