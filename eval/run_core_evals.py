@@ -70,6 +70,7 @@ SMOKE_SUITES = [
     "notification_badges_smoke",
     "quality_dashboard_smoke",
     "today_plan_smoke",
+    "completion_overview_smoke",
     "tool_registry_smoke",
     "guardrails_smoke",
     "trace_smoke",
@@ -94,6 +95,7 @@ SUITE_FILES = {
     "notification_badges_smoke": EVAL_DIR / "notification_badges_smoke.py",
     "quality_dashboard_smoke": EVAL_DIR / "quality_dashboard_smoke.py",
     "today_plan_smoke": EVAL_DIR / "today_plan_smoke.py",
+    "completion_overview_smoke": EVAL_DIR / "completion_overview_smoke.py",
     "tool_registry_smoke": EVAL_DIR / "tool_registry_smoke.py",
     "guardrails_smoke": EVAL_DIR / "guardrails_smoke.py",
     "ragas_eval": EVAL_DIR / "ragas_eval.py",
@@ -214,6 +216,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     "today_plan_smoke": {
         "label": "学生今日计划 Smoke",
         "category": "student",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "completion_overview_smoke": {
+        "label": "班级完成情况 Smoke",
+        "category": "teacher",
         "kind": "smoke",
         "priority": "p1",
     },

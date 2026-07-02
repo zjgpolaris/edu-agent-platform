@@ -393,6 +393,7 @@ frontend/
 | POST | `/api/teacher/assignments/{assignment_id}/questions/{question_index}/review-flag` | 教师复核质检盲区题：`verdict` = `bad_question`（题目有问题）/ `not_mastered`（学生没掌握），UPSERT 到 `question_review_flags` |
 | GET | `/api/teacher/badges` | 教师侧边栏通知徽标：`{pending_review, below_threshold, blind_spots_to_review}`（复用作业列表聚合，`blind_spots_to_review`＝各作业未复核质检盲区数之和，前端 60s 轮询；「布置作业」入口显示 pending_review + blind_spots_to_review 之和） |
 | GET | `/api/teacher/quality-dashboard` | 命题质量看板：跨作业聚合 AI 质检分布(error/warn/ok/unchecked)、有效性(主动预警/疑似误报/盲区待复核·确认漏检·其实没掌握)、复核结论分布、高频问题类型、最难题 Top 与近期 few-shot 反例；只读确定性 |
+| GET | `/api/teacher/completion-overview` | 班级作业完成情况：跨作业按学生聚合 已交/欠交/逾期(掉队优先) + 班级摘要(总体提交率/有逾期学生数/已全交数)；只读确定性 |
 | GET | `/api/student/{student_id}/badges` | 学生侧边栏通知徽标：`{pending_assignments, due_soon, pending_review}`（未提交作业/临近到期/今日复习待完成，前端 60s 轮询） |
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
@@ -751,6 +752,7 @@ frontend/
 | `notification_badges_smoke.py` | 通知徽标聚合测试（教师待评阅/低分学生/未复核质检盲区统计与复核清零、学生未提交/到期统计），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `quality_dashboard_smoke.py` | 命题质量看板跨作业聚合测试（质检分布/有效性漏检误报/复核结论/高频问题/最难题排序/few-shot 反例/teacher 隔离），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `today_plan_smoke.py` | 学生今日计划聚合测试（优先级排序/已交排除/逾期置顶/复习余量/薄弱点 focus 编码/DB 集成隔离），8 例离线，已接入 `run_core_evals.py`（SMOKE） |
+| `completion_overview_smoke.py` | 教师班级完成情况聚合测试（逐生计数/逾期判定/掉队排序/班级摘要/DB 集成隔离），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
 | `trajectory_eval.py` | 学习助手工具调用轨迹准确率，已接入 `run_core_evals.py`（CORE/QUICK） |
 | `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中、focus_tags 优先规划、连错降难度、空错题本兜底），7 例，已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
@@ -873,6 +875,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-02 | 1.16.5 | 语义质检自改进闭环：新增 `get_bad_question_examples(teacher_id)`（取该教师历史上人工判为 `bad_question` 的题干+备注，teacher 隔离、去重）；`check_question_semantic` 加 `bad_examples` 参数，将其作为 few-shot 反例注入 system prompt（前 3 条截断，默认 None 行为不变）；`generate-questions` 在 `semantic_check` 时取一次反例传入，使语义质检随教师复核越用越准；`question_quality_smoke` 加注入断言/回归（15→17），`assignment_smoke` 加反例取样/隔离（16→17 例） |
 | 2026-07-02 | 1.16.6 | 命题质量看板：新增 `services/quality_dashboard.py` 的 `get_teacher_quality_dashboard` 跨作业聚合 + `GET /api/teacher/quality-dashboard`；前端 `/teacher/quality-dashboard` 看板页 + 侧边栏「系统运维」入口；新增 `quality_dashboard_smoke.py`（7 例）。把散落在单份作业的质检数据升维成教师可决策的命题质量画像 |
 | 2026-07-02 | 1.16.7 | 学生今日计划：新增 `services/today_plan.py`（build_today_plan 纯函数 + get_student_today_plan）与 `GET /api/students/{id}/today`，把作业到期/今日复习/薄弱点按优先级(逾期>今日截止>复习>未来作业>薄弱点)合成待办；前端 `TodayPlanCard` 接入学生首页，补上此前首页无作业提醒的缺口；新增 `today_plan_smoke.py`（8 例）|
+| 2026-07-02 | 1.16.8 | 教师班级作业完成情况：新增 `services/completion_overview.py`（compute_class_completion 纯函数 + get_class_completion_overview）与 `GET /api/teacher/completion-overview`，跨作业按学生聚合 已交/欠交/逾期(掉队优先)；前端 `ClassCompletionCard` 接入教师首页，补上此前只有作业维度完成率、缺学生维度催办视图的缺口；新增 `completion_overview_smoke.py`（6 例）。与学生「今日计划」形成师生对称 |
 
 ---
 

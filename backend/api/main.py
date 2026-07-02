@@ -2594,6 +2594,15 @@ async def student_today_plan(student_id: str, actor: Actor = Depends(require_aut
     return await run_in_threadpool(get_student_today_plan, student_id, today)
 
 
+@app.get("/api/teacher/completion-overview")
+async def teacher_completion_overview(actor: Actor = Depends(require_auth)):
+    """班级作业完成情况：跨作业按学生聚合已交/欠交/逾期，掉队优先。"""
+    require_teacher_actor(actor)
+    from services.completion_overview import get_class_completion_overview
+    today = _date.today().isoformat()
+    return await run_in_threadpool(get_class_completion_overview, actor.actor_id, today)
+
+
 # ── 学习成长报告 ────────────────────────────────────────────────────────────────
 
 @app.get("/api/student/{student_id}/learning-report")
