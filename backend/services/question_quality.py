@@ -86,12 +86,14 @@ def summarize_quality(questions: list[dict[str, Any]]) -> dict[str, int]:
 _LEVEL_RANK = {"ok": 0, "warn": 1, "error": 2}
 
 
-def check_question_semantic(q: dict[str, Any], *, llm: Any = None) -> dict[str, Any]:
+def check_question_semantic(q: dict[str, Any], *, llm: Any = None, bad_examples: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """用 LLM 判定题目的语义问题（歧义、答案是否自洽/正确、干扰项是否合理）。
 
     - opt-in：仅在调用方显式传入 llm 时才跑；无 llm 或调用失败 → 降级为
       {"level": "ok", "issues": [], "checked": False}（不误报、不阻断）。
     - checked=False 表示未真正跑 LLM，用于区分"查过且无问题"与"没查"。
+    - bad_examples：该教师历史上人工判定为『题目有问题』的样例，作为 few-shot
+      反例注入 prompt，帮助模型识别同类问题（自改进闭环）。为空则行为不变。
     """
     if llm is None:
         return {"level": "ok", "issues": [], "checked": False}
@@ -121,12 +123,25 @@ def check_question_semantic(q: dict[str, Any], *, llm: Any = None) -> dict[str, 
             severity: str = "warn"   # warn | error
             issues: list[str] = []
 
+        fewshot = ""
+        for ex in (bad_examples or [])[:3]:
+            ex_prompt = _norm(ex.get("prompt"))[:80]
+            if not ex_prompt:
+                continue
+            ex_note = _norm(ex.get("note"))
+            fewshot += f"\n- 题干：{ex_prompt}" + (f"（问题：{ex_note[:40]}）" if ex_note else "")
+        fewshot_block = (
+            "\n以下是该教师此前人工判定为『题目有问题』的样例，供参考其易错模式"
+            "（不要照搬内容，只借鉴问题类型）：" + fewshot
+        ) if fewshot else ""
+
         messages = [
             {"role": "system", "content": (
                 "你是初中历史命题审校专家。判断给定题目在语义上是否有问题。"
                 f"{focus}\n"
                 "只输出 JSON：{\"has_issue\":false,\"severity\":\"warn\",\"issues\":[\"简短中文问题描述\"]}。"
                 "若无问题，has_issue=false 且 issues 为空。severity 仅 warn 或 error（答案本身错误用 error）。"
+                f"{fewshot_block}"
             )},
             {"role": "user", "content": body},
         ]

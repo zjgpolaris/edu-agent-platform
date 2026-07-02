@@ -2872,8 +2872,17 @@ async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor
     from tools.registry import run_tool
     from tools.base import ToolExecutionContext
     from services.question_quality import check_question, check_question_semantic, merge_quality
+    from services.assignment_service import get_bad_question_examples
 
     ctx = ToolExecutionContext(actor_id=actor.actor_id, session_id=f"gen-{actor.actor_id}")
+
+    # 语义质检自改进：取该教师历史 bad_question 作为 few-shot 反例（每次请求取一次）
+    bad_examples: list[dict] = []
+    if req.semantic_check:
+        try:
+            bad_examples = await run_in_threadpool(get_bad_question_examples, actor.actor_id)
+        except Exception:
+            bad_examples = []
 
     def _strip(o: str) -> str:
         return o[3:].strip() if len(o) > 2 and o[1] == "." else o.strip()
@@ -2883,7 +2892,7 @@ async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor
         structural = check_question(q_dict)
         if req.semantic_check:
             try:
-                semantic = check_question_semantic(q_dict, llm=llm_fast)
+                semantic = check_question_semantic(q_dict, llm=llm_fast, bad_examples=bad_examples)
                 gq.quality = merge_quality(structural, semantic)
             except Exception:
                 gq.quality = structural  # 语义质检失败不阻断出题

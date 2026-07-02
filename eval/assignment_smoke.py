@@ -20,6 +20,7 @@ from services.assignment_service import (
     compute_assignment_insights,
     create_assignment,
     get_assignment_submissions,
+    get_bad_question_examples,
     list_student_assignments,
     list_teacher_assignments,
     record_question_review_flag,
@@ -192,6 +193,25 @@ def record_review_flag_upsert_and_validate() -> None:
         pass
 
 
+def bad_question_examples_fetch_and_isolation() -> None:
+    tt = "smoke-teacher-fewshot"
+    a = create_assignment(tt, "反例卷", [
+        {"type": "single_choice", "prompt": "唐朝建立于哪一年？", "options": ["618", "626", "907", "960"],
+         "answer": "A", "knowledge_tag": "唐朝"},
+        {"type": "single_choice", "prompt": "宋朝建立于哪一年？", "options": ["960", "1127", "1279", "1368"],
+         "answer": "A", "knowledge_tag": "宋朝"},
+    ], ["fs-stu"])
+    # 标 index 0 = bad_question，index 1 = not_mastered
+    record_question_review_flag(tt, a["id"], 0, "bad_question", note="干扰项有争议")
+    record_question_review_flag(tt, a["id"], 1, "not_mastered")
+    ex = get_bad_question_examples(tt)
+    assert len(ex) == 1, ex                       # 仅 bad_question 计入
+    assert ex[0]["prompt"] == "唐朝建立于哪一年？", ex
+    assert ex[0]["note"] == "干扰项有争议", ex
+    # teacher 隔离：别的教师取不到
+    assert get_bad_question_examples("smoke-teacher-other") == []
+
+
 def permission_guard() -> None:
     try:
         get_assignment_submissions("other-teacher", _state["aid"])
@@ -256,6 +276,7 @@ if __name__ == "__main__":
         ("insights_excludes_prewarned_and_underanswered", insights_excludes_prewarned_and_underanswered),
         ("record_review_flag_bad_question", record_review_flag_bad_question),
         ("record_review_flag_upsert_and_validate", record_review_flag_upsert_and_validate),
+        ("bad_question_examples_fetch_and_isolation", bad_question_examples_fetch_and_isolation),
         ("permission_guard", permission_guard),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)

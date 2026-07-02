@@ -378,6 +378,43 @@ def get_question_review_flags(assignment_id: str) -> dict[int, dict[str, Any]]:
     }
 
 
+def get_bad_question_examples(teacher_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
+    """取某教师历史上人工判定为『题目有问题』的题干与备注，供语义质检 few-shot 反例。
+
+    仅本教师、按复核时间倒序、去重题干；无数据返回 []。
+    """
+    _ensure_tables()
+    limit = max(1, min(int(limit), 20))
+    with get_connection() as conn:
+        rows = conn.execute(
+            text("""SELECT f.question_index, f.note, a.questions_json
+                FROM question_review_flags f
+                JOIN assignments a ON a.id = f.assignment_id
+                WHERE f.teacher_id = :tid AND f.verdict = 'bad_question'
+                ORDER BY f.created_at DESC"""),
+            {"tid": teacher_id},
+        ).mappings().fetchall()
+
+    examples: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for r in rows:
+        try:
+            questions = json.loads(r["questions_json"] or "[]")
+        except (ValueError, TypeError):
+            continue
+        q_idx = int(r["question_index"])
+        if q_idx < 0 or q_idx >= len(questions):
+            continue
+        prompt = str(questions[q_idx].get("prompt") or "").strip()
+        if not prompt or prompt in seen:
+            continue
+        seen.add(prompt)
+        examples.append({"prompt": prompt, "note": (r["note"] or "").strip() or None})
+        if len(examples) >= limit:
+            break
+    return examples
+
+
 def record_question_review_flag(
     teacher_id: str,
     assignment_id: str,

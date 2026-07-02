@@ -141,6 +141,36 @@ def merge_ok_when_both_clean() -> None:
     assert m["level"] == "ok" and m["issues"] == [], m
 
 
+class _RecordingStubLLM:
+    """记录收到的 messages，用于断言 few-shot 反例已注入 prompt。"""
+    def __init__(self, payload: dict):
+        self._payload = payload
+        self.last_messages = None
+
+    def invoke(self, messages):
+        self.last_messages = messages
+        class _Resp:
+            content = json.dumps(self._payload, ensure_ascii=False)
+        return _Resp()
+
+
+def semantic_injects_bad_examples_into_prompt() -> None:
+    llm = _RecordingStubLLM({"has_issue": False, "severity": "warn", "issues": []})
+    bad = [{"prompt": "秦朝统一六国是在公元前哪一年？", "note": "选项有歧义"}]
+    check_question_semantic(VALID_SC, llm=llm, bad_examples=bad)
+    system_text = " ".join(m["content"] for m in llm.last_messages if m["role"] == "system")
+    assert "秦朝统一六国" in system_text, system_text
+    assert "题目有问题" in system_text, system_text
+
+
+def semantic_without_bad_examples_unchanged() -> None:
+    # 不传 bad_examples 时 prompt 不含 few-shot 段（回归）
+    llm = _RecordingStubLLM({"has_issue": False, "severity": "warn", "issues": []})
+    check_question_semantic(VALID_SC, llm=llm)
+    system_text = " ".join(m["content"] for m in llm.last_messages if m["role"] == "system")
+    assert "此前人工判定" not in system_text, system_text
+
+
 if __name__ == "__main__":
     cases = [
         ("valid_single_choice_ok", valid_single_choice_ok),
@@ -158,6 +188,8 @@ if __name__ == "__main__":
         ("semantic_no_issue_ok", semantic_no_issue_ok),
         ("merge_prefixes_and_takes_max_level", merge_prefixes_and_takes_max_level),
         ("merge_ok_when_both_clean", merge_ok_when_both_clean),
+        ("semantic_injects_bad_examples_into_prompt", semantic_injects_bad_examples_into_prompt),
+        ("semantic_without_bad_examples_unchanged", semantic_without_bad_examples_unchanged),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)
     print(f"question_quality_smoke={passed}/{len(cases)}")
