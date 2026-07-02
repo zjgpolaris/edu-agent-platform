@@ -68,6 +68,7 @@ SMOKE_SUITES = [
     "assignment_review_loop_smoke",
     "question_quality_smoke",
     "notification_badges_smoke",
+    "quality_dashboard_smoke",
     "tool_registry_smoke",
     "guardrails_smoke",
     "trace_smoke",
@@ -90,6 +91,7 @@ SUITE_FILES = {
     "assignment_review_loop_smoke": EVAL_DIR / "assignment_review_loop_smoke.py",
     "question_quality_smoke": EVAL_DIR / "question_quality_smoke.py",
     "notification_badges_smoke": EVAL_DIR / "notification_badges_smoke.py",
+    "quality_dashboard_smoke": EVAL_DIR / "quality_dashboard_smoke.py",
     "tool_registry_smoke": EVAL_DIR / "tool_registry_smoke.py",
     "guardrails_smoke": EVAL_DIR / "guardrails_smoke.py",
     "ragas_eval": EVAL_DIR / "ragas_eval.py",
@@ -197,6 +199,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "notification_badges_smoke": {
         "label": "通知徽标聚合 Smoke",
+        "category": "teacher",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "quality_dashboard_smoke": {
+        "label": "命题质量看板 Smoke",
         "category": "teacher",
         "kind": "smoke",
         "priority": "p1",

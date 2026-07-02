@@ -69,6 +69,7 @@ const teacherNav: NavItem[] = [
     label: "系统运维", icon: "运", children: [
       { label: "Eval Dashboard", href: "/eval", icon: "测" },
       { label: "班级学情", href: "/teacher/class-analytics", icon: "析" },
+      { label: "命题质量", href: "/teacher/quality-dashboard", icon: "质" },
     ],
   },
 ];

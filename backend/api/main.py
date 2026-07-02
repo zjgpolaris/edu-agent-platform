@@ -2747,6 +2747,7 @@ from services.assignment_service import (
     review_assignment_submission as _review_assignment_submission,
     submit_assignment as _submit_assignment,
 )
+from services.quality_dashboard import get_teacher_quality_dashboard as _get_teacher_quality_dashboard
 
 
 class AssignmentQuestion(BaseModel):
@@ -2965,6 +2966,13 @@ async def teacher_badges(actor: Actor = Depends(require_auth)):
     """教师侧边栏通知徽标：待评阅、低分学生数。"""
     require_teacher_actor(actor)
     return await run_in_threadpool(_get_teacher_badges, actor.actor_id)
+
+
+@app.get("/api/teacher/quality-dashboard")
+async def teacher_quality_dashboard(actor: Actor = Depends(require_auth)):
+    """命题质量看板：跨作业聚合 AI 质检分布、有效性、复核结论、高频问题与近期反例。"""
+    require_teacher_actor(actor)
+    return await run_in_threadpool(_get_teacher_quality_dashboard, actor.actor_id)
 
 
 @app.get("/api/teacher/assignments/{assignment_id}/submissions")
