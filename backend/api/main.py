@@ -2585,6 +2585,15 @@ async def student_mastery_overview(student_id: str, actor: Actor = Depends(requi
     return await run_in_threadpool(get_mastery_overview, student_id)
 
 
+@app.get("/api/students/{student_id}/today")
+async def student_today_plan(student_id: str, actor: Actor = Depends(require_auth)):
+    """学生今日计划：作业到期/今日复习/薄弱点按优先级合成的待办清单。"""
+    assert_student_access(actor, student_id)
+    from services.today_plan import get_student_today_plan
+    today = _date.today().isoformat()
+    return await run_in_threadpool(get_student_today_plan, student_id, today)
+
+
 # ── 学习成长报告 ────────────────────────────────────────────────────────────────
 
 @app.get("/api/student/{student_id}/learning-report")
