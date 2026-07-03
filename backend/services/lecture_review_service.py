@@ -248,3 +248,129 @@ def generate_lecture_review(
         "generated_at": now_iso(),
         "assignments_analyzed": min(limit_assignments, _DEFAULT_LIMIT_ASSIGNMENTS),
     }
+
+
+# ── 跨作业题目级错误聚合 ──────────────────────────────────────────────────────
+
+def aggregate_class_wrong_questions(
+    teacher_id: str,
+    limit_assignments: int = 10,
+    top_n: int = 15,
+) -> dict[str, Any]:
+    """跨作业聚合每道题的班级答错率，找出最难的题目。
+
+    与 aggregate_teacher_errors（按知识点聚合）不同，这里聚合到题目粒度，
+    暴露具体哪道题让全班犯难——帮助教师定位共性教学盲点。
+
+    Returns:
+    {
+        "questions": [
+            {
+                "prompt": str,              # 题干（前 80 字）
+                "knowledge_tag": str|None,
+                "difficulty": str|None,     # easy|medium|hard
+                "type": str,
+                "accuracy": float,          # 正确率 0-100
+                "attempts": int,            # 作答总人次
+                "student_count_wrong": int, # 答错不同学生数
+                "wrong_options": list,      # 高频错误选项（最多3条）
+                "assignment_title": str,
+                "assignment_id": str,
+                "question_index": int,
+            },
+            ...
+        ],
+        "assignments_analyzed": int,
+        "generated_at": str,
+    }
+    按 student_count_wrong 降序，取前 top_n 条。
+    """
+    from collections import Counter as _Counter
+    limit_assignments = max(1, min(int(limit_assignments), 30))
+    top_n = max(1, min(int(top_n), 50))
+
+    from services.assignment_service import _ensure_tables as _ensure_asgn_tables
+    _ensure_asgn_tables()
+
+    with get_connection() as conn:
+        asgn_rows = conn.execute(
+            text("""SELECT a.id, a.title, a.questions_json
+                 FROM assignments a
+                 WHERE a.teacher_id = :tid
+                   AND EXISTS (SELECT 1 FROM assignment_submissions s WHERE s.assignment_id = a.id)
+                 ORDER BY a.created_at DESC
+                 LIMIT :lim"""),
+            {"tid": teacher_id, "lim": limit_assignments},
+        ).mappings().fetchall()
+        if not asgn_rows:
+            return {"questions": [], "assignments_analyzed": 0, "generated_at": now_iso()}
+
+        asgn_ids = [r["id"] for r in asgn_rows]
+        asgn_meta: dict[str, dict] = {
+            r["id"]: {"title": r["title"], "questions": json.loads(r["questions_json"] or "[]")}
+            for r in asgn_rows
+        }
+
+        placeholders = ", ".join(f":aid_{i}" for i in range(len(asgn_ids)))
+        sub_rows = conn.execute(
+            text(f"""SELECT assignment_id, student_id, answers_json
+                 FROM assignment_submissions WHERE assignment_id IN ({placeholders})"""),
+            {f"aid_{i}": aid for i, aid in enumerate(asgn_ids)},
+        ).mappings().fetchall()
+
+    # 按 (assignment_id, question_index) 聚合
+    from collections import defaultdict
+    q_stats: dict[tuple, dict[str, Any]] = defaultdict(lambda: {
+        "attempts": 0, "wrong_students": set(), "wrong_opts": _Counter()
+    })
+
+    for sub in sub_rows:
+        aid = sub["assignment_id"]
+        answers = json.loads(sub["answers_json"] or "[]")
+        for ans in answers:
+            q_idx = int(ans.get("question_index", -1))
+            if q_idx < 0:
+                continue
+            is_correct = ans.get("is_correct")
+            if is_correct is None:
+                continue  # 主观题跳过
+            key = (aid, q_idx)
+            q_stats[key]["attempts"] += 1
+            if not is_correct:
+                q_stats[key]["wrong_students"].add(sub["student_id"])
+                raw_ans = str(ans.get("student_answer") or "").strip()
+                if raw_ans:
+                    q_stats[key]["wrong_opts"][raw_ans] += 1
+
+    # 整理输出
+    result: list[dict[str, Any]] = []
+    for (aid, q_idx), stat in q_stats.items():
+        questions = asgn_meta[aid]["questions"]
+        if q_idx >= len(questions):
+            continue
+        q = questions[q_idx]
+        attempts = stat["attempts"]
+        wrong_count = len(stat["wrong_students"])
+        accuracy = round((attempts - wrong_count) / attempts * 100, 1) if attempts else 100.0
+        wrong_opts = [{"option": k, "count": v}
+                      for k, v in stat["wrong_opts"].most_common(3)]
+        result.append({
+            "prompt": str(q.get("prompt") or "")[:80],
+            "knowledge_tag": q.get("knowledge_tag"),
+            "difficulty": q.get("difficulty"),
+            "type": q.get("type", "single_choice"),
+            "accuracy": accuracy,
+            "attempts": attempts,
+            "student_count_wrong": wrong_count,
+            "wrong_options": wrong_opts,
+            "assignment_title": asgn_meta[aid]["title"],
+            "assignment_id": aid,
+            "question_index": q_idx,
+        })
+
+    result.sort(key=lambda x: (-x["student_count_wrong"], x["accuracy"]))
+    return {
+        "questions": result[:top_n],
+        "assignments_analyzed": len(asgn_ids),
+        "generated_at": now_iso(),
+    }

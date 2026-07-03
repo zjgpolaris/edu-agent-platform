@@ -81,6 +81,7 @@ SMOKE_SUITES = [
     "calendar_smoke",
     "urge_notification_smoke",
     "tiered_assignment_smoke",
+    "class_wrong_analysis_smoke",
 ]
 SUITE_FILES = {
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
@@ -117,6 +118,7 @@ SUITE_FILES = {
     "calendar_smoke": EVAL_DIR / "calendar_smoke.py",
     "urge_notification_smoke": EVAL_DIR / "urge_notification_smoke.py",
     "tiered_assignment_smoke": EVAL_DIR / "tiered_assignment_smoke.py",
+    "class_wrong_analysis_smoke": EVAL_DIR / "class_wrong_analysis_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "history_character_smoke": {
@@ -277,6 +279,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "tiered_assignment_smoke": {
         "label": "分层作业 Smoke",
+        "category": "teacher",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "class_wrong_analysis_smoke": {
+        "label": "班级错题聚合 Smoke",
         "category": "teacher",
         "kind": "smoke",
         "priority": "p1",

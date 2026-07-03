@@ -38,11 +38,31 @@ type ClassMasteryHeatmap = {
   total_tags: number;
 };
 
+type WrongQuestion = {
+  prompt: string;
+  knowledge_tag: string | null;
+  difficulty: string | null;
+  type: string;
+  accuracy: number;
+  attempts: number;
+  student_count_wrong: number;
+  wrong_options: Array<{ option: string; count: number }>;
+  assignment_title: string;
+  assignment_id: string;
+  question_index: number;
+};
+type ClassWrongAnalysis = {
+  questions: WrongQuestion[];
+  assignments_analyzed: number;
+  generated_at: string;
+};
+
 export default function TeacherClassAnalyticsPage() {
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState<ClassAnalytics | null>(null);
   const [suggestions, setSuggestions] = useState<TeachingSuggestions | null>(null);
   const [classHeatmap, setClassHeatmap] = useState<ClassMasteryHeatmap | null>(null);
+  const [wrongAnalysis, setWrongAnalysis] = useState<ClassWrongAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -66,14 +86,16 @@ export default function TeacherClassAnalyticsPage() {
     setLoading(true);
     setError("");
     try {
-      const [analyticsRes, heatmapRes] = await Promise.all([
+      const [analyticsRes, heatmapRes, wrongRes] = await Promise.all([
         fetch(`${API}/api/teacher/class-analytics`, { headers: authHeaders(user.token) }),
         fetch(`${API}/api/teacher/class-mastery-heatmap`, { headers: authHeaders(user.token) }),
+        fetch(`${API}/api/teacher/class-wrong-analysis`, { headers: authHeaders(user.token) }),
       ]);
       if (!analyticsRes.ok) throw new Error("获取班级学情失败");
       const data = await analyticsRes.json();
       setAnalytics(data);
       if (heatmapRes.ok) setClassHeatmap(await heatmapRes.json());
+      if (wrongRes.ok) setWrongAnalysis(await wrongRes.json());
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取班级学情失败");
     } finally {
@@ -306,6 +328,58 @@ export default function TeacherClassAnalyticsPage() {
           )}
         </div>
 
+        {/* 全班难题榜 */}
+        {wrongAnalysis && wrongAnalysis.questions.length > 0 && (
+          <div className="analytics-section">
+            <div className="panel-heading-row">
+              <div>
+                <p className="section-kicker">CLASS HARD QUESTIONS</p>
+                <h3>全班难题榜</h3>
+              </div>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted,#6b7280)" }}>
+                近 {wrongAnalysis.assignments_analyzed} 份作业 · 按答错学生数排序
+              </span>
+            </div>
+            <p style={{ fontSize: "0.78rem", color: "var(--text-muted,#6b7280)", margin: "0 0 12px" }}>
+              这些题目让最多学生犯难，建议在讲评课重点讲解或布置针对性变式练习。
+            </p>
+            <div className="cwa-table">
+              <div className="cwa-header">
+                <span className="cwa-col-prompt">题干</span>
+                <span className="cwa-col-num">答错人</span>
+                <span className="cwa-col-acc">正确率</span>
+                <span className="cwa-col-wrong">高频错选</span>
+                <span className="cwa-col-asgn">来源作业</span>
+              </div>
+              {wrongAnalysis.questions.slice(0, 10).map((q, i) => {
+                const topWrong = q.wrong_options[0];
+                const diffColor = q.difficulty === "easy" ? "#166534" : q.difficulty === "hard" ? "#991b1b" : "#854d0e";
+                const diffBg = q.difficulty === "easy" ? "#dcfce7" : q.difficulty === "hard" ? "#fee2e2" : q.difficulty ? "#fef9c3" : "transparent";
+                return (
+                  <div key={i} className="cwa-row">
+                    <span className="cwa-col-prompt">
+                      <span className="cwa-rank">{i + 1}</span>
+                      {q.prompt}
+                      {q.knowledge_tag && <span className="cwa-tag">{q.knowledge_tag}</span>}
+                      {q.difficulty && <span className="cwa-tag" style={{ background: diffBg, color: diffColor }}>{q.difficulty === "easy" ? "基础" : q.difficulty === "hard" ? "提高" : "中等"}</span>}
+                    </span>
+                    <span className="cwa-col-num" style={{ color: q.student_count_wrong > 3 ? "#c0392b" : undefined }}>
+                      {q.student_count_wrong}人
+                    </span>
+                    <span className="cwa-col-acc" style={{ color: q.accuracy < 50 ? "#c0392b" : q.accuracy < 70 ? "#b0862b" : "#2d6a4f" }}>
+                      {q.accuracy}%
+                    </span>
+                    <span className="cwa-col-wrong">
+                      {topWrong ? `「${topWrong.option}」×${topWrong.count}` : "—"}
+                    </span>
+                    <span className="cwa-col-asgn">{q.assignment_title.slice(0, 12)}{q.assignment_title.length > 12 ? "…" : ""}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="analytics-section">
           <div className="panel-heading-row">
             <div>
@@ -497,6 +571,18 @@ export default function TeacherClassAnalyticsPage() {
           cursor: pointer;
           font-size: 13px;
         }
+        /* 全班难题榜表格 */
+        .cwa-table { display:flex; flex-direction:column; gap:4px; overflow-x:auto; }
+        .cwa-header, .cwa-row { display:grid; grid-template-columns:1fr 60px 60px 100px 100px; gap:8px; align-items:center; font-size:12px; padding:6px 8px; border-radius:6px; }
+        .cwa-header { font-weight:700; color:var(--text-muted,#6b7280); background:#f9f9f8; font-size:11px; letter-spacing:.04em; }
+        .cwa-row { border:1px solid #f0ebe0; background:#fdfbf7; transition:border-color .15s; }
+        .cwa-row:hover { border-color:#d4a96e; }
+        .cwa-col-prompt { display:flex; align-items:baseline; gap:5px; flex-wrap:wrap; min-width:0; overflow:hidden; }
+        .cwa-rank { font-size:11px; font-weight:700; color:var(--text-muted,#6b7280); width:16px; flex-shrink:0; }
+        .cwa-tag { font-size:10px; background:#f0ebe0; border-radius:3px; padding:1px 5px; white-space:nowrap; flex-shrink:0; }
+        .cwa-col-num, .cwa-col-acc { font-weight:700; font-size:13px; text-align:center; }
+        .cwa-col-wrong, .cwa-col-asgn { font-size:11px; color:var(--text-muted,#6b7280); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        @media (max-width:640px) { .cwa-header, .cwa-row { grid-template-columns:1fr 50px 50px; } .cwa-col-wrong,.cwa-col-asgn { display:none; } }
 
         .suggestions-content {
           display: grid;

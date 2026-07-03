@@ -2702,6 +2702,28 @@ async def student_notifications_read_all(student_id: str, actor: Actor = Depends
     return {"marked_read": n}
 
 
+@app.get("/api/teacher/class-wrong-analysis")
+async def teacher_class_wrong_analysis(
+    limit_assignments: int = 10,
+    top_n: int = 15,
+    actor: Actor = Depends(require_auth),
+):
+    """跨作业聚合每道题的班级答错率，返回按答错学生数降序的题目列表。
+
+    用于教师发现哪道题是全班共同难点，补充「每份作业单独洞察」的不足。
+    Query params:
+        limit_assignments: 最多分析最近几份作业（默认10，上限30）
+        top_n:             返回前几道难题（默认15，上限50）
+    """
+    require_teacher_actor(actor)
+    from services.lecture_review_service import aggregate_class_wrong_questions
+    result = await run_in_threadpool(
+        aggregate_class_wrong_questions, actor.actor_id,
+        max(1, min(limit_assignments, 30)), max(1, min(top_n, 50))
+    )
+    return result
+
+
 @app.get("/api/teacher/class-mastery-heatmap")
 async def teacher_class_mastery_heatmap(actor: Actor = Depends(require_auth)):
     """班级知识点掌握度热力图：聚合所有学生错题本，按知识点统计薄弱人数和平均掌握强度。
