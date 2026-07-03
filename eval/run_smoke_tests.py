@@ -29,6 +29,7 @@ SMOKE_TESTS = [
     "class_wrong_analysis_smoke.py",
     "tutor_effectiveness_smoke.py",
     "check_in_smoke.py",
+    "preference_smoke.py",
 ]
 
 

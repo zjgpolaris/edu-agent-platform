@@ -66,6 +66,7 @@ from services.batch_essay_service import batch_grade, compute_summary
 from services.weakpoint_service import get_weakpoints, record_weakpoint, delete_weakpoint, clear_weakpoints
 from services.variant_service import get_or_create_variant, generate_variant
 from services.check_in_service import check_in, get_check_in_status, get_achievements, get_check_in_history
+from services.learning_preference_service import get_preferences, set_preferences, get_preference_schema
 from tools.registry import list_tools
 
 from contextlib import asynccontextmanager
@@ -3406,3 +3407,32 @@ async def student_check_in_history(
     """获取打卡历史记录（用于日历展示）"""
     assert_student_access(actor, student_id)
     return await run_in_threadpool(get_check_in_history, student_id, days)
+
+
+# ── 学习偏好配置 ──────────────────────────────────────────────────────
+class PreferenceUpdateRequest(BaseModel):
+    preferences: dict[str, str]
+
+
+@app.get("/api/students/{student_id}/preferences")
+async def student_get_preferences(student_id: str, actor: Actor = Depends(require_auth)):
+    """获取学生学习偏好配置"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(get_preferences, student_id)
+
+
+@app.put("/api/students/{student_id}/preferences")
+async def student_set_preferences(
+    student_id: str,
+    req: PreferenceUpdateRequest,
+    actor: Actor = Depends(require_auth),
+):
+    """保存学生学习偏好配置"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(set_preferences, student_id, req.preferences)
+
+
+@app.get("/api/preferences/schema")
+async def preference_schema():
+    """获取偏好维度定义（供前端渲染表单）"""
+    return get_preference_schema()

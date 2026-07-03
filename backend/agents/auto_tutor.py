@@ -29,6 +29,7 @@ from security.prompt_injection import build_untrusted_context_block
 from structured_output import invoke_structured
 from student_profile import LearningEvent, get_student_profile, try_record_learning_event
 from services.weakpoint_service import delete_weakpoint, get_weakpoints, record_correct_evidence, record_weakpoint
+from services.learning_preference_service import build_preference_prompt
 from tools.base import ToolExecutionContext
 from tools.registry import run_tool
 from trace_store import current_trace_id, emit_trace_event, set_trace_id
@@ -249,6 +250,10 @@ def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], prof
         f"\n本节课必须优先讲解（来自学生刚做错的作业）：{('、'.join(focus_tags))}，把它们排在计划最前。"
         if focus_tags else ""
     )
+
+    # 注入学生偏好设置
+    preference_prompt = build_preference_prompt(state.student_id)
+
     prompt = [
         {
             "role": "system",
@@ -258,6 +263,7 @@ def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], prof
                 "每步包含：knowledge_point（知识点）、difficulty（easy/medium/hard，错得多的从 easy 起）、"
                 "strategy（一句话教学策略）、rationale（为何把它排在这个位置，要引用学情）。\n"
                 "只输出 JSON：{\"lesson_plan\": [{\"knowledge_point\":\"\",\"difficulty\":\"easy\",\"strategy\":\"\",\"rationale\":\"\"}]}"
+                f"{preference_prompt}"
             ),
         },
         {

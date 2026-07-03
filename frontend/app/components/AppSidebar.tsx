@@ -48,6 +48,7 @@ const studentNav: NavItem[] = [
       { label: "错题本", href: "/student/weakpoints", icon: "错" },
       { label: "智能练习", href: "/student/quiz", icon: "练" },
       { label: "记忆中心", href: "/student/memory", icon: "忆" },
+      { label: "偏好设置", href: "/student/settings", icon: "设" },
     ],
   },
 ];
