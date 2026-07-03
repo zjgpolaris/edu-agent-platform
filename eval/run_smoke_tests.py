@@ -23,6 +23,7 @@ SMOKE_TESTS = [
     "lecture_review_smoke.py",
     "mastery_heatmap_smoke.py",
     "difficulty_smoke.py",
+    "calendar_smoke.py",
 ]
 
 

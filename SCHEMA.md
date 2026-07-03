@@ -891,6 +891,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-03 | 1.17.1 | 讲评课 AI 辅助升级：新增 `services/lecture_review_service.py`（aggregate_teacher_errors 跨作业聚合错误分布 + generate_lecture_review LLM 批量生成讲解提示/板书关键词/即时练习形式）；新增 `POST /api/teacher/lecture-review`；教师作业管理页新增「AI 讲评稿」折叠面板，按知识点展示讲评卡片，支持一键复制全文；新增 `lecture_review_smoke.py`（6 例）。把散落的错题数据升维为教师可直接用的备课素材 |
 | 2026-07-03 | 1.17.2 | 知识点掌握度热力图：新增 `GET /api/teacher/class-mastery-heatmap`（聚合所有学生错题本 → 按 tag 统计 student_count/avg_wrong/avg_strength）；学生错题本页顶部加彩色磁贴热力图（红=薄弱/黄=学习中/绿=掌握，点击跳转 AutoTutor）；教师班级学情页新增班级热力图面板（按 student_count 排序，hover 显示统计）；新增 `mastery_heatmap_smoke.py`（5 例）|
 | 2026-07-03 | 1.17.3 | 出题难度维度：`GeneratedQuestion` 新增 `difficulty` 字段并写入题目 JSON；`compute_assignment_insights` 加 `difficulty_distribution` 统计（easy/medium/hard 计数）；前端作业洞察面板展示难度分布 chip；答题详情每题加难度 badge；AI 出题结果携带难度回传前端 `DraftQuestion`；新增 `difficulty_smoke.py`（5 例）。不影响存量题目（无 difficulty 字段时全为 0，向后兼容）|
+| 2026-07-03 | 1.17.4 | 学生学习日历：新建 `/student/calendar` 页面（GitHub 贡献图风格热力图，9 周 × 7 天格子）；复用成长报告 API 的 `activity_by_day`/`review_by_day`/`streak_days`，无需新接口；摘要行展示连续打卡/活跃天数/复习率/错题数/辅导次数；格子带颜色深浅（0=灰/1-2=浅绿/3-5=中绿/6-9=深绿/10+=最深），复习任务叠加橙/绿边框；桌面侧边栏 + 移动端「更多」列表均添加「学习日历」入口；新增 `calendar_smoke.py`（5 例）|
 
 ---
 
