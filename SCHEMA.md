@@ -380,7 +380,8 @@ frontend/
 | GET | `/api/students/{student_id}/review/today` | 获取今日自适应复习任务（无则生成） |
 | POST | `/api/students/{student_id}/review/submit` | 提交复习答题结果 |
 | GET | `/api/students/{student_id}/mastery-overview` | 知识点掌握度总览 + 连续打卡天数（strength 纳入 correct_streak 加成） |
-| GET | `/api/teacher/class-mastery-heatmap` | 班级知识点掌握度热力图：聚合所有学生错题本，按 tag 统计薄弱人数/avg_wrong/avg_strength，按 student_count 降序 |
+| PUT | `/api/teacher/assignments/{assignment_id}/difficulty-groups` | 为作业的学生设置难度分层（`{student_id: "easy"/"medium"/"hard"}`），传 `{}` 清除分层 |
+| GET | `/api/student/{student_id}/assignments/{assignment_id}/my-questions` | 返回学生应作答的题目：有分层按难度筛选，无分层返回全部，降级（无匹配题）返回全部 |
 | GET | `/api/students/{student_id}/review/variant-question` | 为指定 tag 生成（或返回今日缓存的）变式题；`wrong_count>=2` 时复习 session 也自动使用（`?tag=xxx`） |
 | GET | `/api/students/{student_id}/today` | 学生今日计划：作业到期(逾期/今日截止)、今日复习余量、薄弱点攻克按优先级合成的待办清单；只读、不触发 LLM |
 | GET | `/api/student/{student_id}/learning-report` | 学习成长报告：汇总 SM-2 复习进度、作业批改趋势、每日活跃度、错题统计、AutoTutor 会话数（`?days=14`） |
@@ -896,6 +897,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-03 | 1.17.3 | 出题难度维度：`GeneratedQuestion` 新增 `difficulty` 字段并写入题目 JSON；`compute_assignment_insights` 加 `difficulty_distribution` 统计（easy/medium/hard 计数）；前端作业洞察面板展示难度分布 chip；答题详情每题加难度 badge；AI 出题结果携带难度回传前端 `DraftQuestion`；新增 `difficulty_smoke.py`（5 例）。不影响存量题目（无 difficulty 字段时全为 0，向后兼容）|
 | 2026-07-03 | 1.17.4 | 学生学习日历：新建 `/student/calendar` 页面（GitHub 贡献图风格热力图，9 周 × 7 天格子）；复用成长报告 API 的 `activity_by_day`/`review_by_day`/`streak_days`，无需新接口；摘要行展示连续打卡/活跃天数/复习率/错题数/辅导次数；格子带颜色深浅（0=灰/1-2=浅绿/3-5=中绿/6-9=深绿/10+=最深），复习任务叠加橙/绿边框；桌面侧边栏 + 移动端「更多」列表均添加「学习日历」入口；新增 `calendar_smoke.py`（5 例）|
 | 2026-07-03 | 1.17.5 | 催办通知实际发送：新增 `services/notification_service.py`（send_urge_notification/get_student_notifications/mark_notification_read/mark_all_read/get_unread_count，`student_notifications` 表）；新增 `POST /api/teacher/urge-students`、`GET /api/students/{id}/notifications`、`POST /api/students/{id}/notifications/read-all`；`ClassCompletionCard` 加「一键催办」按钮+自定义消息输入框；`TodayPlanCard` 展示老师催办通知横幅（可关闭，后台静默已读）；新增 `urge_notification_smoke.py`（6 例）。补上「有数据但无行动」的催办断点 |
+| 2026-07-03 | 1.17.6 | 学生分层作业：`assignments` 表新增 `difficulty_groups_json` 字段（{student_id: "easy"\|"medium"\|"hard"}）；新增 `set_difficulty_groups`/`get_questions_for_student`/`_parse_difficulty_groups`；`list_student_assignments` 返回 `my_difficulty`；新增 `PUT /api/teacher/assignments/{id}/difficulty-groups` + `GET /api/student/{sid}/assignments/{aid}/my-questions`；教师作业详情加「学生难度分层」紫色面板（含学生下拉选择器+保存）；学生作业列表加难度组标签，开题时自动拉过滤后的题目（无匹配则降级全量）；新增 `tiered_assignment_smoke.py`（6 例）|
 
 ---
 

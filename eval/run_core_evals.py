@@ -80,6 +80,7 @@ SMOKE_SUITES = [
     "difficulty_smoke",
     "calendar_smoke",
     "urge_notification_smoke",
+    "tiered_assignment_smoke",
 ]
 SUITE_FILES = {
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
@@ -115,6 +116,7 @@ SUITE_FILES = {
     "difficulty_smoke": EVAL_DIR / "difficulty_smoke.py",
     "calendar_smoke": EVAL_DIR / "calendar_smoke.py",
     "urge_notification_smoke": EVAL_DIR / "urge_notification_smoke.py",
+    "tiered_assignment_smoke": EVAL_DIR / "tiered_assignment_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "history_character_smoke": {
@@ -269,6 +271,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "urge_notification_smoke": {
         "label": "催办通知 Smoke",
+        "category": "teacher",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "tiered_assignment_smoke": {
+        "label": "分层作业 Smoke",
         "category": "teacher",
         "kind": "smoke",
         "priority": "p1",

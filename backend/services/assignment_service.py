@@ -37,6 +37,10 @@ def _ensure_tables() -> None:
             due_date TEXT,
             created_at TEXT NOT NULL)"""))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_assignments_teacher ON assignments(teacher_id, created_at)"))
+        # 旧库补列：difficulty_groups_json（{student_id: "easy"|"medium"|"hard"}）
+        existing_asgn = {c["name"] for c in inspect(conn).get_columns("assignments")}
+        if "difficulty_groups_json" not in existing_asgn:
+            conn.execute(text("ALTER TABLE assignments ADD COLUMN difficulty_groups_json TEXT"))
         conn.execute(text("""CREATE TABLE IF NOT EXISTS assignment_submissions (
             id TEXT PRIMARY KEY,
             assignment_id TEXT NOT NULL,
@@ -535,7 +539,7 @@ def review_assignment_submission(
 
 
 def list_student_assignments(student_id: str) -> list[dict[str, Any]]:
-    """学生待办 + 已完成作业。"""
+    """学生待办 + 已完成作业。返回字段含 my_difficulty（若教师设了分层）。"""
     _ensure_tables()
     with get_connection() as conn:
         rows = conn.execute(
@@ -557,6 +561,9 @@ def list_student_assignments(student_id: str) -> list[dict[str, Any]]:
             {"score": sub["score"], "status": sub["status"], "submitted_at": sub["submitted_at"]}
             if sub else None
         )
+        # 分层难度：若该作业设了难度分组，返回当前学生的分配难度
+        groups = _parse_difficulty_groups(row.get("difficulty_groups_json"))
+        item["my_difficulty"] = groups.get(student_id)
         result.append(item)
     return result
 
@@ -569,6 +576,82 @@ def get_teacher_badges(teacher_id: str) -> dict[str, int]:
         "below_threshold": sum(int(a.get("below_threshold_count") or 0) for a in assignments),
         "blind_spots_to_review": sum(int(a.get("open_blind_spot_count") or 0) for a in assignments),
     }
+
+
+
+def _parse_difficulty_groups(raw: Any) -> dict[str, str]:
+    """解析 difficulty_groups_json 为 {student_id: difficulty} dict，解析失败返回空 dict。"""
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        return {str(k): str(v).lower() for k, v in data.items() if v in {"easy", "medium", "hard"}}
+    except Exception:
+        return {}
+
+
+_VALID_DIFFICULTIES = {"easy", "medium", "hard"}
+
+
+def set_difficulty_groups(
+    teacher_id: str,
+    assignment_id: str,
+    groups: dict[str, str],
+) -> None:
+    """设置作业的学生难度分组。groups = {student_id: "easy"|"medium"|"hard"}。
+
+    - teacher_id 用于权限校验（仅作业的出题教师可修改）。
+    - 传入 {} 或 None 表示清除分组（恢复统一题目）。
+    - 传入的学生必须在该作业的 assignee_ids 中；不在其中的 key 会被过滤掉。
+    """
+    _ensure_tables()
+    with get_connection() as conn:
+        row = conn.execute(
+            text("SELECT teacher_id, assignee_ids_json FROM assignments WHERE id = :aid"),
+            {"aid": assignment_id},
+        ).mappings().fetchone()
+    if not row:
+        raise LookupError("作业不存在")
+    if str(row["teacher_id"]) != str(teacher_id):
+        raise PermissionError("只有出题教师才能修改难度分组")
+    assignees = set(json.loads(row["assignee_ids_json"] or "[]"))
+    # 过滤：只保留合法学生 + 合法难度
+    cleaned = {
+        sid: diff for sid, diff in (groups or {}).items()
+        if sid in assignees and diff in _VALID_DIFFICULTIES
+    }
+    with get_connection() as conn:
+        conn.execute(
+            text("UPDATE assignments SET difficulty_groups_json = :dg WHERE id = :aid"),
+            {"dg": json.dumps(cleaned, ensure_ascii=False) if cleaned else None, "aid": assignment_id},
+        )
+
+
+def get_questions_for_student(student_id: str, assignment_id: str) -> list[dict[str, Any]]:
+    """返回学生应作答的题目列表。
+
+    - 若该作业设了分层且该学生有分配难度：只返回匹配该难度的题目。
+    - 否则返回全部题目（兼容未分层的旧作业）。
+    """
+    _ensure_tables()
+    with get_connection() as conn:
+        row = conn.execute(
+            text("SELECT questions_json, assignee_ids_json, difficulty_groups_json FROM assignments WHERE id = :aid"),
+            {"aid": assignment_id},
+        ).mappings().fetchone()
+    if not row:
+        raise LookupError("作业不存在")
+    assignees = json.loads(row["assignee_ids_json"] or "[]")
+    if student_id not in assignees:
+        raise PermissionError("此作业未分配给你")
+    questions: list[dict[str, Any]] = json.loads(row["questions_json"] or "[]")
+    groups = _parse_difficulty_groups(row.get("difficulty_groups_json"))
+    my_diff = groups.get(student_id)
+    if not my_diff:
+        return questions  # 未分层，返回全部
+    # 筛选：difficulty 匹配或无 difficulty 字段（保留旧题目）
+    filtered = [q for q in questions if not q.get("difficulty") or q.get("difficulty") == my_diff]
+    return filtered if filtered else questions  # 若过滤后为空则降级返回全部
 
 
 def get_student_badges(student_id: str, today: str) -> dict[str, int]:

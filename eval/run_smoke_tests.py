@@ -25,6 +25,7 @@ SMOKE_TESTS = [
     "difficulty_smoke.py",
     "calendar_smoke.py",
     "urge_notification_smoke.py",
+    "tiered_assignment_smoke.py",
 ]
 
 

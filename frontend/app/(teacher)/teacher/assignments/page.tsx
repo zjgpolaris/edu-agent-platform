@@ -107,6 +107,30 @@ export default function TeacherAssignmentsPage() {
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [flagging, setFlagging] = useState<number | null>(null);
 
+  // 难度分层
+  const [diffGroups, setDiffGroups] = useState<Record<string, string>>({});
+  const [savingGroups, setSavingGroups] = useState(false);
+  const [groupMsg, setGroupMsg] = useState("");
+
+  async function saveDiffGroups() {
+    if (!user?.token || !detail || savingGroups) return;
+    setSavingGroups(true); setGroupMsg("");
+    try {
+      const res = await fetch(`${API}/api/teacher/assignments/${detail.assignment.id}/difficulty-groups`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+        body: JSON.stringify({ groups: diffGroups }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setGroupMsg("难度分层已保存 ✓");
+      setTimeout(() => setGroupMsg(""), 3000);
+    } catch (e) {
+      setGroupMsg(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSavingGroups(false);
+    }
+  }
+
   useEffect(() => {
     if (user?.role !== "teacher" && user?.role !== "admin") {
       if (user) setError("仅教师可访问");
@@ -509,6 +533,52 @@ export default function TeacherAssignmentsPage() {
                   )}
                 </div>
 
+                {/* 难度分层设置面板 */}
+                {detail.submissions.length > 0 && (
+                  <div className="tasg-diff-groups-panel">
+                    <div className="tasg-lecture-head">
+                      <span className="tasg-label">学生难度分层</span>
+                      <div className="tasg-lecture-actions">
+                        <button className="tasg-copy-btn" onClick={saveDiffGroups} disabled={savingGroups}>
+                          {savingGroups ? "保存中…" : "保存分层"}
+                        </button>
+                        {Object.keys(diffGroups).length > 0 && (
+                          <button className="tasg-copy-btn" onClick={() => setDiffGroups({})}>清除分层</button>
+                        )}
+                      </div>
+                    </div>
+                    <p style={{ fontSize: "12px", color: "var(--muted,#7a7068)", margin: "0 0 8px" }}>
+                      为每位学生设置难度，学生只会看到匹配难度的题目。留空则学生看全部题目。
+                    </p>
+                    <div className="tasg-diff-groups-list">
+                      {detail.submissions.map((sub) => (
+                        <div key={sub.student_id} className="tasg-diff-groups-row">
+                          <span className="tasg-diff-groups-name">{sub.student_id}</span>
+                          <select
+                            className="tasg-diff-groups-select"
+                            value={diffGroups[sub.student_id] ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setDiffGroups(prev => {
+                                const next = { ...prev };
+                                if (v) next[sub.student_id] = v;
+                                else delete next[sub.student_id];
+                                return next;
+                              });
+                            }}
+                          >
+                            <option value="">不分层（看全部）</option>
+                            <option value="easy">基础题</option>
+                            <option value="medium">中等题</option>
+                            <option value="hard">提高题</option>
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                    {groupMsg && <p className="cc-urge-result">{groupMsg}</p>}
+                  </div>
+                )}
+
                 {detail.submissions.length === 0 ? (
                   <p className="tasg-empty">暂无学生提交</p>
                 ) : detail.submissions.map((sub) => (
@@ -862,4 +932,11 @@ const CSS = `
 .tasg-lecture-tip, .tasg-lecture-keywords, .tasg-lecture-exercise { font-size:13px; line-height:1.7; margin:3px 0; color:var(--ink,#1a1612); }
 .tasg-lecture-label { font-size:11px; font-weight:700; color:#4a7a3c; margin-right:6px; background:#e8f5e4; border-radius:3px; padding:1px 5px; white-space:nowrap; }
 .tasg-lecture-footer { font-size:11px; color:var(--muted,#7a7068); margin:2px 0 0; }
+/* 难度分层面板 */
+.tasg-diff-groups-panel { background:#f5f3ff; border:1px solid #c4b5fd; border-radius:12px; padding:14px 16px; margin:0 0 16px; }
+.tasg-diff-groups-list { display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+.tasg-diff-groups-row { display:flex; align-items:center; gap:10px; }
+.tasg-diff-groups-name { font-size:13px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tasg-diff-groups-select { border:1px solid #c4b5fd; border-radius:7px; padding:4px 8px; font-size:12px; background:#fff; color:var(--ink,#1a1612); cursor:pointer; }
+.tasg-diff-groups-select:focus { outline:none; border-color:#7c3aed; }
 `;

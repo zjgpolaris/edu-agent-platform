@@ -3212,6 +3212,32 @@ async def teacher_flag_question_review(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+class DifficultyGroupsRequest(BaseModel):
+    groups: dict[str, str]  # {student_id: "easy"|"medium"|"hard"}
+
+
+@app.put("/api/teacher/assignments/{assignment_id}/difficulty-groups")
+async def teacher_set_difficulty_groups(
+    assignment_id: str,
+    req: DifficultyGroupsRequest,
+    actor: Actor = Depends(require_auth),
+):
+    """教师为某份作业的学生设置难度分层（easy/medium/hard）。
+
+    传入 {} 表示清除分层（所有学生看全部题目）。
+    每个 student_id 必须是该作业的 assignee，否则被忽略。
+    """
+    require_teacher_actor(actor)
+    from services.assignment_service import set_difficulty_groups
+    try:
+        await run_in_threadpool(set_difficulty_groups, actor.actor_id, assignment_id, req.groups)
+        return {"ok": True, "assignment_id": assignment_id, "groups": req.groups}
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except PermissionError as exc:
@@ -3222,6 +3248,24 @@ async def teacher_flag_question_review(
 async def student_list_assignments(student_id: str, actor: Actor = Depends(require_auth)):
     assert_student_access(actor, student_id)
     return {"assignments": await run_in_threadpool(_list_student_assignments, student_id)}
+
+
+@app.get("/api/student/{student_id}/assignments/{assignment_id}/my-questions")
+async def student_get_my_questions(
+    student_id: str,
+    assignment_id: str,
+    actor: Actor = Depends(require_auth),
+):
+    """返回该学生应作答的题目（分层作业按难度筛选，普通作业返回全部）。"""
+    assert_student_access(actor, student_id)
+    from services.assignment_service import get_questions_for_student
+    try:
+        questions = await run_in_threadpool(get_questions_for_student, student_id, assignment_id)
+        return {"questions": questions, "student_id": student_id, "assignment_id": assignment_id}
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 def _student_badges_sync(student_id: str) -> dict:

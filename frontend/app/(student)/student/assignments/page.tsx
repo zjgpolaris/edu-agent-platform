@@ -11,6 +11,7 @@ type Question = {
   options?: string[] | null;
   answer?: unknown;
   knowledge_tag?: string | null;
+  difficulty?: string | null;
 };
 type Submission = { score: number | null; status: string; submitted_at: string } | null;
 type Assignment = {
@@ -22,6 +23,7 @@ type Assignment = {
   due_date: string | null;
   created_at: string;
   submission: Submission;
+  my_difficulty?: string | null;  // 教师设置的难度分层（easy|medium|hard）
 };
 type SubmitResult = {
   score: number | null;
@@ -63,7 +65,22 @@ export default function StudentAssignmentsPage() {
   }
 
   function openAssignment(a: Assignment) {
-    setActive(a); setAnswers({}); setResult(null);
+    // 若有难度分层，异步拉取过滤后的题目，再展示
+    if (a.my_difficulty && user?.actorId && user?.token) {
+      fetch(`${API}/api/student/${user.actorId}/assignments/${a.id}/my-questions`, { headers: authHeaders(user.token) })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d?.questions?.length) {
+            setActive({ ...a, questions: d.questions });
+          } else {
+            setActive(a);
+          }
+        })
+        .catch(() => setActive(a));
+    } else {
+      setActive(a);
+    }
+    setAnswers({}); setResult(null);
   }
 
   async function submit() {
@@ -116,6 +133,11 @@ export default function StudentAssignmentsPage() {
                     <span className="asg-card-meta">
                       {a.subject && <span className="asg-tag">{a.subject}</span>}
                       {a.questions.length} 题
+                      {a.my_difficulty && (
+                        <span className={`asg-diff-tag ${a.my_difficulty}`}>
+                          {a.my_difficulty === "easy" ? "基础组" : a.my_difficulty === "hard" ? "提高组" : "中等组"}
+                        </span>
+                      )}
                       {a.due_date && <span className="asg-due">截止 {a.due_date}</span>}
                     </span>
                   </div>
@@ -319,4 +341,9 @@ const CSS = `
 .asg-cta-btn:hover { opacity:.88; transform:translateY(-1px); }
 .asg-cta-review { background:var(--jade,#2d6a4f); color:#fff; }
 .asg-cta-tutor { background:var(--gold,#b08d2b); color:#fff; }
+/* 难度标签 */
+.asg-diff-tag { font-size:11px; font-weight:700; border-radius:8px; padding:1px 7px; }
+.asg-diff-tag.easy { background:#dcfce7; color:#166534; }
+.asg-diff-tag.medium { background:#fef9c3; color:#854d0e; }
+.asg-diff-tag.hard { background:#fee2e2; color:#991b1b; }
 `;
