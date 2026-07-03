@@ -13,6 +13,24 @@ type Weakpoint = {
   wrong_count: number;
   last_wrong_at: string;
   source: string;
+  correct_streak?: number;
+};
+
+type MasteryHeatmapItem = {
+  tag: string;
+  strength: number;  // 0.1-1.0
+  wrong_count: number;
+  correct_streak: number;
+  last_reviewed: string;
+};
+
+type MasteryOverview = {
+  total_tags: number;
+  mastered: number;
+  learning: number;
+  weak: number;
+  streak_days: number;
+  heatmap: MasteryHeatmapItem[];
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -61,17 +79,25 @@ export default function WeakpointsPage() {
   const id = user?.actorId;
   const token = user?.token;
 
+  const [mastery, setMastery] = useState<MasteryOverview | null>(null);
+
   useEffect(() => {
     if (!id || !token) { setLoading(false); return; }
     let cancelled = false;
     async function load() {
       setLoading(true); setError("");
       try {
-        const data = await fetchApiJson<{ weakpoints: Weakpoint[] }>(`/api/student/${id}/weakpoints`, {
-          token: token!,
-          fallbackMessage: "错题本加载失败",
-        });
-        if (!cancelled) setWeakpoints(data.weakpoints || []);
+        const [wpData, masteryData] = await Promise.all([
+          fetchApiJson<{ weakpoints: Weakpoint[] }>(`/api/student/${id}/weakpoints`, {
+            token: token!, fallbackMessage: "错题本加载失败",
+          }),
+          fetch(`${API}/api/students/${id}/mastery-overview`, { headers: authHeaders(token!) })
+            .then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        if (!cancelled) {
+          setWeakpoints(wpData.weakpoints || []);
+          setMastery(masteryData ?? null);
+        }
       } catch (err) {
         if (!cancelled) setError(normalizeError(err, "错题本加载失败"));
       } finally {
@@ -139,6 +165,12 @@ export default function WeakpointsPage() {
 
         {loading && <p className="empty-hint">正在加载错题记录...</p>}
         {error && <div className="error-card"><p>{error}</p></div>}
+
+        {/* 掌握度热力图 */}
+        {!loading && mastery && mastery.heatmap.length > 0 && (
+          <MasteryHeatmap mastery={mastery} studentId={id!} />
+        )}
+
         {!loading && !error && weakpoints.length === 0 && (
           <div className="material-empty-state">
             <strong>暂无错题记录</strong>
@@ -154,6 +186,65 @@ export default function WeakpointsPage() {
         )}
       </section>
     </main>
+  );
+}
+
+/** strength 0.1-1.0 → 背景色：红(弱)→黄(中)→绿(强) */
+function strengthColor(s: number): { bg: string; fg: string; label: string } {
+  if (s >= 0.7) return { bg: "#d1fae5", fg: "#065f46", label: "掌握" };
+  if (s >= 0.4) return { bg: "#fef3c7", fg: "#92400e", label: "学习中" };
+  return { bg: "#fee2e2", fg: "#991b1b", label: "薄弱" };
+}
+
+function MasteryHeatmap({ mastery, studentId }: { mastery: MasteryOverview; studentId: string }) {
+  const sorted = [...mastery.heatmap].sort((a, b) => a.strength - b.strength);
+  return (
+    <div style={{ marginBottom: "28px" }}>
+      {/* 摘要行 */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+        <p style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted, #6b7280)", letterSpacing: "0.06em" }}>
+          掌握度热力图 · {mastery.total_tags} 个知识点
+        </p>
+        <div style={{ display: "flex", gap: "10px", fontSize: "0.72rem" }}>
+          <span style={{ color: "#065f46" }}>● 掌握 {mastery.mastered}</span>
+          <span style={{ color: "#92400e" }}>● 学习中 {mastery.learning}</span>
+          <span style={{ color: "#991b1b" }}>● 薄弱 {mastery.weak}</span>
+        </div>
+      </div>
+      {/* 热力磁贴 */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+        {sorted.map((item) => {
+          const { bg, fg, label } = strengthColor(item.strength);
+          const href = `/student/auto-tutor?focus=${encodeURIComponent(item.tag)}`;
+          return (
+            <a
+              key={item.tag}
+              href={href}
+              title={`${item.tag}｜${label}｜出错 ${item.wrong_count} 次｜连对 ${item.correct_streak} 次`}
+              style={{
+                display: "inline-flex", flexDirection: "column", alignItems: "center",
+                gap: "2px", padding: "8px 12px", borderRadius: "8px",
+                background: bg, color: fg, textDecoration: "none",
+                fontSize: "0.8rem", fontWeight: 600,
+                border: `1px solid ${fg}22`,
+                transition: "transform .15s, box-shadow .15s",
+                cursor: "pointer",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 12px rgba(0,0,0,.1)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; (e.currentTarget as HTMLElement).style.boxShadow = ""; }}
+            >
+              <span>{item.tag}</span>
+              <span style={{ fontSize: "0.65rem", opacity: 0.75 }}>×{item.wrong_count}</span>
+            </a>
+          );
+        })}
+      </div>
+      {mastery.streak_days > 0 && (
+        <p style={{ marginTop: "10px", fontSize: "0.78rem", color: "#4b9560" }}>
+          🔥 已连续复习 {mastery.streak_days} 天
+        </p>
+      )}
+    </div>
   );
 }
 

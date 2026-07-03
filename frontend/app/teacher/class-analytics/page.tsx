@@ -25,10 +25,24 @@ type TeachingSuggestions = {
   homework_suggestions: string[];
 };
 
+type ClassMasteryTag = {
+  tag: string;
+  student_count: number;
+  avg_wrong: number;
+  avg_strength: number;  // 0-1
+};
+
+type ClassMasteryHeatmap = {
+  tags: ClassMasteryTag[];
+  total_students: number;
+  total_tags: number;
+};
+
 export default function TeacherClassAnalyticsPage() {
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState<ClassAnalytics | null>(null);
   const [suggestions, setSuggestions] = useState<TeachingSuggestions | null>(null);
+  const [classHeatmap, setClassHeatmap] = useState<ClassMasteryHeatmap | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -52,12 +66,14 @@ export default function TeacherClassAnalyticsPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${API}/api/teacher/class-analytics`, {
-        headers: authHeaders(user.token),
-      });
-      if (!response.ok) throw new Error("获取班级学情失败");
-      const data = await response.json();
+      const [analyticsRes, heatmapRes] = await Promise.all([
+        fetch(`${API}/api/teacher/class-analytics`, { headers: authHeaders(user.token) }),
+        fetch(`${API}/api/teacher/class-mastery-heatmap`, { headers: authHeaders(user.token) }),
+      ]);
+      if (!analyticsRes.ok) throw new Error("获取班级学情失败");
+      const data = await analyticsRes.json();
       setAnalytics(data);
+      if (heatmapRes.ok) setClassHeatmap(await heatmapRes.json());
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取班级学情失败");
     } finally {
@@ -222,6 +238,50 @@ export default function TeacherClassAnalyticsPage() {
             </div>
           )}
         </div>
+
+        {/* 班级知识点掌握度热力图 */}
+        {classHeatmap && classHeatmap.tags.length > 0 && (
+          <div className="analytics-section">
+            <div className="panel-heading-row">
+              <div>
+                <p className="section-kicker">MASTERY HEATMAP</p>
+                <h3>班级知识点掌握度热力图</h3>
+              </div>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted, #6b7280)" }}>
+                {classHeatmap.total_tags} 个知识点 · {classHeatmap.total_students} 名学生有记录
+              </span>
+            </div>
+            <p style={{ fontSize: "0.78rem", color: "var(--text-muted, #6b7280)", margin: "0 0 12px" }}>
+              颜色深浅反映班级平均掌握强度，红色=普遍薄弱，绿色=普遍掌握。点击知识点可在教学建议中重点关注。
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {classHeatmap.tags.slice(0, 30).map((item) => {
+                const s = item.avg_strength;
+                const bg = s >= 0.7 ? "#d1fae5" : s >= 0.4 ? "#fef3c7" : "#fee2e2";
+                const fg = s >= 0.7 ? "#065f46" : s >= 0.4 ? "#92400e" : "#991b1b";
+                const share = classHeatmap.total_students > 0
+                  ? Math.round((item.student_count / classHeatmap.total_students) * 100)
+                  : 0;
+                return (
+                  <div
+                    key={item.tag}
+                    title={`${item.tag}｜${item.student_count} 人薄弱（${share}%）｜平均出错 ${item.avg_wrong} 次`}
+                    style={{
+                      display: "inline-flex", flexDirection: "column", alignItems: "center",
+                      gap: "3px", padding: "8px 14px", borderRadius: "8px",
+                      background: bg, color: fg,
+                      fontSize: "0.82rem", fontWeight: 600,
+                      border: `1px solid ${fg}22`, cursor: "default",
+                    }}
+                  >
+                    <span>{item.tag}</span>
+                    <span style={{ fontSize: "0.65rem", opacity: 0.75 }}>{item.student_count}人 · {share}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="analytics-section">
           <div className="panel-heading-row">

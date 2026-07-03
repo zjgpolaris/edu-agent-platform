@@ -2650,6 +2650,69 @@ async def teacher_completion_overview(actor: Actor = Depends(require_auth)):
     return await run_in_threadpool(get_class_completion_overview, actor.actor_id, today)
 
 
+@app.get("/api/teacher/class-mastery-heatmap")
+async def teacher_class_mastery_heatmap(actor: Actor = Depends(require_auth)):
+    """班级知识点掌握度热力图：聚合所有学生错题本，按知识点统计薄弱人数和平均掌握强度。
+
+    Returns:
+    {
+        "tags": [
+            {
+                "tag": str,          # 知识点
+                "student_count": int, # 有此薄弱点的学生数
+                "avg_wrong": float,   # 平均答错次数
+                "avg_strength": float,# 平均掌握强度 0-1
+            },
+            ...
+        ],
+        "total_students": int,
+        "total_tags": int,
+    }
+    按 student_count 降序。
+    """
+    require_teacher_actor(actor)
+
+    def _fetch():
+        from collections import defaultdict
+        from db.engine import get_connection
+        from sqlalchemy import text
+        _ensure = __import__("services.weakpoint_service", fromlist=["_ensure_table"])
+        _ensure._ensure_table()
+        with get_connection() as conn:
+            rows = conn.execute(
+                text("""SELECT knowledge_tag, wrong_count, correct_streak, student_id
+                     FROM weakpoints ORDER BY knowledge_tag"""),
+            ).mappings().fetchall()
+            total_students_row = conn.execute(
+                text("SELECT COUNT(DISTINCT student_id) AS cnt FROM weakpoints"),
+            ).mappings().fetchone()
+
+        total_students = int(total_students_row["cnt"] or 0) if total_students_row else 0
+        tag_data: dict[str, dict] = defaultdict(lambda: {"students": set(), "wrong_sum": 0, "strength_sum": 0.0})
+        for r in rows:
+            tag = r["knowledge_tag"]
+            wc = int(r["wrong_count"] or 0)
+            cs = int(r["correct_streak"] or 0)
+            strength = round(min(1.0, max(0.1, 1.0 - min(wc * 0.15, 0.9) + cs * 0.2)), 3)
+            tag_data[tag]["students"].add(r["student_id"])
+            tag_data[tag]["wrong_sum"] += wc
+            tag_data[tag]["strength_sum"] += strength
+
+        result = []
+        for tag, d in tag_data.items():
+            sc = len(d["students"])
+            result.append({
+                "tag": tag,
+                "student_count": sc,
+                "avg_wrong": round(d["wrong_sum"] / sc, 1) if sc else 0.0,
+                "avg_strength": round(d["strength_sum"] / sc, 3) if sc else 0.5,
+            })
+        result.sort(key=lambda x: (-x["student_count"], -x["avg_wrong"]))
+        return {"tags": result, "total_students": total_students, "total_tags": len(result)}
+
+    return await run_in_threadpool(_fetch)
+
+
 # ── 学习成长报告 ────────────────────────────────────────────────────────────────
 
 @app.get("/api/student/{student_id}/learning-report")

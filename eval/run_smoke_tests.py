@@ -21,6 +21,7 @@ SMOKE_TESTS = [
     "teacher_features_smoke.py",
     "variant_question_smoke.py",
     "lecture_review_smoke.py",
+    "mastery_heatmap_smoke.py",
 ]
 
 

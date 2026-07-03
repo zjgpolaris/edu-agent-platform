@@ -380,6 +380,7 @@ frontend/
 | GET | `/api/students/{student_id}/review/today` | 获取今日自适应复习任务（无则生成） |
 | POST | `/api/students/{student_id}/review/submit` | 提交复习答题结果 |
 | GET | `/api/students/{student_id}/mastery-overview` | 知识点掌握度总览 + 连续打卡天数（strength 纳入 correct_streak 加成） |
+| GET | `/api/teacher/class-mastery-heatmap` | 班级知识点掌握度热力图：聚合所有学生错题本，按 tag 统计薄弱人数/avg_wrong/avg_strength，按 student_count 降序 |
 | GET | `/api/students/{student_id}/review/variant-question` | 为指定 tag 生成（或返回今日缓存的）变式题；`wrong_count>=2` 时复习 session 也自动使用（`?tag=xxx`） |
 | GET | `/api/students/{student_id}/today` | 学生今日计划：作业到期(逾期/今日截止)、今日复习余量、薄弱点攻克按优先级合成的待办清单；只读、不触发 LLM |
 | GET | `/api/student/{student_id}/learning-report` | 学习成长报告：汇总 SM-2 复习进度、作业批改趋势、每日活跃度、错题统计、AutoTutor 会话数（`?days=14`） |
@@ -888,6 +889,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-02 | 1.16.8 | 教师班级作业完成情况：新增 `services/completion_overview.py`（compute_class_completion 纯函数 + get_class_completion_overview）与 `GET /api/teacher/completion-overview`，跨作业按学生聚合 已交/欠交/逾期(掉队优先)；前端 `ClassCompletionCard` 接入教师首页，补上此前只有作业维度完成率、缺学生维度催办视图的缺口；新增 `completion_overview_smoke.py`（6 例）。与学生「今日计划」形成师生对称 |
 | 2026-07-03 | 1.17.0 | 错题变式生成：新增 `services/variant_service.py`（generate_variant / get_or_create_variant / get_cached_variant，当日缓存+LLM降级）；`review_service._pick_question` 当 `wrong_count>=VARIANT_THRESHOLD(2)` 时自动改用变式题替代重复原题；新增 `GET /api/students/{id}/review/variant-question?tag=xxx`；新增 `variant_question_smoke.py`（6 例）。补上「背了就忘、只会认题面」的复习盲区 |
 | 2026-07-03 | 1.17.1 | 讲评课 AI 辅助升级：新增 `services/lecture_review_service.py`（aggregate_teacher_errors 跨作业聚合错误分布 + generate_lecture_review LLM 批量生成讲解提示/板书关键词/即时练习形式）；新增 `POST /api/teacher/lecture-review`；教师作业管理页新增「AI 讲评稿」折叠面板，按知识点展示讲评卡片，支持一键复制全文；新增 `lecture_review_smoke.py`（6 例）。把散落的错题数据升维为教师可直接用的备课素材 |
+| 2026-07-03 | 1.17.2 | 知识点掌握度热力图：新增 `GET /api/teacher/class-mastery-heatmap`（聚合所有学生错题本 → 按 tag 统计 student_count/avg_wrong/avg_strength）；学生错题本页顶部加彩色磁贴热力图（红=薄弱/黄=学习中/绿=掌握，点击跳转 AutoTutor）；教师班级学情页新增班级热力图面板（按 student_count 排序，hover 显示统计）；新增 `mastery_heatmap_smoke.py`（5 例）|
 
 ---
 
