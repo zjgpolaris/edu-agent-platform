@@ -34,15 +34,26 @@ const PRIORITY_LABEL: Record<Task["priority"], string> = { urgent: "紧急", hig
 export default function TodayPlanCard() {
   const { user } = useAuth();
   const [plan, setPlan] = useState<TodayPlan | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!user?.actorId) return;
+    setError(false);
     fetch(`${API}/api/students/${user.actorId}/today`, { headers: authHeaders(user.token) })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setPlan(d))
-      .catch(() => {});
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d: TodayPlan) => setPlan(d))
+      .catch(() => setError(true));
   }, [user?.actorId, user?.token]);
 
+  if (error) return (
+    <section className="tp-card" aria-label="今日计划">
+      <style>{CSS}</style>
+      <p className="tp-load-err">今日计划加载失败，请刷新重试。</p>
+    </section>
+  );
   if (!plan) return null;
 
   const { tasks, summary } = plan;
@@ -115,4 +126,5 @@ const CSS = `
   display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; }
 .tp-clear strong { font-size:15px; display:block; margin-bottom:2px; }
 .tp-clear p { font-size:13px; color:var(--muted,#7a7068); margin:0; }
+.tp-load-err { font-size:13px; color:var(--cinnabar,#b7422b); padding:8px 0; margin:0; }
 `;

@@ -140,7 +140,13 @@ backend/
 │   └── audit_log.py               # 审计日志
 │
 ├── services/                  # 业务服务
+│   ├── assignment_service.py      # 作业生命周期（创建/提交/自动批改/洞察/质检盲区/复核）
 │   ├── batch_essay_service.py     # 批量作文批改
+│   ├── completion_overview.py     # 教师班级作业完成情况：跨作业按学生聚合已交/欠交/逾期（纯函数+装配）
+│   ├── quality_dashboard.py       # 命题质量看板：跨作业聚合 AI 质检分布/有效性/复核结论（只读确定性）
+│   ├── question_quality.py        # AI 出题结构质检 + LLM 语义质检（opt-in，few-shot 自改进）
+│   ├── review_service.py          # SM-2 自适应复习调度
+│   ├── today_plan.py              # 学生今日计划：作业到期/复习/薄弱点按优先级合成待办（纯函数+装配）
 │   └── weakpoint_service.py       # 错题本服务（掌握度证据计数：答错强化，连续答对达阈值才移除）
 │
 ├── textbook_learning/         # 教材学习

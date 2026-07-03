@@ -28,7 +28,7 @@ def compute_class_completion(records: list[dict[str, Any]], today: str) -> dict[
                 "pending": 0, "overdue": 0, "overdue_titles": [],
             })
             d["assigned"] += 1
-            if sid in submitted:
+            if str(sid) in submitted:
                 d["submitted"] += 1
             else:
                 d["pending"] += 1

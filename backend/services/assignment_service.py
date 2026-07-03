@@ -385,14 +385,16 @@ def get_bad_question_examples(teacher_id: str, *, limit: int = 5) -> list[dict[s
     """
     _ensure_tables()
     limit = max(1, min(int(limit), 20))
+    # SQL 层限制行数，避免全量加载 questions_json 大字段（limit 已在上方钳位至 [1,20]）
     with get_connection() as conn:
         rows = conn.execute(
             text("""SELECT f.question_index, f.note, a.questions_json
                 FROM question_review_flags f
                 JOIN assignments a ON a.id = f.assignment_id
                 WHERE f.teacher_id = :tid AND f.verdict = 'bad_question'
-                ORDER BY f.created_at DESC"""),
-            {"tid": teacher_id},
+                ORDER BY f.created_at DESC
+                LIMIT :lim"""),
+            {"tid": teacher_id, "lim": limit * 4},  # 多取几条以备去重后仍够用
         ).mappings().fetchall()
 
     examples: list[dict[str, Any]] = []
@@ -400,9 +402,9 @@ def get_bad_question_examples(teacher_id: str, *, limit: int = 5) -> list[dict[s
     for r in rows:
         try:
             questions = json.loads(r["questions_json"] or "[]")
+            q_idx = int(r["question_index"])  # NULL → TypeError，统一在此捕获
         except (ValueError, TypeError):
             continue
-        q_idx = int(r["question_index"])
         if q_idx < 0 or q_idx >= len(questions):
             continue
         prompt = str(questions[q_idx].get("prompt") or "").strip()

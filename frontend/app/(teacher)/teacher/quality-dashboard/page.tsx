@@ -118,10 +118,10 @@ export default function TeacherQualityDashboardPage() {
               <section className="qd-section">
                 <h2 className="qd-h2">命题概览</h2>
                 <div className="qd-metrics">
-                  <div className="qd-metric"><b>{t!.assignment_count}</b><span>作业数</span></div>
-                  <div className="qd-metric"><b>{t!.question_count}</b><span>题目总数</span></div>
-                  <div className="qd-metric"><b>{t!.quality_checked_count}</b><span>已质检</span></div>
-                  <div className="qd-metric"><b>{t!.semantic_checked_count}</b><span>含语义质检</span></div>
+                  <div className="qd-metric"><b>{t?.assignment_count}</b><span>作业数</span></div>
+                  <div className="qd-metric"><b>{t?.question_count}</b><span>题目总数</span></div>
+                  <div className="qd-metric"><b>{t?.quality_checked_count}</b><span>已质检</span></div>
+                  <div className="qd-metric"><b>{t?.semantic_checked_count}</b><span>含语义质检</span></div>
                 </div>
               </section>
 
@@ -130,28 +130,28 @@ export default function TeacherQualityDashboardPage() {
                 <h2 className="qd-h2">AI 质检有效性</h2>
                 <div className="qd-eff-grid">
                   <div className="qd-eff-card">
-                    <b>{eff!.proactive_flagged}</b>
+                    <b>{eff?.proactive_flagged}</b>
                     <span>主动预警</span>
                     <em>AI 判为 error/warn 的题</em>
                   </div>
-                  <div className={`qd-eff-card${eff!.suspected_false_alarm > 0 ? " amber" : ""}`}>
-                    <b>{eff!.suspected_false_alarm}</b>
+                  <div className={`qd-eff-card${(eff?.suspected_false_alarm ?? 0) > 0 ? " amber" : ""}`}>
+                    <b>{eff?.suspected_false_alarm}</b>
                     <span>疑似误报</span>
                     <em>预警但正确率≥{80}%</em>
                   </div>
-                  <div className={`qd-eff-card${eff!.blind_spots_open > 0 ? " danger" : ""}`}>
-                    <b>{eff!.blind_spots_open}</b>
+                  <div className={`qd-eff-card${(eff?.blind_spots_open ?? 0) > 0 ? " danger" : ""}`}>
+                    <b>{eff?.blind_spots_open}</b>
                     <span>待复核盲区</span>
                     <em>判合格但正确率异常低</em>
                   </div>
                   <div className="qd-eff-card">
-                    <b>{eff!.blind_spots_confirmed_bad}</b>
+                    <b>{eff?.blind_spots_confirmed_bad}</b>
                     <span>已确认漏检</span>
                     <em>教师判定题目有问题</em>
                   </div>
                 </div>
                 <p className="qd-note">{effectivenessNote()}</p>
-                {eff!.blind_spots_open > 0 && (
+                {(eff?.blind_spots_open ?? 0) > 0 && (
                   <Link href="/teacher/assignments" className="qd-cta">去复核盲区 →</Link>
                 )}
               </section>

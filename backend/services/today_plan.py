@@ -8,8 +8,11 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 from urllib.parse import quote
+
+_log = logging.getLogger(__name__)
 
 
 def build_today_plan(
@@ -64,18 +67,19 @@ def build_today_plan(
     for a in upcoming:
         tasks.append(_assignment_task(a, "normal", "待完成"))
 
-    if weakpoints:
-        top = weakpoints[0]
+    # 只取 knowledge_tag 非空的薄弱点（空 tag 无法生成有效任务，不计入展示数）
+    actionable_weakpoints = [w for w in (weakpoints or []) if str(w.get("knowledge_tag") or "").strip()]
+    if actionable_weakpoints:
+        top = actionable_weakpoints[0]
         tag = str(top.get("knowledge_tag") or "").strip()
-        if tag:
-            tasks.append({
-                "kind": "weakpoint",
-                "priority": "normal",
-                "title": f"攻克薄弱点「{tag}」",
-                "detail": f"错题本出错 {int(top.get('wrong_count') or 0)} 次，用 AI 辅导逐步突破",
-                "href": "/student/auto-tutor?focus=" + quote(tag),
-                "ref_id": tag,
-            })
+        tasks.append({
+            "kind": "weakpoint",
+            "priority": "normal",
+            "title": f"攻克薄弱点「{tag}」",
+            "detail": f"错题本出错 {int(top.get('wrong_count') or 0)} 次，用 AI 辅导逐步突破",
+            "href": "/student/auto-tutor?focus=" + quote(tag),
+            "ref_id": tag,
+        })
 
     summary = {
         "pending_assignments": len(pending),
@@ -83,7 +87,7 @@ def build_today_plan(
         "due_today_assignments": len(due_today),
         "review_remaining": review_remaining,
         "review_total": review_total,
-        "weakpoint_count": len(weakpoints or []),
+        "weakpoint_count": len(actionable_weakpoints),  # 与任务列表口径一致
         "all_clear": len(tasks) == 0,
     }
     return {"date": today, "tasks": tasks, "summary": summary}
@@ -101,7 +105,8 @@ def get_student_today_plan(student_id: str, today: str) -> dict[str, Any]:
     review_total = 0
     try:
         session = get_today_session(student_id, today, hydrate=False)
-    except Exception:
+    except Exception as exc:
+        _log.warning("today_plan: get_today_session failed for %s: %s", student_id, exc)
         session = None
     if session:
         review_total = int(session.get("total") or 0)
@@ -109,7 +114,8 @@ def get_student_today_plan(student_id: str, today: str) -> dict[str, Any]:
 
     try:
         weakpoints = get_weakpoints(student_id)
-    except Exception:
+    except Exception as exc:
+        _log.warning("today_plan: get_weakpoints failed for %s: %s", student_id, exc)
         weakpoints = []
 
     return build_today_plan(

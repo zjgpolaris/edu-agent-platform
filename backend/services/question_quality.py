@@ -138,10 +138,10 @@ def check_question_semantic(q: dict[str, Any], *, llm: Any = None, bad_examples:
         messages = [
             {"role": "system", "content": (
                 "你是初中历史命题审校专家。判断给定题目在语义上是否有问题。"
+                f"{fewshot_block}\n"
                 f"{focus}\n"
                 "只输出 JSON：{\"has_issue\":false,\"severity\":\"warn\",\"issues\":[\"简短中文问题描述\"]}。"
                 "若无问题，has_issue=false 且 issues 为空。severity 仅 warn 或 error（答案本身错误用 error）。"
-                f"{fewshot_block}"
             )},
             {"role": "user", "content": body},
         ]
