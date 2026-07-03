@@ -30,6 +30,9 @@ type Overview = {
 export default function ClassCompletionCard() {
   const { user } = useAuth();
   const [data, setData] = useState<Overview | null>(null);
+  const [urging, setUrging] = useState(false);
+  const [urgeMsg, setUrgeMsg] = useState("");
+  const [urgeResult, setUrgeResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.token) return;
@@ -38,6 +41,26 @@ export default function ClassCompletionCard() {
       .then((d) => d && setData(d))
       .catch(() => {});
   }, [user?.token]);
+
+  async function urgeAll(studentIds: string[]) {
+    if (!user?.token || urging || studentIds.length === 0) return;
+    setUrging(true); setUrgeResult(null);
+    try {
+      const res = await fetch(`${API}/api/teacher/urge-students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+        body: JSON.stringify({ student_ids: studentIds, message: urgeMsg.trim() }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      setUrgeResult(`已向 ${d.sent} 名学生发送催办通知 ✓`);
+      setTimeout(() => setUrgeResult(null), 4000);
+    } catch {
+      setUrgeResult("催办失败，请重试");
+    } finally {
+      setUrging(false);
+    }
+  }
 
   if (!data || data.summary.assignment_count === 0) return null;
 
@@ -65,22 +88,42 @@ export default function ClassCompletionCard() {
       {behind.length === 0 ? (
         <p className="cc-clear">✓ 所有学生都已交齐当前作业。</p>
       ) : (
-        <ul className="cc-list">
-          {behind.slice(0, 8).map((s) => (
-            <li key={s.student_id}>
-              <Link href={`/teacher/students/${s.student_id}`} className="cc-row">
-                <span className="cc-name">{s.student_id}</span>
-                <span className="cc-stats">
-                  {s.overdue > 0 && <span className="cc-tag overdue">逾期 {s.overdue}</span>}
-                  <span className="cc-tag pending">欠交 {s.pending}/{s.assigned}</span>
-                </span>
-                {s.overdue_titles.length > 0 && (
-                  <span className="cc-titles">逾期：{s.overdue_titles.slice(0, 2).join("、")}{s.overdue_titles.length > 2 ? " 等" : ""}</span>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="cc-list">
+            {behind.slice(0, 8).map((s) => (
+              <li key={s.student_id}>
+                <Link href={`/teacher/students/${s.student_id}`} className="cc-row">
+                  <span className="cc-name">{s.student_id}</span>
+                  <span className="cc-stats">
+                    {s.overdue > 0 && <span className="cc-tag overdue">逾期 {s.overdue}</span>}
+                    <span className="cc-tag pending">欠交 {s.pending}/{s.assigned}</span>
+                  </span>
+                  {s.overdue_titles.length > 0 && (
+                    <span className="cc-titles">逾期：{s.overdue_titles.slice(0, 2).join("、")}{s.overdue_titles.length > 2 ? " 等" : ""}</span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {/* 催办区域 */}
+          <div className="cc-urge-box">
+            <input
+              className="cc-urge-input"
+              placeholder="催办消息（留空用默认文案）"
+              value={urgeMsg}
+              onChange={(e) => setUrgeMsg(e.target.value)}
+              maxLength={100}
+            />
+            <button
+              className="cc-urge-btn"
+              disabled={urging}
+              onClick={() => urgeAll(behind.map((s) => s.student_id))}
+            >
+              {urging ? "发送中…" : `一键催办 ${behind.length} 人`}
+            </button>
+          </div>
+          {urgeResult && <p className="cc-urge-result">{urgeResult}</p>}
+        </>
       )}
     </section>
   );
@@ -108,5 +151,13 @@ const CSS = `
 .cc-tag.overdue { background:#fdecea; color:#c0392b; }
 .cc-tag.pending { background:#fdf6e3; color:#b0862b; }
 .cc-titles { flex-basis:100%; font-size:11px; color:var(--muted,#7a7068); }
+/* 催办区域 */
+.cc-urge-box { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.cc-urge-input { flex:1; min-width:140px; border:1px solid #ddd7cc; border-radius:8px; padding:7px 10px; font-size:12px; background:#fdfbf7; color:var(--ink,#1a1612); }
+.cc-urge-input:focus { outline:none; border-color:var(--cinnabar,#b7422b); }
+.cc-urge-btn { background:var(--cinnabar,#b7422b); color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; }
+.cc-urge-btn:hover:not(:disabled) { background:#962318; }
+.cc-urge-btn:disabled { opacity:.6; cursor:not-allowed; }
+.cc-urge-result { font-size:12px; margin:8px 0 0; color:var(--jade,#2d6a4f); }
 @media (max-width:640px) { .cc-metrics { grid-template-columns:repeat(2,1fr); } }
 `;

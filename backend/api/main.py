@@ -2650,6 +2650,58 @@ async def teacher_completion_overview(actor: Actor = Depends(require_auth)):
     return await run_in_threadpool(get_class_completion_overview, actor.actor_id, today)
 
 
+class UrgeStudentsRequest(BaseModel):
+    student_ids: list[str]                    # 被催的学生 ID 列表
+    message: str = ""                         # 自定义催办内容（空则用默认）
+    assignment_ids: list[str] | None = None   # 关联作业 ID（可选，用于前端跳转）
+
+
+@app.post("/api/teacher/urge-students")
+async def teacher_urge_students(req: UrgeStudentsRequest, actor: Actor = Depends(require_auth)):
+    """教师向欠交学生发送站内催办通知。"""
+    require_teacher_actor(actor)
+    if not req.student_ids:
+        raise HTTPException(status_code=400, detail="student_ids 不能为空")
+    if len(req.student_ids) > 50:
+        raise HTTPException(status_code=400, detail="单次催办最多 50 名学生")
+    from services.notification_service import send_urge_notification
+    msg = (req.message or "").strip() or f"老师提醒你完成未交的作业，请尽快提交！"
+    count = await run_in_threadpool(
+        send_urge_notification, actor.actor_id, req.student_ids, msg, req.assignment_ids or []
+    )
+    record_audit_event(
+        actor_id=actor.actor_id, action="teacher.urge_students",
+        resource_type="notification", success=count > 0,
+        metadata={"student_count": count, "has_custom_msg": bool(req.message.strip())},
+    )
+    return {"sent": count, "teacher_id": actor.actor_id}
+
+
+@app.get("/api/students/{student_id}/notifications")
+async def student_notifications(
+    student_id: str,
+    unread_only: bool = False,
+    limit: int = 20,
+    actor: Actor = Depends(require_auth),
+):
+    """学生读取自己的站内通知列表。"""
+    assert_student_access(actor, student_id)
+    from services.notification_service import get_student_notifications
+    items = await run_in_threadpool(
+        get_student_notifications, student_id, limit=limit, unread_only=unread_only
+    )
+    return {"notifications": items, "count": len(items)}
+
+
+@app.post("/api/students/{student_id}/notifications/read-all")
+async def student_notifications_read_all(student_id: str, actor: Actor = Depends(require_auth)):
+    """将学生所有未读通知标为已读。"""
+    assert_student_access(actor, student_id)
+    from services.notification_service import mark_all_read
+    n = await run_in_threadpool(mark_all_read, student_id)
+    return {"marked_read": n}
+
+
 @app.get("/api/teacher/class-mastery-heatmap")
 async def teacher_class_mastery_heatmap(actor: Actor = Depends(require_auth)):
     """班级知识点掌握度热力图：聚合所有学生错题本，按知识点统计薄弱人数和平均掌握强度。

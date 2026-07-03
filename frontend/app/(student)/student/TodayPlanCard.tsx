@@ -35,18 +35,31 @@ export default function TodayPlanCard() {
   const { user } = useAuth();
   const [plan, setPlan] = useState<TodayPlan | null>(null);
   const [error, setError] = useState(false);
+  const [notices, setNotices] = useState<Array<{ id: string; message: string; teacher_id: string }>>([]);
 
   useEffect(() => {
     if (!user?.actorId) return;
     setError(false);
-    fetch(`${API}/api/students/${user.actorId}/today`, { headers: authHeaders(user.token) })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((d: TodayPlan) => setPlan(d))
-      .catch(() => setError(true));
+    // 并发获取今日计划 + 未读通知
+    Promise.all([
+      fetch(`${API}/api/students/${user.actorId}/today`, { headers: authHeaders(user.token) })
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+      fetch(`${API}/api/students/${user.actorId}/notifications?unread_only=true&limit=3`, { headers: authHeaders(user.token) })
+        .then(r => r.ok ? r.json() : { notifications: [] }).catch(() => ({ notifications: [] })),
+    ]).then(([planData, nData]) => {
+      setPlan(planData as TodayPlan);
+      setNotices((nData.notifications || []).slice(0, 3));
+    }).catch(() => setError(true));
   }, [user?.actorId, user?.token]);
+
+  function dismissNotice(id: string) {
+    if (!user?.token || !user?.actorId) return;
+    setNotices(prev => prev.filter(n => n.id !== id));
+    // 后台静默标记已读（不阻塞 UI）
+    fetch(`${API}/api/students/${user.actorId}/notifications/read-all`, {
+      method: "POST", headers: authHeaders(user.token),
+    }).catch(() => {});
+  }
 
   if (error) return (
     <section className="tp-card" aria-label="今日计划">
@@ -61,6 +74,19 @@ export default function TodayPlanCard() {
   return (
     <section className="tp-card" aria-label="今日计划">
       <style>{CSS}</style>
+
+      {/* 催办通知横幅 */}
+      {notices.length > 0 && (
+        <div className="tp-notices">
+          {notices.map((n) => (
+            <div key={n.id} className="tp-notice">
+              <span className="tp-notice-icon">📢</span>
+              <span className="tp-notice-msg">{n.message}</span>
+              <button className="tp-notice-dismiss" onClick={() => dismissNotice(n.id)} aria-label="关闭">×</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="tp-head">
         <div>
           <p className="tp-eyebrow">TODAY · 今日计划</p>
@@ -127,4 +153,11 @@ const CSS = `
 .tp-clear strong { font-size:15px; display:block; margin-bottom:2px; }
 .tp-clear p { font-size:13px; color:var(--muted,#7a7068); margin:0; }
 .tp-load-err { font-size:13px; color:var(--cinnabar,#b7422b); padding:8px 0; margin:0; }
+/* 催办通知横幅 */
+.tp-notices { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+.tp-notice { display:flex; align-items:flex-start; gap:8px; background:#fff8e1; border:1px solid #ffe082; border-radius:8px; padding:8px 10px; }
+.tp-notice-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
+.tp-notice-msg { flex:1; font-size:12px; color:#795548; line-height:1.5; }
+.tp-notice-dismiss { background:none; border:none; cursor:pointer; color:#a1887f; font-size:16px; line-height:1; padding:0 2px; flex-shrink:0; }
+.tp-notice-dismiss:hover { color:#6d4c41; }
 `;

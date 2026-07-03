@@ -408,6 +408,9 @@ frontend/
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
 | POST | `/api/teacher/lecture-review` | 讲评课 AI 辅助：跨最近 5 份作业聚合错误分布，LLM 为每个高频错误知识点生成讲解提示/板书关键词/即时练习形式；前端作业管理页「AI 讲评稿」面板展示+一键复制 |
+| POST | `/api/teacher/urge-students` | 向欠交学生发送站内催办通知（最多50人/次），写入 `student_notifications` 表 |
+| GET | `/api/students/{student_id}/notifications` | 学生读取自己的通知列表（`?unread_only=true&limit=N`）|
+| POST | `/api/students/{student_id}/notifications/read-all` | 将该学生所有未读通知标为已读 |
 
 ### 作文批改
 
@@ -892,6 +895,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-03 | 1.17.2 | 知识点掌握度热力图：新增 `GET /api/teacher/class-mastery-heatmap`（聚合所有学生错题本 → 按 tag 统计 student_count/avg_wrong/avg_strength）；学生错题本页顶部加彩色磁贴热力图（红=薄弱/黄=学习中/绿=掌握，点击跳转 AutoTutor）；教师班级学情页新增班级热力图面板（按 student_count 排序，hover 显示统计）；新增 `mastery_heatmap_smoke.py`（5 例）|
 | 2026-07-03 | 1.17.3 | 出题难度维度：`GeneratedQuestion` 新增 `difficulty` 字段并写入题目 JSON；`compute_assignment_insights` 加 `difficulty_distribution` 统计（easy/medium/hard 计数）；前端作业洞察面板展示难度分布 chip；答题详情每题加难度 badge；AI 出题结果携带难度回传前端 `DraftQuestion`；新增 `difficulty_smoke.py`（5 例）。不影响存量题目（无 difficulty 字段时全为 0，向后兼容）|
 | 2026-07-03 | 1.17.4 | 学生学习日历：新建 `/student/calendar` 页面（GitHub 贡献图风格热力图，9 周 × 7 天格子）；复用成长报告 API 的 `activity_by_day`/`review_by_day`/`streak_days`，无需新接口；摘要行展示连续打卡/活跃天数/复习率/错题数/辅导次数；格子带颜色深浅（0=灰/1-2=浅绿/3-5=中绿/6-9=深绿/10+=最深），复习任务叠加橙/绿边框；桌面侧边栏 + 移动端「更多」列表均添加「学习日历」入口；新增 `calendar_smoke.py`（5 例）|
+| 2026-07-03 | 1.17.5 | 催办通知实际发送：新增 `services/notification_service.py`（send_urge_notification/get_student_notifications/mark_notification_read/mark_all_read/get_unread_count，`student_notifications` 表）；新增 `POST /api/teacher/urge-students`、`GET /api/students/{id}/notifications`、`POST /api/students/{id}/notifications/read-all`；`ClassCompletionCard` 加「一键催办」按钮+自定义消息输入框；`TodayPlanCard` 展示老师催办通知横幅（可关闭，后台静默已读）；新增 `urge_notification_smoke.py`（6 例）。补上「有数据但无行动」的催办断点 |
 
 ---
 

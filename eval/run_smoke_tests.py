@@ -24,6 +24,7 @@ SMOKE_TESTS = [
     "mastery_heatmap_smoke.py",
     "difficulty_smoke.py",
     "calendar_smoke.py",
+    "urge_notification_smoke.py",
 ]
 
 
