@@ -30,25 +30,44 @@ type TodayPlan = {
 const KIND_MARK: Record<Task["kind"], string> = { assignment: "业", review: "复", weakpoint: "弱" };
 const PRIORITY_LABEL: Record<Task["priority"], string> = { urgent: "紧急", high: "优先", normal: "待办" };
 
+type CheckInStatus = {
+  checked_in_today: boolean;
+  current_streak: number;
+  total_days: number;
+  today_summary: string | null;
+};
+type Achievement = {
+  key: string;
+  name: string;
+  icon: string;
+  description: string;
+};
+
 /** 学生「今日计划」：把作业到期、今日复习、薄弱点合成一条按优先级排序的待办清单。 */
 export default function TodayPlanCard() {
   const { user } = useAuth();
   const [plan, setPlan] = useState<TodayPlan | null>(null);
   const [error, setError] = useState(false);
   const [notices, setNotices] = useState<Array<{ id: string; message: string; teacher_id: string }>>([]);
+  const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
 
   useEffect(() => {
     if (!user?.actorId) return;
     setError(false);
-    // 并发获取今日计划 + 未读通知
+    // 并发获取今日计划 + 未读通知 + 打卡状态
     Promise.all([
       fetch(`${API}/api/students/${user.actorId}/today`, { headers: authHeaders(user.token) })
         .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
       fetch(`${API}/api/students/${user.actorId}/notifications?unread_only=true&limit=3`, { headers: authHeaders(user.token) })
         .then(r => r.ok ? r.json() : { notifications: [] }).catch(() => ({ notifications: [] })),
-    ]).then(([planData, nData]) => {
+      fetch(`${API}/api/students/${user.actorId}/check-in/status`, { headers: authHeaders(user.token) })
+        .then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([planData, nData, checkInData]) => {
       setPlan(planData as TodayPlan);
       setNotices((nData.notifications || []).slice(0, 3));
+      setCheckInStatus(checkInData as CheckInStatus | null);
     }).catch(() => setError(true));
   }, [user?.actorId, user?.token]);
 
@@ -59,6 +78,32 @@ export default function TodayPlanCard() {
     fetch(`${API}/api/students/${user.actorId}/notifications/read-all`, {
       method: "POST", headers: authHeaders(user.token),
     }).catch(() => {});
+  }
+
+  async function doCheckIn() {
+    if (!user?.actorId || !user?.token || checkingIn) return;
+    setCheckingIn(true);
+    try {
+      const res = await fetch(`${API}/api/students/${user.actorId}/check-in`, {
+        method: "POST", headers: authHeaders(user.token),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCheckInStatus({
+          checked_in_today: true,
+          current_streak: data.current_streak,
+          total_days: data.total_days,
+          today_summary: data.summary,
+        });
+        if (data.new_achievements?.length > 0) {
+          setNewAchievements(data.new_achievements);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCheckingIn(false);
+    }
   }
 
   if (error) return (
@@ -74,6 +119,22 @@ export default function TodayPlanCard() {
   return (
     <section className="tp-card" aria-label="今日计划">
       <style>{CSS}</style>
+
+      {/* 新成就弹窗 */}
+      {newAchievements.length > 0 && (
+        <div className="tp-achievement-popup">
+          {newAchievements.map(a => (
+            <div key={a.key} className="tp-achievement-item">
+              <span className="tp-ach-icon">{a.icon}</span>
+              <div className="tp-ach-body">
+                <strong>解锁成就：{a.name}</strong>
+                <span>{a.description}</span>
+              </div>
+            </div>
+          ))}
+          <button className="tp-ach-close" onClick={() => setNewAchievements([])}>×</button>
+        </div>
+      )}
 
       {/* 催办通知横幅 */}
       {notices.length > 0 && (
@@ -92,9 +153,28 @@ export default function TodayPlanCard() {
           <p className="tp-eyebrow">TODAY · 今日计划</p>
           <h2 className="tp-title">今天优先完成这些</h2>
         </div>
-        {summary.overdue_assignments > 0 && (
-          <span className="tp-alert">{summary.overdue_assignments} 份逾期作业</span>
-        )}
+        <div className="tp-head-right">
+          {checkInStatus && (
+            <div className="tp-checkin-widget">
+              {checkInStatus.checked_in_today ? (
+                <div className="tp-checkin-done">
+                  <span className="tp-checkin-icon">✓</span>
+                  <div className="tp-checkin-info">
+                    <span className="tp-streak">已打卡 · 连续 {checkInStatus.current_streak} 天</span>
+                    <Link href="/student/achievements" className="tp-ach-link">查看成就 →</Link>
+                  </div>
+                </div>
+              ) : (
+                <button className="tp-checkin-btn" onClick={doCheckIn} disabled={checkingIn}>
+                  {checkingIn ? "打卡中..." : "今日打卡"}
+                </button>
+              )}
+            </div>
+          )}
+          {summary.overdue_assignments > 0 && (
+            <span className="tp-alert">{summary.overdue_assignments} 份逾期作业</span>
+          )}
+        </div>
       </div>
 
       {summary.all_clear ? (
@@ -128,9 +208,28 @@ export default function TodayPlanCard() {
 const CSS = `
 .tp-card { background:#fff; border:1px solid #e5e0d5; border-radius:14px; padding:20px 22px; margin:0 0 24px; }
 .tp-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px; }
+.tp-head-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
 .tp-eyebrow { font-size:10px; letter-spacing:.24em; color:var(--cinnabar,#b7422b); margin:0 0 4px; }
 .tp-title { font-size:18px; font-weight:700; margin:0; color:var(--ink,#1a1612); }
 .tp-alert { font-size:12px; font-weight:600; color:#fff; background:var(--cinnabar,#b7422b); border-radius:12px; padding:4px 10px; white-space:nowrap; }
+/* 打卡组件 */
+.tp-checkin-widget { display:flex; align-items:center; gap:8px; }
+.tp-checkin-btn { font-size:12px; font-weight:700; color:#fff; background:var(--jade,#2d6a4f); border:none; border-radius:20px; padding:6px 14px; cursor:pointer; transition:background .15s; }
+.tp-checkin-btn:hover:not(:disabled) { background:#235a3f; }
+.tp-checkin-btn:disabled { opacity:.6; cursor:not-allowed; }
+.tp-checkin-done { display:flex; align-items:center; gap:6px; }
+.tp-checkin-icon { width:22px; height:22px; border-radius:50%; background:#f0faf5; color:var(--jade,#2d6a4f); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; }
+.tp-checkin-info { display:flex; flex-direction:column; gap:1px; }
+.tp-streak { font-size:11px; font-weight:600; color:var(--jade,#2d6a4f); }
+.tp-ach-link { font-size:10px; color:var(--muted,#7a7068); text-decoration:underline; }
+/* 成就解锁弹窗 */
+.tp-achievement-popup { position:relative; background:linear-gradient(135deg,#fff8e1,#fffde7); border:1px solid #ffd54f; border-radius:12px; padding:12px 36px 12px 14px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
+.tp-achievement-item { display:flex; align-items:center; gap:10px; }
+.tp-ach-icon { font-size:24px; flex-shrink:0; }
+.tp-ach-body { display:flex; flex-direction:column; gap:2px; }
+.tp-ach-body strong { font-size:14px; color:#5d4037; }
+.tp-ach-body span { font-size:12px; color:#8d6e63; }
+.tp-ach-close { position:absolute; top:8px; right:10px; background:none; border:none; cursor:pointer; color:#a1887f; font-size:18px; line-height:1; }
 .tp-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
 .tp-task { display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid #eee6d8; border-radius:10px;
   background:#fdfbf7; transition:border-color .15s, transform .1s; }

@@ -44,6 +44,7 @@ const studentNav: NavItem[] = [
       { label: "学习路径", href: "/student/learning-path", icon: "路" },
       { label: "成长报告", href: "/student/report", icon: "报" },
       { label: "学习日历", href: "/student/calendar", icon: "历" },
+      { label: "我的成就", href: "/student/achievements", icon: "奖" },
       { label: "错题本", href: "/student/weakpoints", icon: "错" },
       { label: "智能练习", href: "/student/quiz", icon: "练" },
       { label: "记忆中心", href: "/student/memory", icon: "忆" },

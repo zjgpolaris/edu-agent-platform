@@ -924,3 +924,4 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 ### 总体目标
 
 > 将项目从"功能完整的教育 AI 应用"升级为"可评测、可观测、可治理的教育 Agent 工程作品集"。
+| 2026-07-03 | 1.18.0 | 每日签卡挑战 + 成就系统：新增 `services/check_in_service.py`（打卡记录、连续天数、累计天数、成就解锁逻辑）；5 个成就配置（初来乍到/铜银金牌学者/百日坚持）；新增 `check_ins` 表（student_id/check_in_date/summary）+ `achievements` 表（student_id/achievement_key/unlocked_at）；新增 4 个 API 端点（`POST /api/students/{id}/check-in`、`GET /api/students/{id}/check-in/status`、`GET /api/students/{id}/achievements`、`GET /api/students/{id}/check-in/history`）；TodayPlanCard 新增打卡按钮 + 连续天数显示 + 成就弹窗；新增成就墙页面 `/student/achievements`（已解锁/努力解锁带进度条、打卡面板）；侧边栏「我的学情」新增「我的成就」入口；新增 `check_in_smoke.py`（8 例）|

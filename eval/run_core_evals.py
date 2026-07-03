@@ -83,6 +83,7 @@ SMOKE_SUITES = [
     "tiered_assignment_smoke",
     "class_wrong_analysis_smoke",
     "tutor_effectiveness_smoke",
+    "check_in_smoke",
 ]
 SUITE_FILES = {
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
@@ -121,6 +122,7 @@ SUITE_FILES = {
     "tiered_assignment_smoke": EVAL_DIR / "tiered_assignment_smoke.py",
     "class_wrong_analysis_smoke": EVAL_DIR / "class_wrong_analysis_smoke.py",
     "tutor_effectiveness_smoke": EVAL_DIR / "tutor_effectiveness_smoke.py",
+    "check_in_smoke": EVAL_DIR / "check_in_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "history_character_smoke": {
@@ -293,6 +295,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "tutor_effectiveness_smoke": {
         "label": "AI辅导效果追踪 Smoke",
+        "category": "student",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "check_in_smoke": {
+        "label": "每日签卡挑战 Smoke",
         "category": "student",
         "kind": "smoke",
         "priority": "p1",

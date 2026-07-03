@@ -65,6 +65,7 @@ from homework_grading.review_store import apply_decision, get_review, list_revie
 from services.batch_essay_service import batch_grade, compute_summary
 from services.weakpoint_service import get_weakpoints, record_weakpoint, delete_weakpoint, clear_weakpoints
 from services.variant_service import get_or_create_variant, generate_variant
+from services.check_in_service import check_in, get_check_in_status, get_achievements, get_check_in_history
 from tools.registry import list_tools
 
 from contextlib import asynccontextmanager
@@ -3371,3 +3372,37 @@ async def student_submit_assignment(
         },
     )
     return result
+
+
+# ── 签卡挑战 ──────────────────────────────────────────────────────────
+@app.post("/api/students/{student_id}/check-in")
+async def student_check_in(student_id: str, actor: Actor = Depends(require_auth)):
+    """学生每日签卡"""
+    assert_student_access(actor, student_id)
+    result = await run_in_threadpool(check_in, student_id)
+    return result
+
+
+@app.get("/api/students/{student_id}/check-in/status")
+async def student_check_in_status(student_id: str, actor: Actor = Depends(require_auth)):
+    """获取签卡状态（今日是否已签、连续天数、累计天数）"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(get_check_in_status, student_id)
+
+
+@app.get("/api/students/{student_id}/achievements")
+async def student_achievements(student_id: str, actor: Actor = Depends(require_auth)):
+    """获取学生成就列表（已解锁 + 未解锁带进度）"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(get_achievements, student_id)
+
+
+@app.get("/api/students/{student_id}/check-in/history")
+async def student_check_in_history(
+    student_id: str,
+    days: int = 90,
+    actor: Actor = Depends(require_auth),
+):
+    """获取打卡历史记录（用于日历展示）"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(get_check_in_history, student_id, days)
