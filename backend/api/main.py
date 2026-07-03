@@ -2818,6 +2818,65 @@ async def teacher_class_mastery_heatmap(actor: Actor = Depends(require_auth)):
     return await run_in_threadpool(_fetch)
 
 
+@app.get("/api/teacher/class-knowledge-matrix")
+async def teacher_class_knowledge_matrix(actor: Actor = Depends(require_auth)):
+    """班级知识点掌握度 2D 矩阵：学生×知识点，教师可一目了然看到每个学生在每个知识点的掌握情况。
+
+    Returns:
+    {
+        "students": [{"id": str, "name": str}, ...],  # 学生列表
+        "tags": [str, ...],                           # 知识点列表（按薄弱人数降序）
+        "matrix": [[float, ...], ...],                # matrix[student_idx][tag_idx] = strength (0-1)
+    }
+    """
+    require_teacher_actor(actor)
+
+    def _fetch():
+        from collections import defaultdict
+        from db.engine import get_connection
+        from sqlalchemy import text
+        _ensure = __import__("services.weakpoint_service", fromlist=["_ensure_table"])
+        _ensure._ensure_table()
+
+        with get_connection() as conn:
+            # 获取所有错题记录
+            rows = conn.execute(
+                text("""SELECT student_id, knowledge_tag, wrong_count, correct_streak
+                     FROM weakpoints ORDER BY student_id, knowledge_tag"""),
+            ).mappings().fetchall()
+
+        # 构建学生列表和知识点列表
+        student_ids = sorted(set(r["student_id"] for r in rows))
+        tag_counts = defaultdict(int)
+        student_tag_data = defaultdict(dict)  # {student_id: {tag: strength}}
+
+        for r in rows:
+            sid = r["student_id"]
+            tag = r["knowledge_tag"]
+            wc = int(r["wrong_count"] or 0)
+            cs = int(r["correct_streak"] or 0)
+            strength = round(min(1.0, max(0.1, 1.0 - min(wc * 0.15, 0.9) + cs * 0.2)), 3)
+            student_tag_data[sid][tag] = strength
+            tag_counts[tag] += 1
+
+        # 按薄弱人数排序知识点（最多人薄弱的排前面）
+        tags = sorted(tag_counts.keys(), key=lambda t: -tag_counts[t])[:50]  # 最多返回50个知识点
+
+        # 构建矩阵
+        matrix = []
+        for sid in student_ids:
+            row = []
+            for tag in tags:
+                row.append(student_tag_data[sid].get(tag, 1.0))  # 未出现的知识点默认1.0（已掌握）
+            matrix.append(row)
+
+        students = [{"id": sid, "name": f"学生{i+1}"} for i, sid in enumerate(student_ids)]
+
+        return {"students": students, "tags": tags, "matrix": matrix}
+
+    return await run_in_threadpool(_fetch)
+
+
 # ── 学习成长报告 ────────────────────────────────────────────────────────────────
 
 @app.get("/api/student/{student_id}/learning-report")

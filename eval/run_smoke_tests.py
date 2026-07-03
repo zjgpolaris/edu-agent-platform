@@ -31,6 +31,7 @@ SMOKE_TESTS = [
     "check_in_smoke.py",
     "preference_smoke.py",
     "root_cause_smoke.py",
+    "class_matrix_smoke.py",
 ]
 
 
