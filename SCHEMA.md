@@ -147,6 +147,7 @@ backend/
 │   ├── question_quality.py        # AI 出题结构质检 + LLM 语义质检（opt-in，few-shot 自改进）
 │   ├── review_service.py          # SM-2 自适应复习调度（wrong_count>=2 时自动改用变式题）
 │   ├── today_plan.py              # 学生今日计划：作业到期/复习/薄弱点按优先级合成待办（纯函数+装配）
+│   ├── lecture_review_service.py  # 讲评课 AI 辅助：跨作业聚合错误→LLM 生成讲解提示/板书关键词/即时练习形式
 │   ├── variant_service.py         # 错题变式生成：wrong_count>=VARIANT_THRESHOLD 时 LLM 生成同 tag 不同题面变式题，含当日缓存
 │   └── weakpoint_service.py       # 错题本服务（掌握度证据计数：答错强化，连续答对达阈值才移除）
 │
@@ -405,6 +406,7 @@ frontend/
 | GET | `/api/student/{student_id}/badges` | 学生侧边栏通知徽标：`{pending_assignments, due_soon, pending_review}`（未提交作业/临近到期/今日复习待完成，前端 60s 轮询） |
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
+| POST | `/api/teacher/lecture-review` | 讲评课 AI 辅助：跨最近 5 份作业聚合错误分布，LLM 为每个高频错误知识点生成讲解提示/板书关键词/即时练习形式；前端作业管理页「AI 讲评稿」面板展示+一键复制 |
 
 ### 作文批改
 
@@ -885,6 +887,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-02 | 1.16.7 | 学生今日计划：新增 `services/today_plan.py`（build_today_plan 纯函数 + get_student_today_plan）与 `GET /api/students/{id}/today`，把作业到期/今日复习/薄弱点按优先级(逾期>今日截止>复习>未来作业>薄弱点)合成待办；前端 `TodayPlanCard` 接入学生首页，补上此前首页无作业提醒的缺口；新增 `today_plan_smoke.py`（8 例）|
 | 2026-07-02 | 1.16.8 | 教师班级作业完成情况：新增 `services/completion_overview.py`（compute_class_completion 纯函数 + get_class_completion_overview）与 `GET /api/teacher/completion-overview`，跨作业按学生聚合 已交/欠交/逾期(掉队优先)；前端 `ClassCompletionCard` 接入教师首页，补上此前只有作业维度完成率、缺学生维度催办视图的缺口；新增 `completion_overview_smoke.py`（6 例）。与学生「今日计划」形成师生对称 |
 | 2026-07-03 | 1.17.0 | 错题变式生成：新增 `services/variant_service.py`（generate_variant / get_or_create_variant / get_cached_variant，当日缓存+LLM降级）；`review_service._pick_question` 当 `wrong_count>=VARIANT_THRESHOLD(2)` 时自动改用变式题替代重复原题；新增 `GET /api/students/{id}/review/variant-question?tag=xxx`；新增 `variant_question_smoke.py`（6 例）。补上「背了就忘、只会认题面」的复习盲区 |
+| 2026-07-03 | 1.17.1 | 讲评课 AI 辅助升级：新增 `services/lecture_review_service.py`（aggregate_teacher_errors 跨作业聚合错误分布 + generate_lecture_review LLM 批量生成讲解提示/板书关键词/即时练习形式）；新增 `POST /api/teacher/lecture-review`；教师作业管理页新增「AI 讲评稿」折叠面板，按知识点展示讲评卡片，支持一键复制全文；新增 `lecture_review_smoke.py`（6 例）。把散落的错题数据升维为教师可直接用的备课素材 |
 
 ---
 

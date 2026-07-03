@@ -87,6 +87,17 @@ export default function TeacherAssignmentsPage() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState("");
 
+  // 讲评课 AI 辅助
+  type LectureTopic = {
+    tag: string; error_count: number; student_count: number; accuracy: number;
+    wrong_options: Array<{ option: string; count: number }>;
+    lecture_tip: string; board_keywords: string; sample_exercise: string;
+  };
+  type LectureReview = { topics: LectureTopic[]; generated_at: string; assignments_analyzed: number };
+  const [lectureReview, setLectureReview] = useState<LectureReview | null>(null);
+  const [lectureLoading, setLectureLoading] = useState(false);
+  const [lectureCopied, setLectureCopied] = useState(false);
+
   // 作业详情下钻
   const [detail, setDetail] = useState<AssignmentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -165,6 +176,39 @@ export default function TeacherAssignmentsPage() {
       setError(e instanceof Error ? e.message : "标记失败");
     } finally { setFlagging(null); }
   }
+  async function generateLectureReview() {
+    if (!user?.token || lectureLoading) return;
+    setLectureLoading(true);
+    try {
+      const res = await fetch(`${API}/api/teacher/lecture-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setLectureReview(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "生成讲评稿失败");
+    } finally {
+      setLectureLoading(false);
+    }
+  }
+
+  function copyLectureReview() {
+    if (!lectureReview) return;
+    const lines: string[] = ["===== AI 讲评稿 =====", ""];
+    for (const t of lectureReview.topics) {
+      lines.push(`【${t.tag}】  错误率 ${100 - t.accuracy}%  (${t.student_count}人答错)`);
+      lines.push(`讲解提示：${t.lecture_tip}`);
+      lines.push(`板书关键词：${t.board_keywords}`);
+      lines.push(`巩固练习：${t.sample_exercise}`);
+      lines.push("");
+    }
+    void navigator.clipboard.writeText(lines.join("\n")).then(() => {
+      setLectureCopied(true);
+      setTimeout(() => setLectureCopied(false), 2000);
+    });
+  }
+
   async function copyInsightOutline() {
     if (!detail?.insights) return;
     const i = detail.insights;
@@ -408,6 +452,45 @@ export default function TeacherAssignmentsPage() {
                     )}
                   </div>
                 )}
+
+                {/* AI 讲评稿面板 */}
+                <div className="tasg-lecture-panel">
+                  <div className="tasg-lecture-head">
+                    <span className="tasg-label">AI 讲评稿</span>
+                    <div className="tasg-lecture-actions">
+                      <button className="tasg-copy-btn" onClick={generateLectureReview} disabled={lectureLoading}>
+                        {lectureLoading ? "生成中…" : lectureReview ? "重新生成" : "✦ 生成讲评稿"}
+                      </button>
+                      {lectureReview && lectureReview.topics.length > 0 && (
+                        <button className="tasg-copy-btn" onClick={copyLectureReview}>
+                          {lectureCopied ? "已复制 ✓" : "复制全文"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {lectureReview && lectureReview.topics.length === 0 && (
+                    <p className="tasg-empty compact" style={{ marginTop: 6 }}>暂无足够答题数据，请在学生完成作业后再生成。</p>
+                  )}
+                  {lectureReview && lectureReview.topics.length > 0 && (
+                    <div className="tasg-lecture-topics">
+                      {lectureReview.topics.map((t) => (
+                        <div key={t.tag} className="tasg-lecture-topic">
+                          <div className="tasg-lecture-topic-head">
+                            <span className="tasg-lecture-tag">{t.tag}</span>
+                            <span className="tasg-lecture-stat">{t.student_count} 人答错 · 正确率 {t.accuracy}%</span>
+                          </div>
+                          <p className="tasg-lecture-tip"><span className="tasg-lecture-label">讲解提示</span>{t.lecture_tip}</p>
+                          <p className="tasg-lecture-keywords"><span className="tasg-lecture-label">板书关键词</span>{t.board_keywords}</p>
+                          <p className="tasg-lecture-exercise"><span className="tasg-lecture-label">即时练习</span>{t.sample_exercise}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {lectureReview && (
+                    <p className="tasg-lecture-footer">基于近 {lectureReview.assignments_analyzed} 份作业数据 · {new Date(lectureReview.generated_at).toLocaleString("zh-CN")}</p>
+                  )}
+                </div>
+
                 {detail.submissions.length === 0 ? (
                   <p className="tasg-empty">暂无学生提交</p>
                 ) : detail.submissions.map((sub) => (
@@ -737,4 +820,16 @@ const CSS = `
 .tasg-review-score { width:92px; flex:none; }
 .tasg-review-btn { background:var(--jade,#2d6a4f); color:#fff; border:none; border-radius:7px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
 .tasg-review-btn:disabled { opacity:.6; cursor:not-allowed; }
+/* 讲评稿面板 */
+.tasg-lecture-panel { background:#f3f8f2; border:1px solid #c5ddc0; border-radius:12px; padding:14px 16px; margin:0 0 16px; display:flex; flex-direction:column; gap:10px; }
+.tasg-lecture-head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+.tasg-lecture-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.tasg-lecture-topics { display:flex; flex-direction:column; gap:10px; }
+.tasg-lecture-topic { background:#fff; border:1px solid #d5e9d0; border-radius:9px; padding:12px 14px; }
+.tasg-lecture-topic-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px; }
+.tasg-lecture-tag { font-size:13px; font-weight:700; color:#2d6a2d; background:#eaf4e7; border-radius:5px; padding:2px 10px; }
+.tasg-lecture-stat { font-size:11px; color:var(--muted,#7a7068); }
+.tasg-lecture-tip, .tasg-lecture-keywords, .tasg-lecture-exercise { font-size:13px; line-height:1.7; margin:3px 0; color:var(--ink,#1a1612); }
+.tasg-lecture-label { font-size:11px; font-weight:700; color:#4a7a3c; margin-right:6px; background:#e8f5e4; border-radius:3px; padding:1px 5px; white-space:nowrap; }
+.tasg-lecture-footer { font-size:11px; color:var(--muted,#7a7068); margin:2px 0 0; }
 `;

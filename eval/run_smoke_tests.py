@@ -20,6 +20,7 @@ SMOKE_TESTS = [
     "learning_closure_smoke.py",
     "teacher_features_smoke.py",
     "variant_question_smoke.py",
+    "lecture_review_smoke.py",
 ]
 
 

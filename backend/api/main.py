@@ -525,6 +525,25 @@ async def teacher_teaching_suggestions(req: TeachingSuggestionRequest, actor: Ac
     return payload
 
 
+@app.post("/api/teacher/lecture-review")
+async def teacher_lecture_review(actor: Actor = Depends(require_auth)):
+    """基于近期作业真实答题数据，生成按知识点组织的讲评课 AI 辅助材料。
+
+    每个知识点返回：
+    - lecture_tip: 2 句面向教师的讲解提示
+    - board_keywords: 板书关键词
+    - sample_exercise: 适合即时巩固的练习形式描述
+    - error_count / student_count / accuracy: 错误统计
+    """
+    require_teacher_actor(actor)
+    from services.lecture_review_service import generate_lecture_review
+    try:
+        result = await run_in_threadpool(generate_lecture_review, actor.actor_id)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"讲评材料生成失败: {exc}") from exc
+
+
 # --- Debug / Health ---
 
 @app.get("/api/health")
