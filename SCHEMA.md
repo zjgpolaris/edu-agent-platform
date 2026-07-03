@@ -397,6 +397,8 @@ frontend/
 | GET | `/api/teacher/students/{student_id}/events` | 学生学习事件 |
 | GET | `/api/teacher/class-analytics` | 班级学情分析 |
 | GET | `/api/teacher/class-wrong-analysis` | 跨作业题目级错误聚合：按答错学生数降序展示最难的题（prompt/accuracy/student_count_wrong/wrong_options/来源作业），`?limit_assignments=10&top_n=15` |
+| GET | `/api/teacher/tutor-effectiveness` | 班级 AI 辅导效果：从 learning_events 聚合 auto_tutor 步骤，按知识点统计辅导次数/掌握率/active_students，`?days=30` |
+| GET | `/api/students/{student_id}/tutor-effectiveness` | 学生自己的辅导效果：按知识点统计掌握率+是否仍在错题本，`?days=30` |
 | POST | `/api/teacher/assignments/generate-questions` | AI 出题：按知识点批量 RAG 取材并生成单选题 / 判断题 / 简答题草稿，供教师修改确认；每题附带确定性结构质检结果 `quality`（level: ok/warn/error + issues），教师端以徽标标注需修正/可优化的题；可选 `semantic_check=true` 追加 LLM 语义质检（答案是否自洽、题干歧义、干扰项合理性），问题以「语义：」前缀并入 issues，失败/无凭证时优雅降级；语义质检会注入该教师历史上人工判定为 `bad_question` 的题作为 few-shot 反例，使质检随复核越用越准（自改进闭环） |
 | POST | `/api/teacher/assignments` | 创建作业（客观题+主观题），指定学生 |
 | GET | `/api/teacher/assignments` | 教师作业列表，含完成率、平均分与讲评洞察摘要（待评阅数、薄弱知识点、低正确率题） |
@@ -900,6 +902,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-03 | 1.17.5 | 催办通知实际发送：新增 `services/notification_service.py`（send_urge_notification/get_student_notifications/mark_notification_read/mark_all_read/get_unread_count，`student_notifications` 表）；新增 `POST /api/teacher/urge-students`、`GET /api/students/{id}/notifications`、`POST /api/students/{id}/notifications/read-all`；`ClassCompletionCard` 加「一键催办」按钮+自定义消息输入框；`TodayPlanCard` 展示老师催办通知横幅（可关闭，后台静默已读）；新增 `urge_notification_smoke.py`（6 例）。补上「有数据但无行动」的催办断点 |
 | 2026-07-03 | 1.17.6 | 学生分层作业：`assignments` 表新增 `difficulty_groups_json` 字段（{student_id: "easy"\|"medium"\|"hard"}）；新增 `set_difficulty_groups`/`get_questions_for_student`/`_parse_difficulty_groups`；`list_student_assignments` 返回 `my_difficulty`；新增 `PUT /api/teacher/assignments/{id}/difficulty-groups` + `GET /api/student/{sid}/assignments/{aid}/my-questions`；教师作业详情加「学生难度分层」紫色面板（含学生下拉选择器+保存）；学生作业列表加难度组标签，开题时自动拉过滤后的题目（无匹配则降级全量）；新增 `tiered_assignment_smoke.py`（6 例）|
 | 2026-07-03 | 1.17.7 | 错题班级聚合视图：`aggregate_class_wrong_questions` 跨最近N份作业聚合题目粒度答错率（主观题过滤，wrong_options 高频错选）；新增 `GET /api/teacher/class-wrong-analysis`；教师班级学情页新增「全班难题榜」表格（按答错学生数降序，正确率色标，高频错选，来源作业）；新增 `class_wrong_analysis_smoke.py`（5 例）。补上「知道知识点弱，但不知道哪道题最难」的盲区 |
+| 2026-07-03 | 1.17.8 | AI 辅导效果追踪：新增 `services/tutor_effectiveness_service.py`（从 learning_events 的 auto_tutor_step 记录聚合，无需改 AutoTutor 逻辑）；学生视角 get_student_tutor_effectiveness（按知识点统计辅导次数/掌握率/still_weak）；班级视角 get_class_tutor_effectiveness（active_students/整体掌握率/按知识点）；新增 `GET /api/teacher/tutor-effectiveness` + `GET /api/students/{id}/tutor-effectiveness`；教师班级学情页新增「AI 辅导效果」彩色磁贴面板（4指标 + 知识点掌握率色块）；新增 `tutor_effectiveness_smoke.py`（5 例）|
 
 ---
 

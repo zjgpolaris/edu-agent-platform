@@ -2724,6 +2724,34 @@ async def teacher_class_wrong_analysis(
     return result
 
 
+@app.get("/api/teacher/tutor-effectiveness")
+async def teacher_tutor_effectiveness(days: int = 30, actor: Actor = Depends(require_auth)):
+    """班级 AI 辅导效果：聚合所有学生的 AutoTutor 步骤数据，按知识点统计辅导次数/掌握率。
+
+    无需修改 AutoTutor 逻辑，从 learning_events 表读取。
+    Query params: days=30（分析最近几天，默认30，上限365）
+    """
+    require_teacher_actor(actor)
+    from services.tutor_effectiveness_service import get_class_tutor_effectiveness
+    return await run_in_threadpool(
+        get_class_tutor_effectiveness, actor.actor_id, max(1, min(days, 365))
+    )
+
+
+@app.get("/api/students/{student_id}/tutor-effectiveness")
+async def student_tutor_effectiveness(
+    student_id: str,
+    days: int = 30,
+    actor: Actor = Depends(require_auth),
+):
+    """学生自己的 AI 辅导效果：按知识点统计辅导次数/掌握率/是否仍在错题本。"""
+    assert_student_access(actor, student_id)
+    from services.tutor_effectiveness_service import get_student_tutor_effectiveness
+    return await run_in_threadpool(
+        get_student_tutor_effectiveness, student_id, max(1, min(days, 365))
+    )
+
+
 @app.get("/api/teacher/class-mastery-heatmap")
 async def teacher_class_mastery_heatmap(actor: Actor = Depends(require_auth)):
     """班级知识点掌握度热力图：聚合所有学生错题本，按知识点统计薄弱人数和平均掌握强度。

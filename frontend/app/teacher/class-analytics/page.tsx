@@ -57,12 +57,20 @@ type ClassWrongAnalysis = {
   generated_at: string;
 };
 
+type TutorEffTag = { tag: string; student_count: number; total: number; mastered: number; mastery_rate: number };
+type ClassTutorEff = {
+  summary: { total_steps: number; mastered_steps: number; mastery_rate: number; active_students: number; days_analyzed: number };
+  tags: TutorEffTag[];
+  generated_at: string;
+};
+
 export default function TeacherClassAnalyticsPage() {
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState<ClassAnalytics | null>(null);
   const [suggestions, setSuggestions] = useState<TeachingSuggestions | null>(null);
   const [classHeatmap, setClassHeatmap] = useState<ClassMasteryHeatmap | null>(null);
   const [wrongAnalysis, setWrongAnalysis] = useState<ClassWrongAnalysis | null>(null);
+  const [tutorEff, setTutorEff] = useState<ClassTutorEff | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -86,16 +94,18 @@ export default function TeacherClassAnalyticsPage() {
     setLoading(true);
     setError("");
     try {
-      const [analyticsRes, heatmapRes, wrongRes] = await Promise.all([
+      const [analyticsRes, heatmapRes, wrongRes, tutorRes] = await Promise.all([
         fetch(`${API}/api/teacher/class-analytics`, { headers: authHeaders(user.token) }),
         fetch(`${API}/api/teacher/class-mastery-heatmap`, { headers: authHeaders(user.token) }),
         fetch(`${API}/api/teacher/class-wrong-analysis`, { headers: authHeaders(user.token) }),
+        fetch(`${API}/api/teacher/tutor-effectiveness`, { headers: authHeaders(user.token) }),
       ]);
       if (!analyticsRes.ok) throw new Error("获取班级学情失败");
       const data = await analyticsRes.json();
       setAnalytics(data);
       if (heatmapRes.ok) setClassHeatmap(await heatmapRes.json());
       if (wrongRes.ok) setWrongAnalysis(await wrongRes.json());
+      if (tutorRes.ok) setTutorEff(await tutorRes.json());
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取班级学情失败");
     } finally {
@@ -327,6 +337,43 @@ export default function TeacherClassAnalyticsPage() {
             </div>
           )}
         </div>
+
+        {/* AI 辅导效果 */}
+        {tutorEff && tutorEff.summary.total_steps > 0 && (
+          <div className="analytics-section">
+            <div className="panel-heading-row">
+              <div>
+                <p className="section-kicker">TUTOR EFFECTIVENESS</p>
+                <h3>AI 辅导效果（近 {tutorEff.summary.days_analyzed} 天）</h3>
+              </div>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted,#6b7280)" }}>
+                {tutorEff.summary.active_students} 名学生有辅导记录
+              </span>
+            </div>
+            <div className="teff-metrics">
+              <div className="teff-metric"><b>{tutorEff.summary.total_steps}</b><span>总辅导步骤</span></div>
+              <div className="teff-metric"><b style={{ color: tutorEff.summary.mastery_rate >= 60 ? "#2d6a4f" : "#b0862b" }}>{tutorEff.summary.mastery_rate}%</b><span>整体掌握率</span></div>
+              <div className="teff-metric"><b>{tutorEff.summary.mastered_steps}</b><span>已掌握步骤</span></div>
+              <div className="teff-metric"><b>{tutorEff.tags.length}</b><span>涉及知识点</span></div>
+            </div>
+            {tutorEff.tags.length > 0 && (
+              <div className="teff-tags">
+                {tutorEff.tags.slice(0, 12).map((t) => {
+                  const rate = t.mastery_rate;
+                  const bg = rate >= 70 ? "#d1fae5" : rate >= 40 ? "#fef9c3" : "#fee2e2";
+                  const fg = rate >= 70 ? "#065f46" : rate >= 40 ? "#854d0e" : "#991b1b";
+                  return (
+                    <div key={t.tag} className="teff-tag-chip" style={{ background: bg, color: fg }}
+                      title={`${t.tag}｜${t.student_count}人辅导 ${t.total}次，掌握率 ${t.mastery_rate}%`}>
+                      <span className="teff-tag-name">{t.tag}</span>
+                      <span className="teff-tag-rate">{t.mastery_rate}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 全班难题榜 */}
         {wrongAnalysis && wrongAnalysis.questions.length > 0 && (
@@ -571,6 +618,16 @@ export default function TeacherClassAnalyticsPage() {
           cursor: pointer;
           font-size: 13px;
         }
+        /* AI 辅导效果面板 */
+        .teff-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
+        .teff-metric { background:#fdfbf7; border:1px solid #eee6d8; border-radius:9px; padding:10px 8px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+        .teff-metric b { font-size:18px; font-weight:700; }
+        .teff-metric span { font-size:11px; color:var(--text-muted,#6b7280); text-align:center; }
+        .teff-tags { display:flex; flex-wrap:wrap; gap:6px; }
+        .teff-tag-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:8px; font-size:12px; cursor:default; }
+        .teff-tag-name { font-weight:600; }
+        .teff-tag-rate { font-size:11px; opacity:.8; }
+        @media (max-width:640px) { .teff-metrics { grid-template-columns:repeat(2,1fr); } }
         /* 全班难题榜表格 */
         .cwa-table { display:flex; flex-direction:column; gap:4px; overflow-x:auto; }
         .cwa-header, .cwa-row { display:grid; grid-template-columns:1fr 60px 60px 100px 100px; gap:8px; align-items:center; font-size:12px; padding:6px 8px; border-radius:6px; }

@@ -27,6 +27,7 @@ SMOKE_TESTS = [
     "urge_notification_smoke.py",
     "tiered_assignment_smoke.py",
     "class_wrong_analysis_smoke.py",
+    "tutor_effectiveness_smoke.py",
 ]
 
 
