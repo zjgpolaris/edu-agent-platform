@@ -2927,6 +2927,7 @@ class GeneratedQuestion(BaseModel):
     options: list[str]
     answer: str
     explanation: str
+    difficulty: str = "medium"    # easy | medium | hard，由出题请求继承
     quality: dict | None = None  # 确定性结构质检结果 {"level","issues"}
 
 
@@ -3042,11 +3043,11 @@ async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor
         if qtype == "true_false":
             q = await run_in_threadpool(_gen_true_false, kp, req.difficulty, sources)
             return await run_in_threadpool(_with_quality, GeneratedQuestion(knowledge_tag=kp, type="true_false", prompt=q["prompt"],
-                                     options=[], answer=q["answer"], explanation=q["explanation"]))
+                                     options=[], answer=q["answer"], explanation=q["explanation"], difficulty=req.difficulty))
         if qtype == "subjective":
             q = await run_in_threadpool(_gen_subjective, kp, req.difficulty, sources)
             return await run_in_threadpool(_with_quality, GeneratedQuestion(knowledge_tag=kp, type="subjective", prompt=q["prompt"],
-                                     options=[], answer="", explanation=q["explanation"]))
+                                     options=[], answer="", explanation=q["explanation"], difficulty=req.difficulty))
         # 默认单选题
         q = await run_in_threadpool(_at_gen_question, kp, req.difficulty, sources)
         return await run_in_threadpool(_with_quality, GeneratedQuestion(
@@ -3054,6 +3055,7 @@ async def teacher_generate_questions(req: GenerateQuestionsRequest, actor: Actor
             options=[_strip(o) for o in q.get("options", [])],
             answer=(q.get("answer", "A") or "A")[:1].upper(),
             explanation=q.get("explanation", ""),
+            difficulty=req.difficulty,
         ))
 
     import asyncio

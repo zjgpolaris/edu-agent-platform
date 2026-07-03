@@ -77,6 +77,7 @@ SMOKE_SUITES = [
     "variant_question_smoke",
     "lecture_review_smoke",
     "mastery_heatmap_smoke",
+    "difficulty_smoke",
 ]
 SUITE_FILES = {
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
@@ -109,6 +110,7 @@ SUITE_FILES = {
     "variant_question_smoke": EVAL_DIR / "variant_question_smoke.py",
     "lecture_review_smoke": EVAL_DIR / "lecture_review_smoke.py",
     "mastery_heatmap_smoke": EVAL_DIR / "mastery_heatmap_smoke.py",
+    "difficulty_smoke": EVAL_DIR / "difficulty_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "history_character_smoke": {
@@ -246,6 +248,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     "mastery_heatmap_smoke": {
         "label": "掌握度热力图 Smoke",
         "category": "student",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "difficulty_smoke": {
+        "label": "出题难度维度 Smoke",
+        "category": "teacher",
         "kind": "smoke",
         "priority": "p1",
     },

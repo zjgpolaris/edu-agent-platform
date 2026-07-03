@@ -253,6 +253,13 @@ def compute_assignment_insights(
             })
     below_threshold_students.sort(key=lambda x: (float(x["score"]), x["student_id"]))
 
+    # 难度分布：统计题目中各难度级别的数量（仅有 difficulty 字段的题目）
+    difficulty_dist: dict[str, int] = {"easy": 0, "medium": 0, "hard": 0}
+    for q in questions:
+        d = str(q.get("difficulty") or "").strip().lower()
+        if d in difficulty_dist:
+            difficulty_dist[d] += 1
+
     suggested_reteach_focus = []
     for tag in top_weak_tags[:3]:
         q_nums = [i + 1 for i in tag.get("question_indices", [])]
@@ -277,6 +284,7 @@ def compute_assignment_insights(
         "top_weak_tags": top_weak_tags[:5],
         "below_threshold_students": below_threshold_students,
         "suggested_reteach_focus": suggested_reteach_focus,
+        "difficulty_distribution": difficulty_dist,
     }
 
 

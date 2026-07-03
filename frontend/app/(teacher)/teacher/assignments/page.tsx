@@ -14,6 +14,7 @@ type DraftQuestion = {
   knowledge_tag: string;
   reference_answer?: string;
   quality?: { level: string; issues: string[] };
+  difficulty?: string;  // easy | medium | hard
 };
 type WeakTag = { knowledge_tag: string; wrong_count?: number; student_count: number; question_indices?: number[]; sources?: string[] };
 type LowAccuracyQuestion = {
@@ -33,6 +34,7 @@ type AssignmentInsights = {
   top_weak_tags: WeakTag[];
   below_threshold_students: Array<{ student_id: string; score: number; status: string; missed_tags: string[]; needs_review: boolean }>;
   suggested_reteach_focus: Array<{ knowledge_tag: string; student_count: number; question_indices: number[]; reason: string }>;
+  difficulty_distribution?: { easy: number; medium: number; hard: number };
 };
 type AssignmentSummary = {
   id: string;
@@ -52,7 +54,7 @@ type GradedAnswer = { question_index: number; student_answer: unknown; is_correc
 type Submission = { student_id: string; score: number | null; status: string; submitted_at: string; answers: GradedAnswer[]; teacher_feedback?: string | null; reviewed_at?: string | null };
 type ReviewFlag = { verdict: string; note?: string | null; created_at: string };
 type AssignmentDetail = {
-  assignment: { id: string; title: string; subject: string | null; questions: Array<{ prompt: string; type: string; knowledge_tag: string | null; reference_answer?: string | null }> };
+  assignment: { id: string; title: string; subject: string | null; questions: Array<{ prompt: string; type: string; knowledge_tag: string | null; reference_answer?: string | null; difficulty?: string | null }> };
   submissions: Submission[];
   insights?: AssignmentInsights;
   review_flags?: Record<string, ReviewFlag>;
@@ -250,13 +252,14 @@ export default function TeacherAssignmentsPage() {
         knowledge_tag: string; type: string; prompt: string;
         options: string[]; answer: string; explanation: string;
         quality?: { level: string; issues: string[] };
+        difficulty?: string;
       }> = await res.json();
       const newQs: DraftQuestion[] = generated.map((q) => {
         if (q.type === "true_false") {
-          return { type: "true_false", prompt: q.prompt, options: [], answer: q.answer || "正确", knowledge_tag: q.knowledge_tag, quality: q.quality };
+          return { type: "true_false", prompt: q.prompt, options: [], answer: q.answer || "正确", knowledge_tag: q.knowledge_tag, quality: q.quality, difficulty: q.difficulty };
         }
         if (q.type === "subjective") {
-          return { type: "subjective", prompt: q.prompt, options: [], answer: "", knowledge_tag: q.knowledge_tag, reference_answer: q.explanation || "", quality: q.quality };
+          return { type: "subjective", prompt: q.prompt, options: [], answer: "", knowledge_tag: q.knowledge_tag, reference_answer: q.explanation || "", quality: q.quality, difficulty: q.difficulty };
         }
         return {
           type: "single_choice",
@@ -265,6 +268,7 @@ export default function TeacherAssignmentsPage() {
           answer: q.answer,
           knowledge_tag: q.knowledge_tag,
           quality: q.quality,
+          difficulty: q.difficulty,
         };
       });
       // 追加到现有题目后（去掉全空占位题）
@@ -401,6 +405,20 @@ export default function TeacherAssignmentsPage() {
                       <div className="tasg-insight-metric"><b>{detail.insights.pending_review_count}</b><span>待评阅</span></div>
                       <div className="tasg-insight-metric"><b>{detail.insights.below_threshold_students.length}</b><span>低分学生</span></div>
                     </div>
+                    {detail.insights.difficulty_distribution && (
+                      (() => {
+                        const dd = detail.insights.difficulty_distribution!;
+                        const total = (dd.easy ?? 0) + (dd.medium ?? 0) + (dd.hard ?? 0);
+                        return total > 0 ? (
+                          <div className="tasg-diff-row">
+                            <span className="tasg-diff-label">难度分布</span>
+                            {dd.easy > 0 && <span className="tasg-diff-chip easy">基础 ×{dd.easy}</span>}
+                            {dd.medium > 0 && <span className="tasg-diff-chip medium">中等 ×{dd.medium}</span>}
+                            {dd.hard > 0 && <span className="tasg-diff-chip hard">提高 ×{dd.hard}</span>}
+                          </div>
+                        ) : null;
+                      })()
+                    )}
                     <div className="tasg-insight-grid">
                       <div className="tasg-insight-card">
                         <span className="tasg-insight-title">讲评优先级</span>
@@ -518,6 +536,7 @@ export default function TeacherAssignmentsPage() {
                             )}
                             {q?.reference_answer && <span className="tasg-ans-detail subjective-answer">参考：{q.reference_answer.slice(0, 60)}</span>}
                             {q?.knowledge_tag && <span className="tasg-ans-tag">{q.knowledge_tag}</span>}
+                            {q?.difficulty && <span className={`tasg-diff-badge ${q.difficulty}`}>{q.difficulty === "easy" ? "基础" : q.difficulty === "hard" ? "提高" : "中等"}</span>}
                           </div>
                         );
                       })}
@@ -820,6 +839,17 @@ const CSS = `
 .tasg-review-score { width:92px; flex:none; }
 .tasg-review-btn { background:var(--jade,#2d6a4f); color:#fff; border:none; border-radius:7px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
 .tasg-review-btn:disabled { opacity:.6; cursor:not-allowed; }
+/* 难度分布与难度标签 */
+.tasg-diff-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 0 2px; }
+.tasg-diff-label { font-size:11px; font-weight:700; color:var(--muted,#7a7068); letter-spacing:.08em; }
+.tasg-diff-chip { font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600; }
+.tasg-diff-chip.easy { background:#dcfce7; color:#166534; }
+.tasg-diff-chip.medium { background:#fef9c3; color:#854d0e; }
+.tasg-diff-chip.hard { background:#fee2e2; color:#991b1b; }
+.tasg-diff-badge { font-size:10px; padding:1px 6px; border-radius:3px; font-weight:600; margin-left:3px; white-space:nowrap; }
+.tasg-diff-badge.easy { background:#dcfce7; color:#166534; }
+.tasg-diff-badge.medium { background:#fef9c3; color:#854d0e; }
+.tasg-diff-badge.hard { background:#fee2e2; color:#991b1b; }
 /* 讲评稿面板 */
 .tasg-lecture-panel { background:#f3f8f2; border:1px solid #c5ddc0; border-radius:12px; padding:14px 16px; margin:0 0 16px; display:flex; flex-direction:column; gap:10px; }
 .tasg-lecture-head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
