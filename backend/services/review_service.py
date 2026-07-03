@@ -12,6 +12,7 @@ from sqlalchemy import text
 from db.engine import get_connection
 from student_profile import now_iso
 from services.weakpoint_service import get_weakpoints
+from services.variant_service import get_or_create_variant, should_use_variant
 
 
 def _ensure_table() -> None:
@@ -107,11 +108,23 @@ def _hydrate_pending_tasks(student_id: str, today: str, tasks: list[dict]) -> li
     return tasks
 
 
+def _pick_question(student_id: str, today: str, wp: dict[str, Any]) -> dict[str, Any]:
+    """为单个薄弱点选题策略：答错次数达阈值则生成变式题，否则普通出题。"""
+    import logging
+    tag = wp["knowledge_tag"]
+    try:
+        if should_use_variant(wp.get("wrong_count", 0)):
+            return get_or_create_variant(student_id, tag, today=today)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("review: 变式题生成失败 tag=%s: %s", tag, exc)
+    return _generate_question(tag)
+
+
 def create_today_session(student_id: str, today: str) -> dict:
     _ensure_table()
     weakpoints = get_weakpoints(student_id)
     top = sorted(weakpoints, key=lambda w: w["wrong_count"] * _decay_weight(w["last_wrong_at"]), reverse=True)[:8]
-    tasks = [_generate_question(w["knowledge_tag"]) for w in top]
+    tasks = [_pick_question(student_id, today, w) for w in top]
     with get_connection() as conn:
         conn.execute(
             text("""INSERT INTO review_sessions (id, student_id, date, tasks_json, completed, total, created_at)

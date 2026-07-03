@@ -74,6 +74,7 @@ SMOKE_SUITES = [
     "tool_registry_smoke",
     "guardrails_smoke",
     "trace_smoke",
+    "variant_question_smoke",
 ]
 SUITE_FILES = {
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
@@ -103,6 +104,7 @@ SUITE_FILES = {
     "trajectory_eval": EVAL_DIR / "trajectory_eval.py",
     "auto_tutor_trajectory_eval": EVAL_DIR / "auto_tutor_trajectory_eval.py",
     "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
+    "variant_question_smoke": EVAL_DIR / "variant_question_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "history_character_smoke": {
@@ -222,6 +224,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     "completion_overview_smoke": {
         "label": "班级完成情况 Smoke",
         "category": "teacher",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "variant_question_smoke": {
+        "label": "错题变式生成 Smoke",
+        "category": "student",
         "kind": "smoke",
         "priority": "p1",
     },

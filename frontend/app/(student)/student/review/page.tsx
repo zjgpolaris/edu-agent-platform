@@ -8,6 +8,7 @@ const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 type Task = {
   tag: string; question: string; options: string[];
   answer: string; explanation: string; done: boolean; correct: boolean | null;
+  is_variant?: boolean;
 };
 type Session = { date: string; completed: number; total: number; tasks: Task[] };
 
@@ -93,14 +94,21 @@ const CSS = `
 }
 
 /* ── tag row ── */
-.rv-tagrow { display:flex;align-items:center;justify-content:space-between;margin-bottom:20px; }
+.rv-tagrow { display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:8px; }
+.rv-tag-group { display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
 .rv-tag {
   display:inline-flex;align-items:center;gap:5px;
   padding:3px 12px;border:1px solid rgba(183,66,43,.25);border-radius:2px;
   background:rgba(183,66,43,.06);color:var(--cinnabar);font-size:11px;letter-spacing:.14em;
 }
 .rv-tag::before { content:'◆';font-size:7px; }
-.rv-qmeta { font-size:11px;color:var(--muted);letter-spacing:.1em; }
+.rv-variant-badge {
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border:1px solid rgba(88,128,72,.35);border-radius:2px;
+  background:rgba(88,128,72,.07);color:#4a7a3c;font-size:10px;letter-spacing:.1em;
+}
+.rv-variant-badge::before { content:'∿';font-size:11px; }
+.rv-qmeta { font-size:11px;color:var(--muted);letter-spacing:.1em;flex-shrink:0; }
 
 /* ── question ── */
 .rv-q {
@@ -337,7 +345,10 @@ export default function ReviewPage() {
             <div className="rv-wm">{WM[current % WM.length]}</div>
 
             <div className="rv-tagrow">
-              <span className="rv-tag">{task.tag}</span>
+              <div className="rv-tag-group">
+                <span className="rv-tag">{task.tag}</span>
+                {task.is_variant && <span className="rv-variant-badge">变式题</span>}
+              </div>
               <span className="rv-qmeta">{current + 1} / {session.total}</span>
             </div>
 

@@ -145,8 +145,9 @@ backend/
 │   ├── completion_overview.py     # 教师班级作业完成情况：跨作业按学生聚合已交/欠交/逾期（纯函数+装配）
 │   ├── quality_dashboard.py       # 命题质量看板：跨作业聚合 AI 质检分布/有效性/复核结论（只读确定性）
 │   ├── question_quality.py        # AI 出题结构质检 + LLM 语义质检（opt-in，few-shot 自改进）
-│   ├── review_service.py          # SM-2 自适应复习调度
+│   ├── review_service.py          # SM-2 自适应复习调度（wrong_count>=2 时自动改用变式题）
 │   ├── today_plan.py              # 学生今日计划：作业到期/复习/薄弱点按优先级合成待办（纯函数+装配）
+│   ├── variant_service.py         # 错题变式生成：wrong_count>=VARIANT_THRESHOLD 时 LLM 生成同 tag 不同题面变式题，含当日缓存
 │   └── weakpoint_service.py       # 错题本服务（掌握度证据计数：答错强化，连续答对达阈值才移除）
 │
 ├── textbook_learning/         # 教材学习
@@ -378,6 +379,7 @@ frontend/
 | GET | `/api/students/{student_id}/review/today` | 获取今日自适应复习任务（无则生成） |
 | POST | `/api/students/{student_id}/review/submit` | 提交复习答题结果 |
 | GET | `/api/students/{student_id}/mastery-overview` | 知识点掌握度总览 + 连续打卡天数（strength 纳入 correct_streak 加成） |
+| GET | `/api/students/{student_id}/review/variant-question` | 为指定 tag 生成（或返回今日缓存的）变式题；`wrong_count>=2` 时复习 session 也自动使用（`?tag=xxx`） |
 | GET | `/api/students/{student_id}/today` | 学生今日计划：作业到期(逾期/今日截止)、今日复习余量、薄弱点攻克按优先级合成的待办清单；只读、不触发 LLM |
 | GET | `/api/student/{student_id}/learning-report` | 学习成长报告：汇总 SM-2 复习进度、作业批改趋势、每日活跃度、错题统计、AutoTutor 会话数（`?days=14`） |
 | GET | `/api/student/{student_id}/assignments` | 学生待办/已完成作业列表（含提交状态与分数） |
@@ -882,6 +884,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-02 | 1.16.6 | 命题质量看板：新增 `services/quality_dashboard.py` 的 `get_teacher_quality_dashboard` 跨作业聚合 + `GET /api/teacher/quality-dashboard`；前端 `/teacher/quality-dashboard` 看板页 + 侧边栏「系统运维」入口；新增 `quality_dashboard_smoke.py`（7 例）。把散落在单份作业的质检数据升维成教师可决策的命题质量画像 |
 | 2026-07-02 | 1.16.7 | 学生今日计划：新增 `services/today_plan.py`（build_today_plan 纯函数 + get_student_today_plan）与 `GET /api/students/{id}/today`，把作业到期/今日复习/薄弱点按优先级(逾期>今日截止>复习>未来作业>薄弱点)合成待办；前端 `TodayPlanCard` 接入学生首页，补上此前首页无作业提醒的缺口；新增 `today_plan_smoke.py`（8 例）|
 | 2026-07-02 | 1.16.8 | 教师班级作业完成情况：新增 `services/completion_overview.py`（compute_class_completion 纯函数 + get_class_completion_overview）与 `GET /api/teacher/completion-overview`，跨作业按学生聚合 已交/欠交/逾期(掉队优先)；前端 `ClassCompletionCard` 接入教师首页，补上此前只有作业维度完成率、缺学生维度催办视图的缺口；新增 `completion_overview_smoke.py`（6 例）。与学生「今日计划」形成师生对称 |
+| 2026-07-03 | 1.17.0 | 错题变式生成：新增 `services/variant_service.py`（generate_variant / get_or_create_variant / get_cached_variant，当日缓存+LLM降级）；`review_service._pick_question` 当 `wrong_count>=VARIANT_THRESHOLD(2)` 时自动改用变式题替代重复原题；新增 `GET /api/students/{id}/review/variant-question?tag=xxx`；新增 `variant_question_smoke.py`（6 例）。补上「背了就忘、只会认题面」的复习盲区 |
 
 ---
 

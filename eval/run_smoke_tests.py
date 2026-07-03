@@ -19,6 +19,7 @@ SMOKE_TESTS = [
     "homework_grading_smoke.py",
     "learning_closure_smoke.py",
     "teacher_features_smoke.py",
+    "variant_question_smoke.py",
 ]
 
 

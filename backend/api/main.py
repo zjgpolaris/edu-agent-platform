@@ -64,6 +64,7 @@ from homework_grading.service import extract_homework_from_upload, grade_homewor
 from homework_grading.review_store import apply_decision, get_review, list_reviews, save_review
 from services.batch_essay_service import batch_grade, compute_summary
 from services.weakpoint_service import get_weakpoints, record_weakpoint, delete_weakpoint, clear_weakpoints
+from services.variant_service import get_or_create_variant, generate_variant
 from tools.registry import list_tools
 
 from contextlib import asynccontextmanager
@@ -936,6 +937,33 @@ async def student_learning_path(student_id: str, actor: Actor = Depends(require_
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/students/{student_id}/review/variant-question")
+async def student_variant_question(
+    student_id: str,
+    tag: str,
+    actor: Actor = Depends(require_auth),
+):
+    """为指定知识点生成（或返回今日缓存的）变式题。
+
+    当学生在某知识点上答错次数达到阈值（VARIANT_THRESHOLD=2）时，
+    前端可调此接口主动获取变式题，不依赖复习 session 自动触发。
+
+    Query params:
+        tag: 知识点标签，如「鸦片战争」
+    """
+    assert_student_access(actor, student_id)
+    tag = tag.strip()
+    if not tag:
+        raise HTTPException(status_code=400, detail="tag 不能为空")
+    try:
+        import datetime
+        today = datetime.date.today().isoformat()
+        variant = get_or_create_variant(student_id, tag, today=today)
+        return {"variant": variant, "tag": tag, "student_id": student_id}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"变式题生成失败: {exc}") from exc
 
 
 @app.post("/api/students/{student_id}/events")
