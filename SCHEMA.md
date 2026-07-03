@@ -149,7 +149,7 @@ backend/
 │   ├── today_plan.py              # 学生今日计划：作业到期/复习/薄弱点按优先级合成待办（纯函数+装配）
 │   ├── lecture_review_service.py  # 讲评课 AI 辅助：跨作业聚合错误→LLM 生成讲解提示/板书关键词/即时练习形式
 │   ├── variant_service.py         # 错题变式生成：wrong_count>=VARIANT_THRESHOLD 时 LLM 生成同 tag 不同题面变式题，含当日缓存
-│   ├── knowledge_graph_service.py # 知识图谱前置依赖：静态 DAG + 画像/错题推导节点状态（mastered/weak/available/locked）与下一步建议
+│   ├── knowledge_graph_service.py # 知识图谱前置依赖：静态 DAG + 画像/错题推导节点状态（mastered/weak/available/locked）、下一步建议与薄弱点风险预测（前置链含 weak 的下游高风险点）
 │   └── weakpoint_service.py       # 错题本服务（掌握度证据计数：答错强化，连续答对达阈值才移除）
 │
 ├── textbook_learning/         # 教材学习
@@ -367,7 +367,7 @@ frontend/
 |------|------|------|
 | GET | `/api/students/{student_id}/profile` | 学生档案 |
 | GET | `/api/students/{student_id}/review-plan` | 复习计划，聚合学生画像与错题本优先级 |
-| GET | `/api/students/{student_id}/learning-path` | 学习路径，聚合复习计划、画像进度与错题本；`graph` 字段返回知识点前置依赖图（nodes/edges/next_recommended/counts），前端渲染分层"知识地图" |
+| GET | `/api/students/{student_id}/learning-path` | 学习路径，聚合复习计划、画像进度与错题本；`graph` 字段返回知识点前置依赖图（nodes/edges/next_recommended/counts）+ `at_risk` 风险预测（前置链含 weak 的下游高风险点），前端渲染分层"知识地图"与"风险预警" |
 | POST | `/api/students/{student_id}/events` | 记录学习事件 |
 | GET | `/api/students/{student_id}/events` | 学习事件列表 |
 | GET | `/api/students/{student_id}/memory-entries` | 记忆条目 |
@@ -761,7 +761,7 @@ frontend/
 | `learning_assistant_smoke.py` | 学习助手测试 |
 | `guardrails_smoke.py` | 防护机制测试 |
 | `weakpoints_smoke.py` | 错题本测试（含掌握度模型：连续答对才移除、答错重置连对、未跟踪 tag no-op），8 例 |
-| `knowledge_graph_smoke.py` | 知识图谱前置依赖测试（根节点 available、前置未掌握则 locked+locked_by、前置掌握解锁、错题标 weak、next_recommended 优先 weak 后 available、DAG 无环、图外孤立错题纳入、counts 一致），9 例离线，已接入 `run_core_evals.py`（CORE/SMOKE） |
+| `knowledge_graph_smoke.py` | 知识图谱前置依赖测试（根节点 available、前置未掌握则 locked+locked_by、前置掌握解锁、错题标 weak、next_recommended 优先级、DAG 无环、图外孤立错题纳入、counts 一致）+ 薄弱点风险预测（前置链含 weak 则下游 at_risk、无 weak 时为空、weak 节点不重复计入、风险分反映 weak 前置数并降序），13 例离线，已接入 `run_core_evals.py`（CORE/SMOKE） |
 | `student_profile_smoke.py` | 学生档案测试 |
 | `homework_grading_smoke.py` | 作业批改测试 |
 | `learning_closure_smoke.py` | 作业-错题-复习-学情闭环测试 |

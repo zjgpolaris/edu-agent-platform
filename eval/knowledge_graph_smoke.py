@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from services.knowledge_graph_service import build_graph, _has_cycle
+from services.knowledge_graph_service import build_graph, predict_risks, _has_cycle
 
 
 def run_case(name: str, fn) -> bool:
@@ -88,6 +88,41 @@ def counts_sum_matches_nodes() -> None:
     assert sum(g["counts"].values()) == len(g["nodes"]), g["counts"]
 
 
+def no_risk_when_no_weak() -> None:
+    # 没有任何 weak 时不应产生风险预警
+    g = build_graph()
+    assert predict_risks(g) == []
+
+
+def downstream_flagged_at_risk() -> None:
+    # 鸦片战争 weak → 其下游（第二次鸦片战争等）尚未出错但应被预警
+    g = build_graph(weakpoint_tags=["鸦片战争"])
+    risks = predict_risks(g)
+    risk_tags = {r["tag"] for r in risks}
+    assert "第二次鸦片战争" in risk_tags, risk_tags
+    # 洋务运动更靠下游，也应命中
+    assert "洋务运动" in risk_tags, risk_tags
+
+
+def weak_node_not_in_risk() -> None:
+    # 已经是 weak 的节点（已在错题本）不重复计入 at_risk
+    g = build_graph(weakpoint_tags=["鸦片战争"])
+    risks = predict_risks(g)
+    assert all(r["tag"] != "鸦片战争" for r in risks)
+
+
+def risk_score_reflects_weak_prereq_count() -> None:
+    # 两个前置链上的 weak 越多，分越高；戊戌变法在 甲午→洋务→...→鸦片 之下
+    g = build_graph(weakpoint_tags=["鸦片战争", "甲午中日战争"])
+    risks = predict_risks(g)
+    by_tag = {r["tag"]: r for r in risks}
+    # 戊戌变法上游同时有鸦片战争与甲午中日战争两个 weak
+    assert by_tag["戊戌变法"]["score"] == 2, by_tag.get("戊戌变法")
+    # 结果按分降序
+    scores = [r["score"] for r in risks]
+    assert scores == sorted(scores, reverse=True), scores
+
+
 def main() -> None:
     cases = [
         ("root_node_available_by_default", root_node_available_by_default),
@@ -99,6 +134,10 @@ def main() -> None:
         ("graph_is_acyclic", graph_is_acyclic),
         ("isolated_offgraph_tag_included", isolated_offgraph_tag_included),
         ("counts_sum_matches_nodes", counts_sum_matches_nodes),
+        ("no_risk_when_no_weak", no_risk_when_no_weak),
+        ("downstream_flagged_at_risk", downstream_flagged_at_risk),
+        ("weak_node_not_in_risk", weak_node_not_in_risk),
+        ("risk_score_reflects_weak_prereq_count", risk_score_reflects_weak_prereq_count),
     ]
     passed = sum(1 for name, fn in cases if run_case(name, fn))
     print(f"knowledge_graph_smoke={passed}/{len(cases)}")

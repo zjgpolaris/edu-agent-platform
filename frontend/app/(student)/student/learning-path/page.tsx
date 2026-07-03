@@ -25,6 +25,14 @@ type KnowledgeGraph = {
   edges: { from: string; to: string }[];
   next_recommended: string | null;
   counts: Record<string, number>;
+  at_risk?: RiskItem[];
+};
+type RiskItem = {
+  tag: string;
+  label: string;
+  score: number;
+  blocking_weak: string[];
+  reason: string;
 };
 type LearningPath = {
   student_id: string;
@@ -179,6 +187,21 @@ const CSS = `
   background:rgba(183,66,43,.05);font-size:12px;color:var(--ink-soft);letter-spacing:.03em;line-height:1.7;
 }
 .lp-map-next b { color:var(--cinnabar); }
+
+/* ── risk warning (风险预警) ── */
+.lp-risk { margin-top:14px;display:flex;flex-direction:column;gap:8px; }
+.lp-risk-head { font-size:11px;letter-spacing:.14em;color:var(--muted);display:flex;align-items:center;gap:7px; }
+.lp-risk-head::before { content:'⚠';font-size:12px;color:#c9922e; }
+.lp-risk-item {
+  display:flex;align-items:flex-start;gap:10px;padding:10px 13px;border-radius:3px;
+  border:1px solid rgba(201,146,46,.35);background:rgba(201,146,46,.06);
+}
+.lp-risk-tag { font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap; }
+.lp-risk-reason { font-size:11px;color:var(--muted);line-height:1.6;letter-spacing:.02em; }
+.lp-risk-score {
+  margin-left:auto;font-size:10px;color:#c9922e;letter-spacing:.06em;white-space:nowrap;
+  border:1px solid rgba(201,146,46,.4);border-radius:2px;padding:2px 6px;
+}
 `;
 
 function InjectStyles() {
@@ -275,6 +298,21 @@ function KnowledgeMap({ graph }: { graph: KnowledgeGraph }) {
           {nextNode.status === "weak"
             ? " —— 你在这里有错题，先把它攻克。"
             : " —— 前置知识已就绪，可以开始了。"}
+        </div>
+      )}
+
+      {graph.at_risk && graph.at_risk.length > 0 && (
+        <div className="lp-risk">
+          <div className="lp-risk-head">风险预警 · 提前预习这些</div>
+          {graph.at_risk.slice(0, 4).map((risk) => (
+            <div className="lp-risk-item" key={risk.tag}>
+              <div>
+                <div className="lp-risk-tag">{risk.label}</div>
+                <div className="lp-risk-reason">{risk.reason}</div>
+              </div>
+              <span className="lp-risk-score">风险 {risk.score}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

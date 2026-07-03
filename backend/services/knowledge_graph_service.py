@@ -151,3 +151,58 @@ def _has_cycle() -> bool:
         return False
 
     return any(color.get(tag, 0) == 0 and dfs(tag) for tag in KNOWLEDGE_GRAPH)
+
+
+def predict_risks(graph: dict[str, Any]) -> list[dict[str, Any]]:
+    """基于图谱结构预测"尚未出错但很可能学不透"的高风险知识点。
+
+    思路：一个节点自己还没出错（available/locked），但它的**前置链**上有 weak
+    知识点——前置没学透，学它大概率也会卡。这是事前预警，区别于 weakpoint 的事后补救。
+
+    风险分 = 前置链上 weak 知识点的数量（越多说明地基越松）。已经是 weak/mastered
+    的节点不算风险（前者已在错题本，后者已掌握）。
+
+    返回按风险分降序：
+    [{"tag","label","score","blocking_weak":[卡点...],"reason"}...]
+    """
+    nodes = graph.get("nodes", [])
+    by_tag = {n["tag"]: n for n in nodes}
+    weak_tags = {n["tag"] for n in nodes if n["status"] == "weak"}
+    if not weak_tags:
+        return []
+
+    def upstream_weak(tag: str, seen: set[str] | None = None) -> set[str]:
+        """收集 tag 所有（传递）前置里处于 weak 状态的知识点。"""
+        seen = seen if seen is not None else set()
+        found: set[str] = set()
+        for prereq in by_tag.get(tag, {}).get("prereqs", []):
+            if prereq in seen:
+                continue
+            seen.add(prereq)
+            if prereq in weak_tags:
+                found.add(prereq)
+            found |= upstream_weak(prereq, seen)
+        return found
+
+    risks: list[dict[str, Any]] = []
+    for node in nodes:
+        if node["status"] not in ("available", "locked"):
+            continue  # 只预警"还没出错"的节点
+        blocking = sorted(upstream_weak(node["tag"]))
+        if not blocking:
+            continue
+        risks.append(
+            {
+                "tag": node["tag"],
+                "label": node["label"],
+                "score": len(blocking),
+                "blocking_weak": blocking,
+                "reason": f"前置「{('、'.join(blocking))}」尚未掌握，直接学容易卡住",
+            }
+        )
+
+    # 风险分高的优先；同分按图定义顺序稳定
+    order = [n["tag"] for n in nodes]
+    risks.sort(key=lambda r: (-r["score"], order.index(r["tag"])))
+    return risks
+

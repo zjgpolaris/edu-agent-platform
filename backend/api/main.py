@@ -68,7 +68,7 @@ from services.variant_service import get_or_create_variant, generate_variant
 from services.check_in_service import check_in, get_check_in_status, get_achievements, get_check_in_history
 from services.learning_preference_service import get_preferences, set_preferences, get_preference_schema
 from services.root_cause_service import analyze_root_cause, get_latest_root_cause, get_root_cause_summary
-from services.knowledge_graph_service import build_graph as build_knowledge_graph
+from services.knowledge_graph_service import build_graph as build_knowledge_graph, predict_risks as predict_knowledge_risks
 from tools.registry import list_tools
 
 from contextlib import asynccontextmanager
@@ -951,6 +951,7 @@ async def student_learning_path(student_id: str, actor: Actor = Depends(require_
             weak_topics=profile.weak_topics,
             weakpoint_tags=priority_topics,
         )
+        graph["at_risk"] = predict_knowledge_risks(graph)
         return {
             "student_id": student_id,
             "created_at": profile.updated_at,
