@@ -206,3 +206,69 @@ def predict_risks(graph: dict[str, Any]) -> list[dict[str, Any]]:
     risks.sort(key=lambda r: (-r["score"], order.index(r["tag"])))
     return risks
 
+
+def aggregate_class_risks(students: list[dict[str, Any]]) -> dict[str, Any]:
+    """把学生级风险抬到班级视角：找出全班共同的"地基薄弱点"。
+
+    对每个学生，用其错题 build_graph + predict_risks，再按"卡点前置知识点"
+    （at_risk 里的 blocking_weak）聚合——一个前置若同时卡住多名学生的多个下游，
+    说明它是需要系统讲解的地基。同时统计每个前置本身被多少学生标为 weak。
+
+    参数
+    ----
+    students: [{"student_id": str, "weak_tags": [tag...]}...]
+
+    返回
+    ----
+    {
+      "foundations": [{
+          "tag": 前置知识点,
+          "label": 展示名,
+          "weak_students": 直接把它当薄弱点的学生数,
+          "at_risk_students": 因它而下游受影响的学生数,
+          "downstream_risk_count": 它连累的下游风险节点总数（跨学生累加）,
+          "impact": 影响面综合分,
+      }...],  # 按 impact 降序
+      "total_students": int,
+    }
+    """
+    from collections import defaultdict
+
+    total = len(students)
+    weak_students: dict[str, set[str]] = defaultdict(set)
+    at_risk_students: dict[str, set[str]] = defaultdict(set)
+    downstream_count: dict[str, int] = defaultdict(int)
+
+    for stu in students:
+        sid = stu.get("student_id") or ""
+        weak_tags = stu.get("weak_tags") or []
+        graph = build_graph(weakpoint_tags=weak_tags)
+        for tag in {n["tag"] for n in graph["nodes"] if n["status"] == "weak"}:
+            weak_students[tag].add(sid)
+        for risk in predict_risks(graph):
+            for blocker in risk["blocking_weak"]:
+                at_risk_students[blocker].add(sid)
+                downstream_count[blocker] += 1
+
+    foundations: list[dict[str, Any]] = []
+    for tag in set(weak_students) | set(at_risk_students):
+        ws = len(weak_students.get(tag, set()))
+        ars = len(at_risk_students.get(tag, set()))
+        dc = downstream_count.get(tag, 0)
+        # 影响面：受影响学生（weak 或下游）为主，下游数量为辅
+        impact = len(weak_students.get(tag, set()) | at_risk_students.get(tag, set())) * 10 + dc
+        foundations.append(
+            {
+                "tag": tag,
+                "label": KNOWLEDGE_GRAPH.get(tag, {}).get("label", tag),
+                "weak_students": ws,
+                "at_risk_students": ars,
+                "downstream_risk_count": dc,
+                "impact": impact,
+            }
+        )
+
+    foundations.sort(key=lambda f: (-f["impact"], f["tag"]))
+    return {"foundations": foundations, "total_students": total}
+
+

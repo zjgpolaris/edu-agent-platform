@@ -64,6 +64,16 @@ type ClassTutorEff = {
   generated_at: string;
 };
 
+type RiskFoundation = {
+  tag: string;
+  label: string;
+  weak_students: number;
+  at_risk_students: number;
+  downstream_risk_count: number;
+  impact: number;
+};
+type ClassRisk = { foundations: RiskFoundation[]; total_students: number };
+
 export default function TeacherClassAnalyticsPage() {
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState<ClassAnalytics | null>(null);
@@ -71,6 +81,7 @@ export default function TeacherClassAnalyticsPage() {
   const [classHeatmap, setClassHeatmap] = useState<ClassMasteryHeatmap | null>(null);
   const [wrongAnalysis, setWrongAnalysis] = useState<ClassWrongAnalysis | null>(null);
   const [tutorEff, setTutorEff] = useState<ClassTutorEff | null>(null);
+  const [classRisk, setClassRisk] = useState<ClassRisk | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -94,11 +105,12 @@ export default function TeacherClassAnalyticsPage() {
     setLoading(true);
     setError("");
     try {
-      const [analyticsRes, heatmapRes, wrongRes, tutorRes] = await Promise.all([
+      const [analyticsRes, heatmapRes, wrongRes, tutorRes, riskRes] = await Promise.all([
         fetch(`${API}/api/teacher/class-analytics`, { headers: authHeaders(user.token) }),
         fetch(`${API}/api/teacher/class-mastery-heatmap`, { headers: authHeaders(user.token) }),
         fetch(`${API}/api/teacher/class-wrong-analysis`, { headers: authHeaders(user.token) }),
         fetch(`${API}/api/teacher/tutor-effectiveness`, { headers: authHeaders(user.token) }),
+        fetch(`${API}/api/teacher/class-risk-analysis`, { headers: authHeaders(user.token) }),
       ]);
       if (!analyticsRes.ok) throw new Error("获取班级学情失败");
       const data = await analyticsRes.json();
@@ -106,6 +118,7 @@ export default function TeacherClassAnalyticsPage() {
       if (heatmapRes.ok) setClassHeatmap(await heatmapRes.json());
       if (wrongRes.ok) setWrongAnalysis(await wrongRes.json());
       if (tutorRes.ok) setTutorEff(await tutorRes.json());
+      if (riskRes.ok) setClassRisk(await riskRes.json());
     } catch (err) {
       setError(err instanceof Error ? err.message : "获取班级学情失败");
     } finally {
@@ -311,6 +324,50 @@ export default function TeacherClassAnalyticsPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {classRisk && classRisk.foundations.length > 0 && (
+          <div className="analytics-section">
+            <div className="panel-heading-row">
+              <div>
+                <p className="section-kicker">FOUNDATION RISK</p>
+                <h3>地基薄弱点 · 建议系统讲解</h3>
+              </div>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted, #6b7280)" }}>
+                基于 {classRisk.total_students} 名学生的知识图谱前置链分析
+              </span>
+            </div>
+            <p style={{ fontSize: "0.78rem", color: "var(--text-muted, #6b7280)", margin: "0 0 12px" }}>
+              这些前置知识点没打牢，会连累后续多个知识点。相比单个错题，优先系统性补这里更省力。
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {classRisk.foundations.slice(0, 6).map((f) => (
+                <div
+                  key={f.tag}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "12px",
+                    padding: "10px 14px", borderRadius: "8px",
+                    background: "#fff7ed", border: "1px solid #fdba7433",
+                  }}
+                >
+                  <span style={{ fontWeight: 600, fontSize: "0.9rem", color: "#9a3412", minWidth: "6em" }}>
+                    {f.label}
+                  </span>
+                  <span style={{ fontSize: "0.78rem", color: "#6b7280", flex: 1 }}>
+                    {f.weak_students > 0 && `${f.weak_students} 人直接薄弱`}
+                    {f.weak_students > 0 && f.at_risk_students > 0 && " · "}
+                    {f.at_risk_students > 0 && `连累 ${f.at_risk_students} 人的 ${f.downstream_risk_count} 个后续知识点`}
+                  </span>
+                  <span style={{
+                    fontSize: "0.7rem", color: "#c2410c", whiteSpace: "nowrap",
+                    border: "1px solid #fdba7455", borderRadius: "4px", padding: "2px 8px",
+                  }}>
+                    影响 {f.impact}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}

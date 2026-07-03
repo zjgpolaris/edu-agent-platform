@@ -68,7 +68,7 @@ from services.variant_service import get_or_create_variant, generate_variant
 from services.check_in_service import check_in, get_check_in_status, get_achievements, get_check_in_history
 from services.learning_preference_service import get_preferences, set_preferences, get_preference_schema
 from services.root_cause_service import analyze_root_cause, get_latest_root_cause, get_root_cause_summary
-from services.knowledge_graph_service import build_graph as build_knowledge_graph, predict_risks as predict_knowledge_risks
+from services.knowledge_graph_service import build_graph as build_knowledge_graph, predict_risks as predict_knowledge_risks, aggregate_class_risks
 from tools.registry import list_tools
 
 from contextlib import asynccontextmanager
@@ -2822,6 +2822,45 @@ async def teacher_class_mastery_heatmap(actor: Actor = Depends(require_auth)):
             })
         result.sort(key=lambda x: (-x["student_count"], -x["avg_wrong"]))
         return {"tags": result, "total_students": total_students, "total_tags": len(result)}
+
+    return await run_in_threadpool(_fetch)
+
+
+@app.get("/api/teacher/class-risk-analysis")
+async def teacher_class_risk_analysis(actor: Actor = Depends(require_auth)):
+    """班级"地基薄弱点"分析：把学生级知识图谱风险预测抬到班级视角。
+
+    对每个学生用其错题构建知识图谱并预测风险，再按"卡点前置知识点"聚合——
+    一个前置若同时卡住多名学生的多个下游，说明它是需要系统讲解的地基。
+    帮教师从"谁错了什么"升级到"该系统性补哪个根节点"。
+
+    Returns:
+    {
+        "foundations": [
+            {"tag","label","weak_students","at_risk_students",
+             "downstream_risk_count","impact"}, ...  # 按 impact 降序
+        ],
+        "total_students": int,
+    }
+    """
+    require_teacher_actor(actor)
+
+    def _fetch():
+        from collections import defaultdict
+        from db.engine import get_connection
+        from sqlalchemy import text
+        _ensure = __import__("services.weakpoint_service", fromlist=["_ensure_table"])
+        _ensure._ensure_table()
+        with get_connection() as conn:
+            rows = conn.execute(
+                text("SELECT student_id, knowledge_tag FROM weakpoints"),
+            ).mappings().fetchall()
+
+        by_student: dict[str, list[str]] = defaultdict(list)
+        for r in rows:
+            by_student[r["student_id"]].append(r["knowledge_tag"])
+        students = [{"student_id": sid, "weak_tags": tags} for sid, tags in by_student.items()]
+        return aggregate_class_risks(students)
 
     return await run_in_threadpool(_fetch)
 

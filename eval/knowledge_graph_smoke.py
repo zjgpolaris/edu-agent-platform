@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from services.knowledge_graph_service import build_graph, predict_risks, _has_cycle
+from services.knowledge_graph_service import build_graph, predict_risks, aggregate_class_risks, _has_cycle
 
 
 def run_case(name: str, fn) -> bool:
@@ -123,6 +123,41 @@ def risk_score_reflects_weak_prereq_count() -> None:
     assert scores == sorted(scores, reverse=True), scores
 
 
+def class_empty_when_no_weak() -> None:
+    out = aggregate_class_risks([
+        {"student_id": "a", "weak_tags": []},
+        {"student_id": "b", "weak_tags": []},
+    ])
+    assert out["total_students"] == 2
+    assert out["foundations"] == []
+
+
+def class_shared_prereq_accumulates_impact() -> None:
+    # 两名学生都因"鸦片战争"薄弱而下游受影响 → 鸦片战争影响面最大
+    out = aggregate_class_risks([
+        {"student_id": "a", "weak_tags": ["鸦片战争"]},
+        {"student_id": "b", "weak_tags": ["鸦片战争"]},
+    ])
+    top = out["foundations"][0]
+    assert top["tag"] == "鸦片战争", top
+    # 两名学生都直接把它当薄弱点
+    assert top["weak_students"] == 2, top
+    # 且它连累了两名学生的下游
+    assert top["at_risk_students"] == 2, top
+    assert top["downstream_risk_count"] >= 2, top
+
+
+def class_sorted_by_impact() -> None:
+    out = aggregate_class_risks([
+        {"student_id": "a", "weak_tags": ["鸦片战争"]},        # 影响大量下游
+        {"student_id": "b", "weak_tags": ["鸦片战争"]},
+        {"student_id": "c", "weak_tags": ["五四运动"]},        # 叶子节点，无下游
+    ])
+    impacts = [f["impact"] for f in out["foundations"]]
+    assert impacts == sorted(impacts, reverse=True), impacts
+    assert out["foundations"][0]["tag"] == "鸦片战争"
+
+
 def main() -> None:
     cases = [
         ("root_node_available_by_default", root_node_available_by_default),
@@ -138,6 +173,9 @@ def main() -> None:
         ("downstream_flagged_at_risk", downstream_flagged_at_risk),
         ("weak_node_not_in_risk", weak_node_not_in_risk),
         ("risk_score_reflects_weak_prereq_count", risk_score_reflects_weak_prereq_count),
+        ("class_empty_when_no_weak", class_empty_when_no_weak),
+        ("class_shared_prereq_accumulates_impact", class_shared_prereq_accumulates_impact),
+        ("class_sorted_by_impact", class_sorted_by_impact),
     ]
     passed = sum(1 for name, fn in cases if run_case(name, fn))
     print(f"knowledge_graph_smoke={passed}/{len(cases)}")

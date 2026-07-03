@@ -149,7 +149,7 @@ backend/
 │   ├── today_plan.py              # 学生今日计划：作业到期/复习/薄弱点按优先级合成待办（纯函数+装配）
 │   ├── lecture_review_service.py  # 讲评课 AI 辅助：跨作业聚合错误→LLM 生成讲解提示/板书关键词/即时练习形式
 │   ├── variant_service.py         # 错题变式生成：wrong_count>=VARIANT_THRESHOLD 时 LLM 生成同 tag 不同题面变式题，含当日缓存
-│   ├── knowledge_graph_service.py # 知识图谱前置依赖：静态 DAG + 画像/错题推导节点状态（mastered/weak/available/locked）、下一步建议与薄弱点风险预测（前置链含 weak 的下游高风险点）
+│   ├── knowledge_graph_service.py # 知识图谱前置依赖：静态 DAG + 画像/错题推导节点状态（mastered/weak/available/locked）、下一步建议、薄弱点风险预测（前置链含 weak 的下游高风险点）与班级地基薄弱点聚合（aggregate_class_risks）
 │   └── weakpoint_service.py       # 错题本服务（掌握度证据计数：答错强化，连续答对达阈值才移除）
 │
 ├── textbook_learning/         # 教材学习
@@ -399,6 +399,7 @@ frontend/
 | GET | `/api/teacher/class-analytics` | 班级学情分析 |
 | GET | `/api/teacher/class-wrong-analysis` | 跨作业题目级错误聚合：按答错学生数降序展示最难的题（prompt/accuracy/student_count_wrong/wrong_options/来源作业），`?limit_assignments=10&top_n=15` |
 | GET | `/api/teacher/tutor-effectiveness` | 班级 AI 辅导效果：从 learning_events 聚合 auto_tutor 步骤，按知识点统计辅导次数/掌握率/active_students，`?days=30` |
+| GET | `/api/teacher/class-risk-analysis` | 班级「地基薄弱点」：逐生 build_graph+predict_risks，按卡点前置聚合，返回 foundations（tag/weak_students/at_risk_students/downstream_risk_count/impact，按 impact 降序）定位需系统讲解的根节点 |
 | GET | `/api/students/{student_id}/tutor-effectiveness` | 学生自己的辅导效果：按知识点统计掌握率+是否仍在错题本，`?days=30` |
 | POST | `/api/teacher/assignments/generate-questions` | AI 出题：按知识点批量 RAG 取材并生成单选题 / 判断题 / 简答题草稿，供教师修改确认；每题附带确定性结构质检结果 `quality`（level: ok/warn/error + issues），教师端以徽标标注需修正/可优化的题；可选 `semantic_check=true` 追加 LLM 语义质检（答案是否自洽、题干歧义、干扰项合理性），问题以「语义：」前缀并入 issues，失败/无凭证时优雅降级；语义质检会注入该教师历史上人工判定为 `bad_question` 的题作为 few-shot 反例，使质检随复核越用越准（自改进闭环） |
 | POST | `/api/teacher/assignments` | 创建作业（客观题+主观题），指定学生 |
@@ -761,7 +762,7 @@ frontend/
 | `learning_assistant_smoke.py` | 学习助手测试 |
 | `guardrails_smoke.py` | 防护机制测试 |
 | `weakpoints_smoke.py` | 错题本测试（含掌握度模型：连续答对才移除、答错重置连对、未跟踪 tag no-op），8 例 |
-| `knowledge_graph_smoke.py` | 知识图谱前置依赖测试（根节点 available、前置未掌握则 locked+locked_by、前置掌握解锁、错题标 weak、next_recommended 优先级、DAG 无环、图外孤立错题纳入、counts 一致）+ 薄弱点风险预测（前置链含 weak 则下游 at_risk、无 weak 时为空、weak 节点不重复计入、风险分反映 weak 前置数并降序），13 例离线，已接入 `run_core_evals.py`（CORE/SMOKE） |
+| `knowledge_graph_smoke.py` | 知识图谱前置依赖测试（根节点 available、前置未掌握则 locked+locked_by、前置掌握解锁、错题标 weak、next_recommended 优先级、DAG 无环、图外孤立错题纳入、counts 一致）+ 薄弱点风险预测（前置链含 weak 则下游 at_risk、无 weak 时为空、weak 节点不重复计入、风险分反映 weak 前置数并降序）+ 班级地基薄弱点聚合（多生共享前置累加影响面、无 weak 返回空、按 impact 降序），16 例离线，已接入 `run_core_evals.py`（CORE/SMOKE） |
 | `student_profile_smoke.py` | 学生档案测试 |
 | `homework_grading_smoke.py` | 作业批改测试 |
 | `learning_closure_smoke.py` | 作业-错题-复习-学情闭环测试 |
