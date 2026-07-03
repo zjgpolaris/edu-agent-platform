@@ -31,6 +31,7 @@ CORE_SUITES = [
     "student_profile_smoke",
     "homework_grading_smoke",
     "weakpoints_smoke",
+    "knowledge_graph_smoke",
     "learning_closure_smoke",
     "teacher_features_smoke",
     "review_system_smoke",
@@ -61,6 +62,7 @@ SMOKE_SUITES = [
     "student_profile_smoke",
     "homework_grading_smoke",
     "weakpoints_smoke",
+    "knowledge_graph_smoke",
     "learning_closure_smoke",
     "teacher_features_smoke",
     "review_system_smoke",
@@ -129,6 +131,7 @@ SUITE_FILES = {
     "preference_smoke": EVAL_DIR / "preference_smoke.py",
     "root_cause_smoke": EVAL_DIR / "root_cause_smoke.py",
     "class_matrix_smoke": EVAL_DIR / "class_matrix_smoke.py",
+    "knowledge_graph_smoke": EVAL_DIR / "knowledge_graph_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "history_character_smoke": {
@@ -344,6 +347,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     "trace_smoke": {
         "label": "Agent Runtime Trace Smoke",
         "category": "observability",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "knowledge_graph_smoke": {
+        "label": "知识图谱前置依赖 Smoke",
+        "category": "learning",
         "kind": "smoke",
         "priority": "p1",
     },

@@ -12,6 +12,20 @@ type Weakpoint = {
   correct_streak?: number;
 };
 type Milestone = { title: string; completed: boolean };
+type GraphNode = {
+  tag: string;
+  label: string;
+  grade?: string | null;
+  status: "mastered" | "weak" | "available" | "locked";
+  prereqs: string[];
+  locked_by: string[];
+};
+type KnowledgeGraph = {
+  nodes: GraphNode[];
+  edges: { from: string; to: string }[];
+  next_recommended: string | null;
+  counts: Record<string, number>;
+};
 type LearningPath = {
   student_id: string;
   updated_at?: string;
@@ -22,6 +36,7 @@ type LearningPath = {
   recommended_actions: string[];
   progress: Record<string, number>;
   milestones: Milestone[];
+  graph?: KnowledgeGraph;
 };
 
 const MASTERY_THRESHOLD = 2;
@@ -129,6 +144,41 @@ const CSS = `
 .lp-empty-c { font-family:'Ma Shan Zheng',serif;font-size:64px;color:var(--muted);opacity:.4;line-height:1;margin-bottom:20px; }
 .lp-empty-t { font-size:18px;font-weight:700;color:var(--ink);letter-spacing:.08em;margin-bottom:10px; }
 .lp-empty-s { font-size:13px;color:var(--muted);line-height:1.9;letter-spacing:.04em;margin-bottom:24px; }
+
+/* ── knowledge map (前置依赖图) ── */
+.lp-map { display:flex;flex-direction:column;gap:0; }
+.lp-map-layer { display:flex;flex-wrap:wrap;gap:8px;position:relative;padding:6px 0; }
+.lp-map-layer:not(:last-child)::after {
+  content:'';position:absolute;left:14px;bottom:-3px;width:1px;height:12px;
+  background:linear-gradient(to bottom,var(--border),transparent);
+}
+.lp-chip {
+  display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:3px;
+  border:1px solid var(--border);background:var(--paper-soft);
+  font-size:12px;letter-spacing:.03em;color:var(--ink-soft);position:relative;
+}
+.lp-chip-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0; }
+.lp-chip.mastered  { border-color:var(--gold);color:var(--ink); }
+.lp-chip.mastered  .lp-chip-dot { background:var(--gold); }
+.lp-chip.weak      { border-color:var(--cinnabar);color:var(--cinnabar);font-weight:600; }
+.lp-chip.weak      .lp-chip-dot { background:var(--cinnabar); }
+.lp-chip.available { border-color:var(--cinnabar);border-style:dashed;color:var(--ink); }
+.lp-chip.available .lp-chip-dot { background:transparent;border:1.5px solid var(--cinnabar); }
+.lp-chip.locked    { color:var(--muted);background:transparent;opacity:.7; }
+.lp-chip.locked    .lp-chip-dot { background:var(--border); }
+.lp-chip.next {
+  box-shadow:0 0 0 2px rgba(183,66,43,.18);animation:lpNext 1.8s ease-in-out infinite;
+}
+@keyframes lpNext { 0%,100%{box-shadow:0 0 0 2px rgba(183,66,43,.12)} 50%{box-shadow:0 0 0 3px rgba(183,66,43,.3)} }
+.lp-chip-lock { font-size:9px;color:var(--muted);letter-spacing:0; }
+.lp-map-legend { display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:10px;color:var(--muted); }
+.lp-map-legend span { display:inline-flex;align-items:center;gap:5px;letter-spacing:.06em; }
+.lp-map-legend i { width:7px;height:7px;border-radius:50%;display:inline-block; }
+.lp-map-next {
+  margin-top:14px;padding:11px 14px;border:1px solid var(--cinnabar);border-radius:3px;
+  background:rgba(183,66,43,.05);font-size:12px;color:var(--ink-soft);letter-spacing:.03em;line-height:1.7;
+}
+.lp-map-next b { color:var(--cinnabar); }
 `;
 
 function InjectStyles() {
@@ -148,6 +198,87 @@ function formatDate(iso?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+const STATUS_LABEL: Record<GraphNode["status"], string> = {
+  mastered: "已掌握",
+  weak: "需强化",
+  available: "可开始",
+  locked: "未解锁",
+};
+
+/** 按前置依赖深度把节点分层：无前置在第 0 层，其余取所有前置层数 +1。 */
+function layerNodes(nodes: GraphNode[]): GraphNode[][] {
+  const byTag = new Map(nodes.map((n) => [n.tag, n]));
+  const depth = new Map<string, number>();
+  const visiting = new Set<string>();
+  const depthOf = (tag: string): number => {
+    if (depth.has(tag)) return depth.get(tag)!;
+    if (visiting.has(tag)) return 0; // 环保护（后端已保证无环，这里兜底）
+    visiting.add(tag);
+    const node = byTag.get(tag);
+    const prereqs = (node?.prereqs ?? []).filter((p) => byTag.has(p));
+    const d = prereqs.length === 0 ? 0 : Math.max(...prereqs.map(depthOf)) + 1;
+    visiting.delete(tag);
+    depth.set(tag, d);
+    return d;
+  };
+  const layers: GraphNode[][] = [];
+  for (const n of nodes) {
+    const d = depthOf(n.tag);
+    (layers[d] ??= []).push(n);
+  }
+  return layers.filter(Boolean);
+}
+
+function KnowledgeMap({ graph }: { graph: KnowledgeGraph }) {
+  const layers = layerNodes(graph.nodes);
+  const nextTag = graph.next_recommended;
+  const nextNode = graph.nodes.find((n) => n.tag === nextTag);
+  return (
+    <div className="lp-sec">
+      <div className="lp-sec-title">知识地图</div>
+      <div className="lp-map">
+        {layers.map((layer, i) => (
+          <div className="lp-map-layer" key={i}>
+            {layer.map((node) => (
+              <span
+                key={node.tag}
+                className={`lp-chip ${node.status}${node.tag === nextTag ? " next" : ""}`}
+                title={
+                  node.status === "locked" && node.locked_by.length > 0
+                    ? `需先掌握：${node.locked_by.join("、")}`
+                    : STATUS_LABEL[node.status]
+                }
+              >
+                <span className="lp-chip-dot" />
+                {node.label}
+                {node.status === "locked" && node.locked_by.length > 0 && (
+                  <span className="lp-chip-lock">🔒</span>
+                )}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="lp-map-legend">
+        <span><i style={{ background: "var(--gold)" }} />已掌握</span>
+        <span><i style={{ background: "var(--cinnabar)" }} />需强化</span>
+        <span><i style={{ border: "1.5px solid var(--cinnabar)" }} />可开始</span>
+        <span><i style={{ background: "var(--border)" }} />未解锁</span>
+      </div>
+
+      {nextNode && (
+        <div className="lp-map-next">
+          下一步建议学习：<b>{nextNode.label}</b>
+          {nextNode.status === "weak"
+            ? " —— 你在这里有错题，先把它攻克。"
+            : " —— 前置知识已就绪，可以开始了。"}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function LearningPathPage() {
@@ -268,6 +399,10 @@ export default function LearningPathPage() {
               })}
             </div>
           </div>
+        )}
+
+        {path?.graph && path.graph.nodes.length > 0 && (
+          <KnowledgeMap graph={path.graph} />
         )}
 
         {(actions.length > 0 || milestones.length > 0) && (

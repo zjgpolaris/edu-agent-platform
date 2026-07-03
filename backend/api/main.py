@@ -68,6 +68,7 @@ from services.variant_service import get_or_create_variant, generate_variant
 from services.check_in_service import check_in, get_check_in_status, get_achievements, get_check_in_history
 from services.learning_preference_service import get_preferences, set_preferences, get_preference_schema
 from services.root_cause_service import analyze_root_cause, get_latest_root_cause, get_root_cause_summary
+from services.knowledge_graph_service import build_graph as build_knowledge_graph
 from tools.registry import list_tools
 
 from contextlib import asynccontextmanager
@@ -945,6 +946,11 @@ async def student_learning_path(student_id: str, actor: Actor = Depends(require_
             {"title": action, "completed": False}
             for action in review_plan.get("recommended_actions", [])
         ]
+        graph = build_knowledge_graph(
+            strong_topics=profile.strong_topics,
+            weak_topics=profile.weak_topics,
+            weakpoint_tags=priority_topics,
+        )
         return {
             "student_id": student_id,
             "created_at": profile.updated_at,
@@ -956,6 +962,7 @@ async def student_learning_path(student_id: str, actor: Actor = Depends(require_
             "recommended_actions": review_plan.get("recommended_actions", []),
             "progress": progress,
             "milestones": milestones,
+            "graph": graph,
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
