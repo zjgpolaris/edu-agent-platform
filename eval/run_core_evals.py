@@ -85,6 +85,7 @@ SMOKE_SUITES = [
     "tutor_effectiveness_smoke",
     "check_in_smoke",
     "preference_smoke",
+    "root_cause_smoke",
 ]
 SUITE_FILES = {
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
@@ -125,6 +126,7 @@ SUITE_FILES = {
     "tutor_effectiveness_smoke": EVAL_DIR / "tutor_effectiveness_smoke.py",
     "check_in_smoke": EVAL_DIR / "check_in_smoke.py",
     "preference_smoke": EVAL_DIR / "preference_smoke.py",
+    "root_cause_smoke": EVAL_DIR / "root_cause_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "history_character_smoke": {
@@ -309,6 +311,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "preference_smoke": {
         "label": "学习偏好配置 Smoke",
+        "category": "student",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "root_cause_smoke": {
+        "label": "薄弱点根因诊断 Smoke",
         "category": "student",
         "kind": "smoke",
         "priority": "p1",

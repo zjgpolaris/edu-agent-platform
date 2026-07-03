@@ -67,6 +67,7 @@ from services.weakpoint_service import get_weakpoints, record_weakpoint, delete_
 from services.variant_service import get_or_create_variant, generate_variant
 from services.check_in_service import check_in, get_check_in_status, get_achievements, get_check_in_history
 from services.learning_preference_service import get_preferences, set_preferences, get_preference_schema
+from services.root_cause_service import analyze_root_cause, get_latest_root_cause, get_root_cause_summary
 from tools.registry import list_tools
 
 from contextlib import asynccontextmanager
@@ -3436,3 +3437,52 @@ async def student_set_preferences(
 async def preference_schema():
     """获取偏好维度定义（供前端渲染表单）"""
     return get_preference_schema()
+
+
+# ── 薄弱点根因诊断 ──────────────────────────────────────────────────────
+class AnalyzeRootCauseRequest(BaseModel):
+    question_text: str | None = None
+    student_answer: str
+    correct_answer: str
+    wrong_count: int = 1
+
+
+@app.post("/api/students/{student_id}/weakpoints/{knowledge_tag}/analyze")
+async def analyze_weakpoint_root_cause(
+    student_id: str,
+    knowledge_tag: str,
+    req: AnalyzeRootCauseRequest,
+    actor: Actor = Depends(require_auth),
+):
+    """分析错题根因（概念模糊/知识遗忘/审题失误/粗心大意）"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(
+        analyze_root_cause,
+        student_id,
+        knowledge_tag,
+        req.question_text or "",
+        req.student_answer,
+        req.correct_answer,
+        req.wrong_count,
+    )
+
+
+@app.get("/api/students/{student_id}/weakpoints/{knowledge_tag}/root-cause")
+async def get_weakpoint_root_cause(
+    student_id: str,
+    knowledge_tag: str,
+    actor: Actor = Depends(require_auth),
+):
+    """获取某知识点最新的根因诊断结果"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(get_latest_root_cause, student_id, knowledge_tag)
+
+
+@app.get("/api/students/{student_id}/root-cause/summary")
+async def get_student_root_cause_summary(
+    student_id: str,
+    actor: Actor = Depends(require_auth),
+):
+    """获取学生所有知识点的根因分布统计"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(get_root_cause_summary, student_id)

@@ -30,6 +30,7 @@ SMOKE_TESTS = [
     "tutor_effectiveness_smoke.py",
     "check_in_smoke.py",
     "preference_smoke.py",
+    "root_cause_smoke.py",
 ]
 
 
