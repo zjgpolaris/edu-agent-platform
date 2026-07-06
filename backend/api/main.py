@@ -68,6 +68,7 @@ from services.variant_service import get_or_create_variant, generate_variant
 from services.check_in_service import check_in, get_check_in_status, get_achievements, get_check_in_history
 from services.learning_preference_service import get_preferences, set_preferences, get_preference_schema
 from services.root_cause_service import analyze_root_cause, get_latest_root_cause, get_root_cause_summary
+from services.weekly_summary_service import build_weekly_summary
 from services.knowledge_graph_service import build_graph as build_knowledge_graph, predict_risks as predict_knowledge_risks, aggregate_class_risks
 from tools.registry import list_tools
 
@@ -3113,6 +3114,13 @@ async def student_learning_report(
         return report
 
     return await run_in_threadpool(_fetch)
+
+
+@app.get("/api/students/{student_id}/weekly-summary")
+async def student_weekly_summary(student_id: str, actor: Actor = Depends(require_auth)):
+    """学生周报：聚合本周学习数据，生成自然语言小结与下周建议（LLM，降级规则模板）。"""
+    assert_student_access(actor, student_id)
+    return await run_in_threadpool(build_weekly_summary, student_id)
 
 
 # ── 教师布置作业工作流 ──────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import TodayPlanCard from "./TodayPlanCard";
+import WeeklySummaryCard from "./WeeklySummaryCard";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -128,6 +129,7 @@ export default function StudentDashboardPage() {
       </section>
 
       <TodayPlanCard />
+      <WeeklySummaryCard />
 
       <section className="workbench-overview-grid" aria-label="今日任务">
         <div className="workbench-metric student-metric">
