@@ -29,7 +29,7 @@ fake_rag.splitter = _SmokeSplitter()
 sys.modules["rag.knowledge_base"] = fake_rag
 
 from materials.schema import MaterialPage, MaterialSaveRequest
-from materials.service import save_material_for_rag, get_saved_material, delete_saved_material
+from materials.service import save_material_for_rag, get_saved_material, delete_saved_material, _chunk_cited
 from materials.store import MaterialNotFoundError, get_material_chunks, init_material_store
 
 
@@ -97,12 +97,28 @@ def delete_removes_rows() -> None:
     raise AssertionError("deleted material should not be readable")
 
 
+def chunk_citation_detection() -> None:
+    # 显式引用 [片段2] 的答案：片段2 已引用，片段1 未引用
+    answer = "洋务运动主张学习西方先进技术。[片段2]（依据来自第 2 页）"
+    assert _chunk_cited(answer, 2) is True, "[片段2] 应判为已引用"
+    assert _chunk_cited(answer, 1) is False, "未出现的 [片段1] 应判为未引用"
+    # 边界：片段1 不应误命中 片段10
+    assert _chunk_cited("参见 [片段10] 的说明。", 1) is False, "片段1 不应误命中片段10"
+    assert _chunk_cited("参见 [片段10] 的说明。", 10) is True, "片段10 应判为已引用"
+    # 容错：带空格 / 前导零
+    assert _chunk_cited("见 片段 3 处。", 3) is True, "片段 3（带空格）应判为已引用"
+    assert _chunk_cited("见 片段03 处。", 3) is True, "片段03（前导零）应判为已引用"
+    # 空答案不报错
+    assert _chunk_cited("", 1) is False
+
+
 def main() -> None:
     init_material_store()
     cases = [
         ("save_preserves_pages", lambda: save_preserves_pages()),
         ("owner_isolation", owner_isolation),
         ("delete_removes_rows", delete_removes_rows),
+        ("chunk_citation_detection", chunk_citation_detection),
     ]
     passed = sum(1 for name, fn in cases if run_case(name, fn))
     print(f"material_rag_smoke={passed}/{len(cases)}")

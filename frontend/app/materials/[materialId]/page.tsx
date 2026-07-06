@@ -42,10 +42,27 @@ type MaterialSource = {
   snippet: string;
 };
 
+type RagDebugChunk = {
+  chunk_id: string;
+  title: string;
+  page?: number | null;
+  score: number;
+  source_mode: string;
+  snippet: string;
+  used: boolean;
+};
+
+type RagDebugInfo = {
+  query: string;
+  total_chunks_retrieved: number;
+  chunks: RagDebugChunk[];
+};
+
 type MaterialAnswerResponse = {
   material_id: string;
   answer: string;
   sources: MaterialSource[];
+  rag_debug?: RagDebugInfo | null;
 };
 
 function formatDate(value: string) {
@@ -66,6 +83,7 @@ export default function MaterialDetailPage() {
   const [askLoading, setAskLoading] = useState(false);
   const [askError, setAskError] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   useEffect(() => {
     const token = user?.token;
@@ -107,7 +125,7 @@ export default function MaterialDetailPage() {
         method: "POST",
         token: user.token,
         includeClientSession: true,
-        body: { question, k: 4 },
+        body: { question, k: 4, debug: true },  // 开启 RAG 调试模式
         fallbackMessage: "资料问答失败，请稍后重试",
       });
       setAnswer(data);
@@ -209,7 +227,74 @@ export default function MaterialDetailPage() {
               <div className="material-answer-card">
                 <strong>资料回答</strong>
                 <p>{answer.answer}</p>
-                {answer.sources.length > 0 && <div className="material-source-list"><span>引用来源</span>{answer.sources.map((source) => <article key={source.chunk_id} className="material-source-card"><strong>{source.title} · 第 {source.page || 1} 页</strong><em>{source.source_mode} · score {source.score.toFixed(2)}</em><p>{source.snippet}</p></article>)}</div>}
+                {answer.sources.length > 0 && (
+                  <div className="material-source-list">
+                    <span>引用来源</span>
+                    {answer.sources.map((source) => (
+                      <article key={source.chunk_id} className="material-source-card">
+                        <strong>{source.title} · 第 {source.page || 1} 页</strong>
+                        <em>{source.source_mode} · score {source.score.toFixed(2)}</em>
+                        <p>{source.snippet}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+
+                {/* RAG Inspector 面板 */}
+                {answer.rag_debug && (
+                  <div style={{ marginTop: "1rem", border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden" }}>
+                    <button
+                      onClick={() => setInspectorOpen(o => !o)}
+                      style={{
+                        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "8px 14px", background: inspectorOpen ? "#1e293b" : "#f8fafc",
+                        color: inspectorOpen ? "#94a3b8" : "#475569",
+                        border: "none", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600,
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      <span>🔍 RAG Inspector · {answer.rag_debug.total_chunks_retrieved} 片段检索 · {answer.rag_debug.chunks.filter(c => c.used).length} 已引用</span>
+                      <span>{inspectorOpen ? "▲ 收起" : "▼ 展开"}</span>
+                    </button>
+
+                    {inspectorOpen && (
+                      <div style={{ background: "#0f172a", padding: "14px 16px", fontFamily: "monospace", fontSize: "0.75rem" }}>
+                        <div style={{ color: "#94a3b8", marginBottom: 10 }}>
+                          query: <span style={{ color: "#e2e8f0" }}>&quot;{answer.rag_debug.query}&quot;</span>
+                        </div>
+                        {answer.rag_debug.chunks.map((chunk, i) => (
+                          <div key={chunk.chunk_id} style={{
+                            marginBottom: 10, padding: "10px 12px", borderRadius: 4,
+                            background: "#1e293b", borderLeft: `3px solid ${chunk.score > 0.7 ? "#4ade80" : chunk.score > 0.4 ? "#facc15" : "#f87171"}`,
+                            opacity: chunk.used ? 1 : 0.6,
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                              <span style={{ color: "#60a5fa", fontWeight: 600 }}>片段 {i + 1} · {chunk.title} p.{chunk.page || 1}</span>
+                              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <span style={{ color: chunk.score > 0.7 ? "#4ade80" : chunk.score > 0.4 ? "#facc15" : "#f87171" }}>
+                                  score: {chunk.score.toFixed(3)}
+                                </span>
+                                <span style={{ color: "#64748b", fontSize: "0.7rem" }}>{chunk.source_mode}</span>
+                                {chunk.used ? (
+                                  <span style={{ color: "#22c55e", fontSize: "0.7rem" }}>✓ 已引用</span>
+                                ) : (
+                                  <span style={{ color: "#64748b", fontSize: "0.7rem" }}>○ 未引用</span>
+                                )}
+                              </span>
+                            </div>
+                            {/* score 进度条 */}
+                            <div style={{ height: 3, borderRadius: 2, background: "#334155", marginBottom: 6 }}>
+                              <div style={{ height: "100%", borderRadius: 2, width: `${Math.min(chunk.score * 100, 100)}%`, background: chunk.score > 0.7 ? "#4ade80" : chunk.score > 0.4 ? "#facc15" : "#f87171" }} />
+                            </div>
+                            <div style={{ color: "#94a3b8", lineHeight: 1.5 }}>
+                              {chunk.snippet.length > 150 ? chunk.snippet.slice(0, 150) + "…" : chunk.snippet}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </aside>

@@ -124,6 +124,7 @@ class MaterialDetailResponse(BaseModel):
 class MaterialQuestionRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     k: int = Field(default=4, ge=1, le=8)
+    debug: bool = Field(default=False, description="是否返回 RAG 检索调试信息")
 
 
 class MaterialSource(BaseModel):
@@ -136,7 +137,24 @@ class MaterialSource(BaseModel):
     snippet: str
 
 
+class RagDebugChunk(BaseModel):
+    chunk_id: str
+    title: str
+    page: int | None = None
+    score: float
+    source_mode: str
+    snippet: str
+    used: bool = True  # 该 chunk 是否被答案以 [片段N] 显式引用
+
+
+class RagDebugInfo(BaseModel):
+    query: str
+    total_chunks_retrieved: int
+    chunks: list[RagDebugChunk] = Field(default_factory=list)
+
+
 class MaterialAnswerResponse(BaseModel):
     material_id: str
     answer: str
     sources: list[MaterialSource] = Field(default_factory=list)
+    rag_debug: RagDebugInfo | None = Field(default=None, description="RAG 检索调试信息，仅 debug=true 时返回")
