@@ -292,9 +292,28 @@ export default function TeacherClassAnalyticsPage() {
                 <p className="section-kicker">MASTERY HEATMAP</p>
                 <h3>班级知识点掌握度热力图</h3>
               </div>
-              <span style={{ fontSize: "0.78rem", color: "var(--text-muted, #6b7280)" }}>
-                {classHeatmap.total_tags} 个知识点 · {classHeatmap.total_students} 名学生有记录
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <span style={{ fontSize: "0.78rem", color: "var(--text-muted, #6b7280)" }}>
+                  {classHeatmap.total_tags} 个知识点 · {classHeatmap.total_students} 名学生有记录
+                </span>
+                <Link
+                  href="/teacher/class-analytics/knowledge-matrix"
+                  style={{
+                    fontSize: "0.8rem",
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    background: "#3b82f6",
+                    color: "#fff",
+                    textDecoration: "none",
+                    fontWeight: 600,
+                    transition: "background 0.2s",
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "#2563eb"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "#3b82f6"}
+                >
+                  查看详细矩阵 →
+                </Link>
+              </div>
             </div>
             <p style={{ fontSize: "0.78rem", color: "var(--text-muted, #6b7280)", margin: "0 0 12px" }}>
               颜色深浅反映班级平均掌握强度，红色=普遍薄弱，绿色=普遍掌握。点击知识点可在教学建议中重点关注。

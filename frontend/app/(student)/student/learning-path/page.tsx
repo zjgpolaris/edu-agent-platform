@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
@@ -258,15 +258,76 @@ function KnowledgeMap({ graph }: { graph: KnowledgeGraph }) {
   const layers = layerNodes(graph.nodes);
   const nextTag = graph.next_recommended;
   const nextNode = graph.nodes.find((n) => n.tag === nextTag);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [nodePositions, setNodePositions] = useState<Map<string, {x: number; y: number}>>(new Map());
+
+  // 收集节点位置用于绘制连线
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const positions = new Map<string, {x: number; y: number}>();
+    const chips = mapRef.current.querySelectorAll('[data-node-tag]');
+    chips.forEach((chip) => {
+      const tag = chip.getAttribute('data-node-tag');
+      if (!tag) return;
+      const rect = chip.getBoundingClientRect();
+      const containerRect = mapRef.current!.getBoundingClientRect();
+      positions.set(tag, {
+        x: rect.left - containerRect.left + rect.width / 2,
+        y: rect.top - containerRect.top + rect.height / 2,
+      });
+    });
+    setNodePositions(positions);
+  }, [layers]);
+
   return (
     <div className="lp-sec">
       <div className="lp-sec-title">知识地图</div>
-      <div className="lp-map">
+      <div className="lp-map" ref={mapRef} style={{ position: 'relative' }}>
+        {/* SVG 连线层（背景） */}
+        {nodePositions.size > 0 && (
+          <svg
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          >
+            <defs>
+              <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,8 L8,4 z" fill="rgba(183,66,43,0.2)" />
+              </marker>
+            </defs>
+            {graph.edges.map((edge, i) => {
+              const from = nodePositions.get(edge.from);
+              const to = nodePositions.get(edge.to);
+              if (!from || !to) return null;
+              return (
+                <line
+                  key={`${edge.from}-${edge.to}-${i}`}
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  stroke="rgba(183,66,43,0.2)"
+                  strokeWidth="1.5"
+                  strokeDasharray="3,3"
+                  markerEnd="url(#arrow)"
+                />
+              );
+            })}
+          </svg>
+        )}
+        {/* 节点层（前景） */}
         {layers.map((layer, i) => (
-          <div className="lp-map-layer" key={i}>
+          <div className="lp-map-layer" key={i} style={{ position: 'relative', zIndex: 1 }}>
             {layer.map((node) => (
               <span
                 key={node.tag}
+                data-node-tag={node.tag}
                 className={`lp-chip ${node.status}${node.tag === nextTag ? " next" : ""}`}
                 title={
                   node.status === "locked" && node.locked_by.length > 0
