@@ -192,6 +192,7 @@ class AutoTutorStartRequest(BaseModel):
     student_id: str = Field(min_length=1, max_length=128)
     grade: str | None = None
     focus_tags: list[str] | None = None  # 作业错题引导：优先讲解这些知识点
+    focus_reason: str | None = Field(default=None, max_length=200)  # 错题本根因诊断错因，指导针对性教学
 
 
 class AutoTutorAnswerRequest(BaseModel):
@@ -1875,6 +1876,7 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
             actor_role=actor_role,
             trace_id=trace_id,
             focus_tags=req.focus_tags or None,
+            focus_reason=req.focus_reason or None,
         )
 
 

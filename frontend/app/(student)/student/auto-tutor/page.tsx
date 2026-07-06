@@ -63,6 +63,15 @@ type SessionState = {
   last_answer_correct?: boolean;
 };
 
+type RootCauseInfo = {
+  root_cause: string;
+  label: string;
+  icon: string;
+  description: string;
+  tip: string;
+  confidence?: number;
+} | null;
+
 const difficultyLabel: Record<string, string> = { easy: "基础", medium: "进阶", hard: "挑战" };
 const adjustmentLabel: Record<string, string> = {
   reteach: "补讲后重测",
@@ -109,15 +118,38 @@ function AutoTutorInner() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("准备就绪");
   const [selected, setSelected] = useState<string | null>(null);
+  const [rootCause, setRootCause] = useState<RootCauseInfo>(null);
   const traceRef = useRef<HTMLDivElement>(null);
 
-  // 从 URL ?focus=知识点 读取作业跳转带来的聚焦知识点
+  // 从 URL ?focus=知识点 读取作业/错题本跳转带来的聚焦知识点
   const focusTag = searchParams?.get("focus") ?? null;
 
   const headers = useMemo(
     () => ({ "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) }),
     [user?.token]
   );
+
+  // 若带 focus 知识点，拉取该点的根因诊断，用于让 agent 针对真实错因规划
+  useEffect(() => {
+    if (!focusTag || !studentId || !user?.token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiBaseUrl}/api/students/${studentId}/weakpoints/${encodeURIComponent(focusTag)}/root-cause`,
+          { headers }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data && data.label) setRootCause(data as RootCauseInfo);
+      } catch {
+        /* 根因缺失时静默降级为纯 focus 规划 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [focusTag, studentId, user?.token, headers]);
 
   const start = useCallback(async () => {
     if (!studentId || loading) return;
@@ -128,6 +160,7 @@ function AutoTutorInner() {
     try {
       const body: Record<string, unknown> = { student_id: studentId };
       if (focusTag) body.focus_tags = [focusTag];
+      if (rootCause?.label) body.focus_reason = `${rootCause.label}：${rootCause.description}`;
       const res = await fetch(`${apiBaseUrl}/api/autotutor/start`, {
         method: "POST",
         headers,
@@ -143,7 +176,7 @@ function AutoTutorInner() {
     } finally {
       setLoading(false);
     }
-  }, [studentId, loading, headers, focusTag]);
+  }, [studentId, loading, headers, focusTag, rootCause]);
 
   async function answer(letter: string) {
     if (!session || loading || session.status !== "awaiting_answer") return;
@@ -213,7 +246,12 @@ function AutoTutorInner() {
             <>
               {focusTag && (
                 <p style={{ fontSize: 12, color: "var(--jade-dark,#2f6f4f)", margin: "4px 0 8px" }}>
-                  将优先讲解你作业中答错的「{focusTag}」
+                  将优先讲解你的薄弱知识点「{focusTag}」
+                </p>
+              )}
+              {focusTag && rootCause && (
+                <p style={{ fontSize: 12, color: "#b87a00", margin: "0 0 8px", lineHeight: 1.5 }}>
+                  {rootCause.icon} 错因诊断：{rootCause.label} — {rootCause.description} agent 会据此调整讲法。
                 </p>
               )}
               <button type="button" className="learning-tool-action" onClick={() => void start()} disabled={loading || !studentId}>

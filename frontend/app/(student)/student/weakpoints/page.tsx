@@ -299,6 +299,15 @@ function WeakCard({ wp, onDelete, deleting }: { wp: Weakpoint; onDelete: (tag: s
         复习 →
       </Link>
 
+      <Link
+        href={`/student/auto-tutor?focus=${encodeURIComponent(wp.knowledge_tag)}`}
+        className="primary-link"
+        title="让 AutoTutor 针对这个薄弱点（结合错因诊断）自主规划一节课"
+        style={{ fontSize: "0.82rem", flexShrink: 0, fontWeight: 500, color: "#2f6f4f" }}
+      >
+        AutoTutor 精讲 →
+      </Link>
+
       <button
         onClick={() => onDelete(wp.knowledge_tag)}
         disabled={isDeleting}

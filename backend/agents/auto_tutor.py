@@ -238,7 +238,7 @@ def _match_source_tag(knowledge_point: str, candidate_tags: list[str]) -> str | 
     return best
 
 
-def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], profile: Any, focus_tags: list[str] | None = None) -> list[LessonStep]:
+def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], profile: Any, focus_tags: list[str] | None = None, focus_reason: str | None = None) -> list[LessonStep]:
     weak_topics = list(getattr(profile, "weak_topics", []) or [])
     recent_topics = list(getattr(profile, "recent_topics", []) or [])
     fallback_steps = _fallback_plan(weakpoints, weak_topics, recent_topics)
@@ -249,6 +249,13 @@ def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], prof
     focus_line = (
         f"\n本节课必须优先讲解（来自学生刚做错的作业）：{('、'.join(focus_tags))}，把它们排在计划最前。"
         if focus_tags else ""
+    )
+    # 来自错题本根因诊断的错因提示：让计划针对真实错因调整教学策略
+    reason_line = (
+        f"\n针对优先讲解知识点的错因诊断：{focus_reason}。"
+        "请据此调整教学策略——概念模糊→重讲核心概念并举例；知识遗忘→先带背关键史实再检验；"
+        "审题失误→强调圈画题干关键词；粗心大意→检验时提示复查。"
+        if focus_reason else ""
     )
 
     # 注入学生偏好设置
@@ -273,7 +280,7 @@ def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], prof
                 f"错题本薄弱点：{weak_summary}\n"
                 f"画像薄弱主题：{('、'.join(weak_topics[:6]) or '无')}\n"
                 f"近期学习主题：{('、'.join(recent_topics[:6]) or '无')}\n"
-                f"{focus_line}\n"
+                f"{focus_line}{reason_line}\n"
                 "请生成本节课计划。"
             ),
         },
@@ -681,6 +688,7 @@ def start_session(
     actor_role: str | None = None,
     trace_id: str | None = None,
     focus_tags: list[str] | None = None,
+    focus_reason: str | None = None,
 ) -> dict[str, Any]:
     trace_id = trace_id or current_trace_id() or uuid4().hex
     set_trace_id(trace_id)
@@ -709,7 +717,7 @@ def start_session(
         weakpoints = [w for w in weakpoints if w["knowledge_tag"] in focus_set] + extra + [w for w in weakpoints if w["knowledge_tag"] not in focus_set]
     if not state.grade:
         state.grade = getattr(profile, "grade", None)
-    state.lesson_plan = _generate_plan(state, weakpoints, profile, focus_tags=focus_tags)
+    state.lesson_plan = _generate_plan(state, weakpoints, profile, focus_tags=focus_tags, focus_reason=focus_reason)
     _emit(
         state,
         "plan",
