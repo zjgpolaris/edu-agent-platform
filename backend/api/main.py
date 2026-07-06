@@ -2325,6 +2325,46 @@ async def eval_run(req: EvalRunRequest, actor: Actor = Depends(require_auth)):
     return summary
 
 
+@app.get("/api/eval/run-stream")
+async def eval_run_stream(suite: str = "quick", actor: Actor = Depends(require_auth)):
+    """SSE：流式推送 eval 运行进度，每个 suite 完成后 emit 一条结构化事件。"""
+    require_eval_actor(actor)
+    runner = load_eval_runner()
+
+    if suite not in ("quick", "all") and suite not in runner.SUITE_FILES:
+        raise HTTPException(status_code=400, detail=f"unknown suite: {suite}")
+
+    names: list[str]
+    if suite == "all":
+        names = runner.CORE_SUITES
+    elif suite == "quick":
+        names = runner.QUICK_SUITES
+    else:
+        names = [suite]
+
+    async def generate():
+        # 开始事件
+        yield f"data: {json.dumps({'type': 'start', 'total': len(names)})}\n\n"
+        results = []
+        for i, name in enumerate(names):
+            yield f"data: {json.dumps({'type': 'running', 'suite': name, 'index': i})}\n\n"
+            try:
+                r = await run_in_threadpool(runner.run_suite, name)
+                results.append(r)
+                yield f"data: {json.dumps({'type': 'suite_done', 'suite': name, 'ok': r.ok, 'passed': r.passed_cases or 0, 'total': r.total_cases or 0, 'duration': round(r.duration_sec or 0, 2), 'index': i})}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'suite_error', 'suite': name, 'error': str(exc), 'index': i})}\n\n"
+        # 汇总
+        try:
+            summary = runner.build_json_summary(results, include_output=True)
+            runner.write_reports(summary)
+            yield f"data: {json.dumps({'type': 'done', 'summary': summary})}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'done_error', 'error': str(exc)})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @app.get("/api/eval/history")
 async def eval_history(limit: int = 20, actor: Actor = Depends(require_auth)):
     require_eval_actor(actor)

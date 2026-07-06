@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 
@@ -143,6 +143,31 @@ type HistorySnapshot = {
   metrics?: EvalTopLevelMetrics;
 };
 
+function snapRate(snap: HistorySnapshot): number | null {
+  return snap.summary?.pass_rate ?? (snap.passed_cases != null && snap.total_cases ? snap.passed_cases / snap.total_cases : null);
+}
+
+// 回归告警阈值：通过率相对上次下跌达到 warn/error 阈值时提示
+const REGRESSION_WARN = 0.02;
+const REGRESSION_ERROR = 0.08;
+
+type RegressionAlert = { severity: "warn" | "error"; currRate: number; prevRate: number; delta: number; newlyFailed: boolean };
+
+// 比较最近相邻两次快照，返回回归告警（无退化则 null）
+function detectRegression(snaps: HistorySnapshot[]): RegressionAlert | null {
+  if (snaps.length < 2) return null;
+  const curr = snaps[snaps.length - 1];
+  const prev = snaps[snaps.length - 2];
+  const c = snapRate(curr);
+  const p = snapRate(prev);
+  const newlyFailed = prev.ok === true && curr.ok === false;
+  if (c == null || p == null) return newlyFailed ? { severity: "error", currRate: 0, prevRate: 0, delta: 0, newlyFailed } : null;
+  const delta = c - p;
+  if (delta <= -REGRESSION_ERROR || newlyFailed) return { severity: "error", currRate: c, prevRate: p, delta, newlyFailed };
+  if (delta <= -REGRESSION_WARN) return { severity: "warn", currRate: c, prevRate: p, delta, newlyFailed };
+  return null;
+}
+
 export default function EvalPage() {
   const { user } = useAuth();
   const [selected, setSelected] = useState("quick");
@@ -157,6 +182,10 @@ export default function EvalPage() {
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [savedCases, setSavedCases] = useState<Set<string>>(new Set());
   const [dedupedCases, setDedupedCases] = useState<Set<string>>(new Set());
+  const [runLog, setRunLog] = useState<Array<{type: string; suite?: string; ok?: boolean; passed?: number; total?: number; duration?: number; error?: string; index?: number}>>([]);
+  const [runTotal, setRunTotal] = useState(0);
+  const [showFailedOnly, setShowFailedOnly] = useState(false);
+  const [regressionAlert, setRegressionAlert] = useState<RegressionAlert | null>(null);
   const [savingCaseId, setSavingCaseId] = useState<string | null>(null);
   const [caseSaveMessages, setCaseSaveMessages] = useState<Record<string, string>>({});
 
@@ -218,7 +247,11 @@ export default function EvalPage() {
         const res = await fetch(`${API}/api/eval/history?limit=20`, { headers });
         if (!res.ok) return;
         const data = await res.json();
-        if (Array.isArray(data.snapshots)) setHistory(data.snapshots as HistorySnapshot[]);
+        if (Array.isArray(data.snapshots)) {
+          const snaps = data.snapshots as HistorySnapshot[];
+          setHistory(snaps);
+          setRegressionAlert(detectRegression(snaps));
+        }
       } catch { /* ignore */ }
     }
     loadSuites();
@@ -241,30 +274,57 @@ export default function EvalPage() {
   async function run() {
     setRunning(true);
     setExpandedSuite(null);
-    try {
-      const headers = { "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) };
-      const res = await fetch(`${API}/api/eval/run`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ suite: selected }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const message = data.detail || `请求失败：${res.status}`;
-        setResult({ ok: false, passed: 0, total: 1, suites: [{ name: "api", ok: false, metrics: {}, failed_cases: [], error: message }] });
-        return;
+    setRunLog([]);
+    setRunTotal(0);
+    setResult(null);
+    setRegressionAlert(null);
+
+    const headers = user?.token ? authHeaders(user.token) : undefined;
+    const url = `${API}/api/eval/run-stream?suite=${encodeURIComponent(selected)}`;
+    const es = new EventSource(url + (headers?.Authorization ? `&token=${headers.Authorization.replace('Bearer ', '')}` : ''));
+
+    es.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'start') {
+          setRunTotal(msg.total || 0);
+          setRunLog([{ type: 'start', index: 0 }]);
+        } else if (msg.type === 'running') {
+          setRunLog(prev => [...prev, { type: 'running', suite: msg.suite, index: msg.index }]);
+        } else if (msg.type === 'suite_done') {
+          setRunLog(prev => [...prev, { type: 'suite_done', suite: msg.suite, ok: msg.ok, passed: msg.passed, total: msg.total, duration: msg.duration, index: msg.index }]);
+        } else if (msg.type === 'suite_error') {
+          setRunLog(prev => [...prev, { type: 'suite_error', suite: msg.suite, error: msg.error, index: msg.index }]);
+        } else if (msg.type === 'done') {
+          setResult({ ...msg.summary, suites: Array.isArray(msg.summary?.suites) ? msg.summary.suites : [] });
+          setLatestStatus("刚刚生成新的 eval report");
+          if (msg.summary?.agent_ops) setAgentOps(msg.summary.agent_ops);
+          es.close();
+          setRunning(false);
+          // refresh history
+          fetch(`${API}/api/eval/history?limit=20`, { headers: { "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) } })
+            .then(r => r.ok ? r.json() : null).then(d => {
+              if (d?.snapshots) {
+                const snaps = d.snapshots as HistorySnapshot[];
+                setHistory(snaps);
+                setRegressionAlert(detectRegression(snaps));
+              }
+            }).catch(() => null);
+        } else if (msg.type === 'done_error') {
+          setRunLog(prev => [...prev, { type: 'done_error', error: msg.error }]);
+          es.close();
+          setRunning(false);
+        }
+      } catch (e) {
+        console.error('SSE parse error:', e);
       }
-      setResult({ ...data, suites: Array.isArray(data.suites) ? data.suites : [] });
-      setLatestStatus("刚刚生成新的 eval report");
-      if (data.agent_ops) setAgentOps(data.agent_ops);
-      // refresh history
-      fetch(`${API}/api/eval/history?limit=20`, { headers: { "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) } })
-        .then(r => r.ok ? r.json() : null).then(d => { if (d?.snapshots) setHistory(d.snapshots as HistorySnapshot[]); }).catch(() => null);
-    } catch (e) {
-      setResult({ ok: false, passed: 0, total: 1, suites: [{ name: "network", ok: false, metrics: {}, failed_cases: [], error: String(e) }] });
-    } finally {
+    };
+
+    es.onerror = () => {
+      es.close();
       setRunning(false);
-    }
+      setRunLog(prev => [...prev, { type: 'error', error: 'SSE 连接中断' }]);
+    };
   }
 
   const passedSuites = result?.passed_suites ?? result?.passed ?? 0;
@@ -331,7 +391,33 @@ export default function EvalPage() {
       </p>
 
       <AgentOpsPanel summary={agentOps} error={agentOpsError} />
+      {regressionAlert && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: "0.75rem",
+          border: `1px solid ${regressionAlert.severity === "error" ? "var(--cinnabar)" : "#d97706"}`,
+          background: regressionAlert.severity === "error" ? "rgba(220,38,38,0.08)" : "rgba(217,119,6,0.08)",
+          borderRadius: "var(--radius-sm)", padding: "0.85rem 1rem", marginBottom: "1.5rem",
+        }}>
+          <span style={{ fontSize: "1.1rem", lineHeight: 1.2 }}>{regressionAlert.severity === "error" ? "🔴" : "🟠"}</span>
+          <div style={{ flex: 1, fontSize: "0.85rem", color: "var(--ink)" }}>
+            <strong style={{ color: regressionAlert.severity === "error" ? "var(--cinnabar)" : "#d97706" }}>
+              {regressionAlert.severity === "error" ? "检测到回归（严重）" : "检测到回归（提示）"}
+            </strong>
+            <div style={{ marginTop: 3, color: "var(--ink-soft)", lineHeight: 1.5 }}>
+              {regressionAlert.newlyFailed && <span>本次运行整体 <strong style={{ color: "var(--cinnabar)" }}>由通过转为失败</strong>；</span>}
+              整体通过率 {(regressionAlert.prevRate * 100).toFixed(1)}% → {(regressionAlert.currRate * 100).toFixed(1)}%
+              （<strong style={{ color: "var(--cinnabar)" }}>{(regressionAlert.delta * 100).toFixed(1)}pt</strong>）。
+              建议对照下方「只看失败」逐 suite 排查新增失败用例。
+            </div>
+          </div>
+          <button onClick={() => setRegressionAlert(null)} style={{
+            background: "none", border: "none", cursor: "pointer", color: "var(--muted)",
+            fontSize: "0.9rem", lineHeight: 1, padding: 2,
+          }} title="关闭">✕</button>
+        </div>
+      )}
       <TrendBar snapshots={history} />
+      <RegressionDiff snapshots={history} />
 
       <div style={{ marginBottom: "1rem", color: "var(--ink-soft)", fontSize: "0.82rem" }}>{latestStatus}</div>
 
@@ -367,6 +453,57 @@ export default function EvalPage() {
         </button>
       </div>
 
+      {/* ── 实时运行日志 ── */}
+      {(running || runLog.length > 0) && (
+        <div style={{
+          marginBottom: "1.5rem",
+          background: "#0f172a",
+          borderRadius: "8px",
+          padding: "14px 18px",
+          fontFamily: "monospace",
+          fontSize: "0.78rem",
+          lineHeight: 1.7,
+          maxHeight: 240,
+          overflowY: "auto",
+          border: "1px solid #1e293b",
+        }}>
+          <div style={{ color: "#94a3b8", marginBottom: 8, fontFamily: "inherit" }}>
+            ▶ eval run · {selected}
+            {runTotal > 0 && (
+              <span style={{ marginLeft: 8, color: "#64748b" }}>
+                ({runLog.filter(l => l.type === 'suite_done' || l.type === 'suite_error').length}/{runTotal})
+              </span>
+            )}
+          </div>
+          {runLog.map((entry, i) => {
+            if (entry.type === 'start') return (
+              <div key={i} style={{ color: "#94a3b8" }}>» 开始运行 {runTotal} 个 suite…</div>
+            );
+            if (entry.type === 'running') return (
+              <div key={i} style={{ color: "#60a5fa" }}>  ⟳ 运行 {entry.suite}…</div>
+            );
+            if (entry.type === 'suite_done') return (
+              <div key={i} style={{ color: entry.ok ? "#4ade80" : "#f87171" }}>
+                {entry.ok ? '  ✓' : '  ✗'} {entry.suite}
+                <span style={{ color: "#64748b", marginLeft: 8 }}>{entry.passed}/{entry.total} cases · {entry.duration}s</span>
+              </div>
+            );
+            if (entry.type === 'suite_error') return (
+              <div key={i} style={{ color: "#f87171" }}>  ✗ {entry.suite} — {entry.error}</div>
+            );
+            if (entry.type === 'error' || entry.type === 'done_error') return (
+              <div key={i} style={{ color: "#f87171" }}>⚠ {entry.error}</div>
+            );
+            return null;
+          })}
+          {running && (
+            <div style={{ color: "#94a3b8", marginTop: 4 }}>
+              <span style={{ animation: "pulse 1s infinite" }}>●</span> 等待结果…
+            </div>
+          )}
+        </div>
+      )}
+
       {result && (
         <div>
           <div style={{
@@ -388,8 +525,28 @@ export default function EvalPage() {
 
           <ReportOverview result={result} token={user?.token} />
 
+          {/* 过滤工具栏 */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
+            <button
+              onClick={() => setShowFailedOnly(f => !f)}
+              style={{
+                padding: "0.3rem 0.875rem", borderRadius: 6, border: "1px solid var(--border-strong)",
+                background: showFailedOnly ? "var(--cinnabar)" : "var(--paper-soft)",
+                color: showFailedOnly ? "#fff" : "var(--ink-soft)",
+                fontSize: "0.8rem", fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              {showFailedOnly ? "● 只看失败" : "○ 只看失败"}
+            </button>
+            <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
+              {showFailedOnly
+                ? `${result.suites.filter(s => !s.ok).length} 个失败 suite`
+                : `${result.suites.length} 个 suite`}
+            </span>
+          </div>
+
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            {result.suites.map(suite => {
+            {result.suites.filter(s => !showFailedOnly || !s.ok).map(suite => {
               const failedCases = (suite.failed_cases || []).map(normalizeFailedCase);
               const metrics = suite.metrics || {};
               const totalCases = suite.total_cases || 0;
@@ -417,8 +574,17 @@ export default function EvalPage() {
                     {suite.category && <Badge>{suite.category}</Badge>}
                     {suite.kind && <Badge>{suite.kind}</Badge>}
                     {totalCases > 0 && (
-                      <span style={{ fontSize: "0.8rem", color: "var(--ink-soft)" }}>
-                        {passedCases}/{totalCases} cases
+                      <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.8rem" }}>
+                        {/* 迷你通过率进度条 */}
+                        <span style={{ width: 60, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden", display: "inline-block" }}>
+                          <span style={{
+                            display: "block", height: "100%", borderRadius: 3,
+                            width: `${Math.round((passedCases / totalCases) * 100)}%`,
+                            background: passedCases === totalCases ? "var(--jade)" : passedCases > totalCases * 0.6 ? "var(--gold)" : "var(--cinnabar)",
+                            transition: "width 0.4s",
+                          }} />
+                        </span>
+                        <span style={{ color: "var(--ink-soft)" }}>{passedCases}/{totalCases}</span>
                       </span>
                     )}
                     {suite.duration_sec != null && (
@@ -474,25 +640,74 @@ export default function EvalPage() {
                       {failedCases.length > 0 && (
                         <div style={{ marginBottom: "0.75rem" }}>
                           <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--cinnabar)", marginBottom: "0.4rem" }}>
-                            失败用例
+                            失败用例 ({failedCases.length})
                           </div>
                           <div style={{ display: "grid", gap: "0.5rem" }}>
-                            {failedCases.map((c) => (
-                              <div key={`${suite.name}-${c.name}`} style={{
-                                padding: "0.6rem 0.75rem", borderRadius: 8, fontSize: "0.8rem",
-                                background: "#fdecea", border: "1px solid var(--cinnabar)", color: "var(--cinnabar-dark)",
+                            {failedCases.map((c, ci) => (
+                              <div key={`${suite.name}-${c.name}-${ci}`} style={{
+                                borderRadius: 6, overflow: "hidden",
+                                border: "1px solid #fca5a5",
                               }}>
-                                <strong>{c.name}</strong>
-                                {c.reason && <div style={{ marginTop: 3 }}>{c.reason}</div>}
-                                <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginTop: 6 }}>
-                                  {c.category && <Badge>{c.category}</Badge>}
-                                  {c.trace_id && <Badge>trace {c.trace_id.slice(0, 10)}</Badge>}
-                                  {c.query && <Badge>query: {c.query.slice(0, 40)}</Badge>}
+                                {/* case 头部 */}
+                                <div style={{
+                                  padding: "8px 12px", background: "#fef2f2",
+                                  display: "flex", alignItems: "flex-start", gap: 8,
+                                }}>
+                                  <span style={{ color: "#ef4444", fontWeight: 700, fontSize: "0.75rem", marginTop: 1, flexShrink: 0 }}>✗</span>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#991b1b", wordBreak: "break-all" }}>{c.name}</div>
+                                    {c.reason && (
+                                      <div style={{ marginTop: 3, fontSize: "0.78rem", color: "#b91c1c", lineHeight: 1.5 }}>{c.reason}</div>
+                                    )}
+                                    <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginTop: 5 }}>
+                                      {c.category && <Badge>{c.category}</Badge>}
+                                      {c.trace_id && <Badge>trace {c.trace_id.slice(0, 10)}</Badge>}
+                                      {c.query && (
+                                        <span style={{
+                                          fontSize: "0.7rem", padding: "1px 6px", borderRadius: 4,
+                                          background: "#fde8e8", color: "#991b1b", fontFamily: "monospace",
+                                          maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                        }} title={c.query}>
+                                          q: {c.query}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
+
+                                {/* expected / actual 对比块 */}
                                 {(c.expected != null || c.actual != null) && (
-                                  <div style={{ marginTop: 6, color: "var(--ink-soft)" }}>
-                                    {c.expected != null && <div><strong>Expected:</strong> {formatUnknown(c.expected)}</div>}
-                                    {c.actual != null && <div><strong>Actual:</strong> {formatUnknown(c.actual)}</div>}
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "#0f172a" }}>
+                                    {c.expected != null && (
+                                      <div style={{ padding: "8px 12px", borderRight: "1px solid #1e293b" }}>
+                                        <div style={{ fontSize: "0.65rem", color: "#4ade80", fontWeight: 700, fontFamily: "monospace", marginBottom: 4, letterSpacing: "0.08em" }}>
+                                          ✓ EXPECTED
+                                        </div>
+                                        <pre style={{
+                                          margin: 0, fontSize: "0.72rem", color: "#86efac",
+                                          fontFamily: "monospace", whiteSpace: "pre-wrap",
+                                          wordBreak: "break-all", lineHeight: 1.5,
+                                          maxHeight: 120, overflowY: "auto",
+                                        }}>
+                                          {formatUnknown(c.expected)}
+                                        </pre>
+                                      </div>
+                                    )}
+                                    {c.actual != null && (
+                                      <div style={{ padding: "8px 12px" }}>
+                                        <div style={{ fontSize: "0.65rem", color: "#f87171", fontWeight: 700, fontFamily: "monospace", marginBottom: 4, letterSpacing: "0.08em" }}>
+                                          ✗ ACTUAL
+                                        </div>
+                                        <pre style={{
+                                          margin: 0, fontSize: "0.72rem", color: "#fca5a5",
+                                          fontFamily: "monospace", whiteSpace: "pre-wrap",
+                                          wordBreak: "break-all", lineHeight: 1.5,
+                                          maxHeight: 120, overflowY: "auto",
+                                        }}>
+                                          {formatUnknown(c.actual)}
+                                        </pre>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -744,6 +959,103 @@ function TrendBar({ snapshots }: { snapshots: HistorySnapshot[] }) {
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: "0.68rem", color: "var(--muted)" }}>
         <span>{items[0]?.generated_at ? new Date(items[0].generated_at).toLocaleDateString() : "earliest"}</span>
         <span>{items[items.length - 1]?.generated_at ? new Date(items[items.length - 1]!.generated_at!).toLocaleDateString() : "latest"}</span>
+      </div>
+    </div>
+  );
+}
+
+const METRIC_LABELS: Record<keyof EvalTopLevelMetrics, string> = {
+  task_success_rate: "任务成功率",
+  retrieval_hit_rate: "检索命中率",
+  source_correctness: "来源正确率",
+  tool_schema_validity: "工具 schema 合规",
+  guardrail_pass_rate: "护栏通过率",
+  format_validity: "格式合规率",
+  avg_latency_ms: "平均延迟(ms)",
+};
+
+// 相邻两次 run 的回归对比：pass_rate + 顶层指标 delta
+function RegressionDiff({ snapshots }: { snapshots: HistorySnapshot[] }) {
+  if (snapshots.length < 2) return null;
+  const curr = snapshots[snapshots.length - 1];
+  const prev = snapshots[snapshots.length - 2];
+
+  const currRate = curr.summary?.pass_rate ?? (curr.passed_cases != null && curr.total_cases ? curr.passed_cases / curr.total_cases : null);
+  const prevRate = prev.summary?.pass_rate ?? (prev.passed_cases != null && prev.total_cases ? prev.passed_cases / prev.total_cases : null);
+
+  // 指标行：延迟越低越好，其余越高越好
+  const metricKeys = Object.keys(METRIC_LABELS) as (keyof EvalTopLevelMetrics)[];
+  const rows: Array<{ label: string; curr: number | null; prev: number | null; delta: number | null; lowerBetter: boolean; isPct: boolean }> = [];
+
+  // pass_rate 置顶
+  rows.push({
+    label: "整体通过率",
+    curr: currRate,
+    prev: prevRate,
+    delta: currRate != null && prevRate != null ? currRate - prevRate : null,
+    lowerBetter: false,
+    isPct: true,
+  });
+  for (const key of metricKeys) {
+    const c = curr.metrics?.[key];
+    const p = prev.metrics?.[key];
+    if (c == null && p == null) continue;
+    const lowerBetter = key === "avg_latency_ms";
+    const isPct = key !== "avg_latency_ms";
+    rows.push({
+      label: METRIC_LABELS[key],
+      curr: c ?? null,
+      prev: p ?? null,
+      delta: c != null && p != null ? c - p : null,
+      lowerBetter,
+      isPct,
+    });
+  }
+
+  const fmt = (v: number | null, isPct: boolean) => {
+    if (v == null) return "—";
+    return isPct ? `${(v * 100).toFixed(1)}%` : `${Math.round(v)}`;
+  };
+  const fmtDelta = (v: number | null, isPct: boolean) => {
+    if (v == null || Math.abs(v) < 1e-9) return "±0";
+    const sign = v > 0 ? "+" : "";
+    return isPct ? `${sign}${(v * 100).toFixed(1)}pt` : `${sign}${Math.round(v)}`;
+  };
+  // 改善=绿，退化=红，持平=灰
+  const deltaColor = (delta: number | null, lowerBetter: boolean) => {
+    if (delta == null || Math.abs(delta) < 1e-9) return "var(--muted)";
+    const improved = lowerBetter ? delta < 0 : delta > 0;
+    return improved ? "var(--jade)" : "var(--cinnabar)";
+  };
+  const arrow = (delta: number | null) => {
+    if (delta == null || Math.abs(delta) < 1e-9) return "→";
+    return delta > 0 ? "▲" : "▼";
+  };
+
+  const currTime = curr.generated_at ? new Date(curr.generated_at).toLocaleString() : "最新";
+  const prevTime = prev.generated_at ? new Date(prev.generated_at).toLocaleString() : "上一次";
+
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "0.85rem 1rem", background: "var(--paper-soft)", marginBottom: "1.5rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 700, fontSize: "0.875rem", color: "var(--ink)" }}>回归对比</span>
+        <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>上次 {prevTime} → 本次 {currTime}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: "0.3rem 0.75rem", fontSize: "0.8rem" }}>
+        <span style={{ fontWeight: 600, color: "var(--muted)", fontSize: "0.7rem" }}>指标</span>
+        <span style={{ fontWeight: 600, color: "var(--muted)", fontSize: "0.7rem", textAlign: "right" }}>上次</span>
+        <span style={{ fontWeight: 600, color: "var(--muted)", fontSize: "0.7rem", textAlign: "right" }}>本次</span>
+        <span style={{ fontWeight: 600, color: "var(--muted)", fontSize: "0.7rem", textAlign: "right" }}>变化</span>
+        {rows.map((row) => (
+          <Fragment key={row.label}>
+            <span style={{ color: "var(--ink)" }}>{row.label}</span>
+            <span style={{ color: "var(--ink-soft)", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmt(row.prev, row.isPct)}</span>
+            <span style={{ color: "var(--ink)", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{fmt(row.curr, row.isPct)}</span>
+            <span style={{ color: deltaColor(row.delta, row.lowerBetter), textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+              {arrow(row.delta)} {fmtDelta(row.delta, row.isPct)}
+            </span>
+          </Fragment>
+        ))}
       </div>
     </div>
   );
