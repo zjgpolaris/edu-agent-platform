@@ -2,7 +2,7 @@
 
 **创建时间：** 2026-06-23
 **项目名称：** EduAgent - K-12 中文/历史 AI 教学平台
-**最后更新：** 2026-06-30
+**最后更新：** 2026-07-06
 
 ---
 
@@ -263,7 +263,12 @@ frontend/
 | `/history-games/card-game` | 卡牌游戏 |
 | `/history-games/multiplayer` | 多人游戏 |
 | `/learning-assistant` | 学习助手 |
+| `/student` | 学生学习工作台，含继续学习主卡（基于今日计划最高优先级任务）、今日计划、本周小结和 Agent 能力入口 |
 | `/student/auto-tutor` | AutoTutor 自主辅导 |
+| `/student/review` | 复习中心：`tab=review` 今日任务（SM-2 自适应练习），`tab=weakpoints` 错因档案馆/错题库（掌握度热力图、重点攻克、AutoTutor 精讲跳转）；旧 `/student/weakpoints` 仅作重定向安全网 |
+| `/student/materials` | 学习资料中心：`tab=materials` 我的资料上传/管理，`tab=textbook` 教材目录；资料/教材 tab 在移动端吸顶横向滚动；旧 `/student/textbook` 仅作重定向安全网 |
+| `/student/dashboard` | 学情总览：`tab=dashboard` 学情速览，`tab=report` 成长报告；`/student/report` 保留直达但不作为导航主入口 |
+| 学生/教师移动端导航 | 4 个高频底栏入口 + “更多”抽屉，支持当前更多项高亮、通知红点和关闭按钮 |
 | `/materials` | 资料库 |
 | `/materials/[materialId]` | 资料详情 |
 | `/student-dashboard` | 学生仪表板 |
@@ -272,6 +277,7 @@ frontend/
 | `/homework-grading` | 作业批改 |
 | `/history-map` | 历史地图 |
 | `/history-debate` | 历史辩论 |
+| `/teacher` | 教师协同工作台，含今日教学队列、批改摘要、作业完成情况和班级成员入口 |
 | `/teacher/dashboard` | 教师仪表板，显示学生数、待审核作业数（红色角标）、本轮讲评重点 |
 | `/teacher/class-analytics` | 班级学情分析，含生成讲评建议和一键复制讲评大纲 |
 | `/teacher/materials` | 教师资料库 |
@@ -416,6 +422,7 @@ frontend/
 | POST | `/api/teacher/lecture-review` | 讲评课 AI 辅助：跨最近 5 份作业聚合错误分布，LLM 为每个高频错误知识点生成讲解提示/板书关键词/即时练习形式；前端作业管理页「AI 讲评稿」面板展示+一键复制 |
 | POST | `/api/teacher/urge-students` | 向欠交学生发送站内催办通知（最多50人/次），写入 `student_notifications` 表 |
 | GET | `/api/students/{student_id}/notifications` | 学生读取自己的通知列表（`?unread_only=true&limit=N`）|
+| POST | `/api/students/{student_id}/notifications/{notification_id}/read` | 将学生的一条未读通知标为已读，用于横幅单条关闭 |
 | POST | `/api/students/{student_id}/notifications/read-all` | 将该学生所有未读通知标为已读 |
 
 ### 作文批改
@@ -729,6 +736,11 @@ frontend/
 - 学习事件
 - 复习计划
 - 错题本
+- 学生首页继续学习主卡：复用 `GET /api/students/{id}/today` 的今日计划，按逾期作业/今日截止作业/今日复习/薄弱点优先级展示一个明确下一步动作，并在无待办时推荐教材或历史人物对话；`useStudentWorkbenchData` 将首页 profile/review-plan/today 聚合为单次数据加载，`ContinueLearningCard` 与 `TodayPlanCard` 共享同一份今日计划，避免重复请求和状态不一致
+- 学生端 `TabShell`：`/student/review`、`/student/materials`、`/student/dashboard` 复用统一 query tab 壳，默认 tab 不写 URL，非默认 tab 可刷新保留，并带 ARIA tab 语义与移动端横向滚动/吸顶样式
+- 学习偏好设置由后端 schema 驱动：`/student/settings` 读取 `GET /api/preferences/schema` 渲染维度和选项，再合并学生已保存偏好，避免前后端双写漂移
+- 学生作业提交前未答校验：在 `/student/assignments` 提交前列出未作答题号，学生可继续检查或确认仍然提交，避免无感提交空答案
+- 学习资源教材目录请求携带认证凭证，区分教材为空与加载失败；复习页移除 Google Fonts 外链，统一使用全局字体变量；周报接口失败时展示可理解失败态而非静默消失
 
 ### 8. 教师端
 
@@ -746,6 +758,7 @@ frontend/
 - 作业错题-复习-辅导数据闭环：`submit_assignment` 返回 `wrong_tags`，学生结果页展示答错知识点并提供「今日复习」「AutoTutor 辅导」入口；答错知识点会追加到已存在的今日复习 session（`merge_new_weakpoints_to_today`，标 `pending_generate` 占位），学生打开复习页时 `get_today_session(hydrate=True)` 按需生成占位题的真题并落库（徽标轮询用 `hydrate=False` 只计数、不触发 LLM）；从作业跳转 AutoTutor 时经 `focus_tags` 把该知识点提到教学计划最前
 - 基于错题本和学生画像聚合班级高频薄弱点
 - 教师首页前置本轮讲评重点，班级学情页展示薄弱点人数占比
+- 教师首页今日教学队列：`TeacherTodayQueue` 前端聚合待复核批改、作业欠交/逾期、班级高频薄弱点与共性错题，给出教师当天优先处理动作；讲评材料生成仅保留入口，不在首页自动触发 LLM
 - 教学建议生成基于高频薄弱点人数和占比，输出讲评步骤、课堂活动、重点知识点和分层作业建议
 
 ---
@@ -940,4 +953,10 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-06 | 1.20.4 | 材料 RAG Inspector 引用追踪（used_in_answer）：`build_material_answer_messages` 加要求让 LLM 用 `[片段N]` 标注引用来源（N 对应检索片段序号，与历史对话侧 `[史料N]` 机制统一）；新增模块级 `_chunk_cited(answer_text, index)` 正则判定（`片段\s*0*{i}(?!\d)`，容错空格/前导零、避免片段1 误命中片段10），`answer_material_question` 的 debug chunk `used` 由硬编码 True 改为按实际引用判定；schema 注释同步；前端 Inspector 头部显示「N 片段检索 · M 已引用」，每 chunk 区分「✓ 已引用 / ○ 未引用」（未引用降透明度 0.6），Chunk→片段 中文化；`material_rag_smoke.py` 新增 `chunk_citation_detection` 用例（3→4 例，覆盖命中/边界/容错/空串）|
 | 2026-07-06 | 1.21.0 | 错题本 → AutoTutor 带根因追问：打通此前孤立的根因诊断（v1.18.2）与自主辅导。后端 `AutoTutorStartRequest` + `start_session` + `_generate_plan` 新增可选 `focus_reason`，在规划 prompt 注入错因并给出对应教学策略（概念模糊→重讲概念、知识遗忘→带背再检验、审题失误→圈画关键词、粗心→提示复查）；`/api/autotutor/start` 透传。前端错题本页 `WeakCard` 每条错题新增「AutoTutor 精讲 →」入口（跳 `?focus={tag}`，补上此前仅「复习→」通用问答、无自主辅导入口的缺口）；AutoTutor 落地页在带 focus 时拉 `GET /api/students/{id}/weakpoints/{tag}/root-cause`，有诊断则展示错因横幅并作为 `focus_reason` 注入 start（无诊断静默降级为纯 focus 规划）。`auto_tutor_trajectory_eval` 7/7 无回归|
 | 2026-07-06 | 1.22.0 | 学生周报：新增 `services/weekly_summary_service.py`（`_collect_metrics` 聚合最近 7 天活跃天数/连续打卡/复习完成率/作业均分/AutoTutor 会话/错题 top，`_llm_narrative` 调 LLM 生成温暖小结+下周建议、失败降级 `_rule_based_narrative` 规则模板，`build_weekly_summary` 组装）；新增 `GET /api/students/{id}/weekly-summary`（LLM 优先，`generated_by` 标记 llm/rule）；前端新增 `WeeklySummaryCard` 组件接入学生首页（`TodayPlanCard` 下方，小结段 + 指标 chips + 下周建议列表，无数据/失败静默不显）；新增 `weekly_summary_smoke.py`（6 例，纯离线覆盖规则文案/建议触发/组装/LLM 优先/降级）|
+| 2026-07-06 | 1.22.1 | 学生端导航重叠入口收束：`/student/review` 合并今日任务与错题库（`tab=weakpoints`），错题库升级为「错因档案馆」视觉与跳转核查；`/student/materials` 合并资料上传与教材目录（`tab=textbook`）；`/student/dashboard` 合并学情速览与成长报告（`tab=report`）；内部链接移除旧 `/student/weakpoints`、`/student/textbook`、`/student/report` href，旧页面仅保留 redirect 安全网；build 57/57 |
+| 2026-07-06 | 1.22.2 | 修复错题库/学习路径点击 `AutoTutor 精讲` 观感无响应：`/student/auto-tutor?focus=...` 进入后等待根因诊断查询完成即自动启动针对性辅导规划，并在 focus 切换时重置会话状态；保留无根因时纯 focus 降级；build 57/57 |
+| 2026-07-06 | 1.22.3 | UX 优化：移动端“更多”抽屉新增标题与关闭按钮、当前更多页同步高亮到底栏、抽屉项显示通知红点；复习中心/学习资料 tab 在移动端吸顶横向滚动，减少切换后迷失；侧边栏分组按钮补 `type=button` 与 `aria-expanded`；`git diff --check` 通过，lint/typecheck 因工具安全分类服务临时不可用未运行 |
+| 2026-07-06 | 1.22.4 | UX 优化第二轮：学生首页 `TodayPlanCard`/`WeeklySummaryCard` 增加骨架屏，避免接口加载期间首屏内容跳变；今日无待办状态补“读一课教材/找历史人物聊聊”下一步 CTA；复习中心空状态补“去完成作业/做智能练习”入口，答题按钮未选择时明确提示“先选择一个答案”，选项增加 `aria-pressed`；教材目录加载态改为卡片骨架屏 |
+| 2026-07-06 | 1.23.0 | 学生工作台 UX alpha：新增 `ContinueLearningCard` 接入 `/student` 首页，基于今日计划最高优先级任务展示“继续学习”主动作；教材目录 tab 请求补认证头并区分失败态；复习页移除 Google Fonts 外链改用全局字体变量；周报加载失败时显示失败态；学生作业提交前增加未答题号提示，可继续检查或确认仍然提交 |
+| 2026-07-07 | 1.24.0 | UX 一致性与工作台聚合：新增学生首页 `useStudentWorkbenchData`，让继续学习卡和今日计划共享同一份 `/today` 数据；新增学生端 `TabShell` 统一复习中心/学习资源/学情总览 tab；通知横幅单条关闭新增 `POST /api/students/{id}/notifications/{notification_id}/read`，不再误标全部已读；偏好设置改为读取后端 `/api/preferences/schema` 动态渲染；教师首页新增 `TeacherTodayQueue`，聚合待复核、欠交/逾期、薄弱点和共性错题 |
 

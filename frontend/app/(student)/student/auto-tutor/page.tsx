@@ -119,7 +119,9 @@ function AutoTutorInner() {
   const [status, setStatus] = useState("准备就绪");
   const [selected, setSelected] = useState<string | null>(null);
   const [rootCause, setRootCause] = useState<RootCauseInfo>(null);
+  const [rootCauseChecked, setRootCauseChecked] = useState(false);
   const traceRef = useRef<HTMLDivElement>(null);
+  const autoStartedFocusRef = useRef<string | null>(null);
 
   // 从 URL ?focus=知识点 读取作业/错题本跳转带来的聚焦知识点
   const focusTag = searchParams?.get("focus") ?? null;
@@ -131,7 +133,18 @@ function AutoTutorInner() {
 
   // 若带 focus 知识点，拉取该点的根因诊断，用于让 agent 针对真实错因规划
   useEffect(() => {
-    if (!focusTag || !studentId || !user?.token) return;
+    setRootCause(null);
+    setRootCauseChecked(false);
+    if (focusTag && autoStartedFocusRef.current !== focusTag) {
+      setSession(null);
+      setSelected(null);
+      setError("");
+      setStatus("正在准备针对性辅导……");
+    }
+    if (!focusTag || !studentId || !user?.token) {
+      setRootCauseChecked(true);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -139,11 +152,14 @@ function AutoTutorInner() {
           `${apiBaseUrl}/api/students/${studentId}/weakpoints/${encodeURIComponent(focusTag)}/root-cause`,
           { headers }
         );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled && data && data.label) setRootCause(data as RootCauseInfo);
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled && data && data.label) setRootCause(data as RootCauseInfo);
+        }
       } catch {
         /* 根因缺失时静默降级为纯 focus 规划 */
+      } finally {
+        if (!cancelled) setRootCauseChecked(true);
       }
     })();
     return () => {
@@ -177,6 +193,14 @@ function AutoTutorInner() {
       setLoading(false);
     }
   }, [studentId, loading, headers, focusTag, rootCause]);
+
+  // 从错题库/学习路径带 focus 进入时，自动开始本节针对性辅导，避免用户二次点击。
+  useEffect(() => {
+    if (!focusTag || !studentId || session || loading || !rootCauseChecked) return;
+    if (autoStartedFocusRef.current === focusTag) return;
+    autoStartedFocusRef.current = focusTag;
+    void start();
+  }, [focusTag, studentId, session, loading, rootCauseChecked, start]);
 
   async function answer(letter: string) {
     if (!session || loading || session.status !== "awaiting_answer") return;

@@ -398,7 +398,7 @@ export default function HomeworkGradingPage() {
               <div className="homework-followup-card">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                   <strong>本次新增/命中的薄弱点</strong>
-                  <a href="/student/weakpoints" style={{ fontSize: "0.82rem", color: "var(--accent, #4b9560)", textDecoration: "none" }}>去错题本复习 →</a>
+                  <a href="/student/review?tab=weakpoints" style={{ fontSize: "0.82rem", color: "var(--accent, #4b9560)", textDecoration: "none" }}>去错题库复习 →</a>
                 </div>
                 <div>{gradeResult.weak_points.map((point) => <span key={point}>{point}</span>)}</div>
               </div>

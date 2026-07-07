@@ -2,10 +2,14 @@
 每日签卡挑战与成就系统服务
 """
 from datetime import datetime, timedelta
+from threading import Lock
 
 from sqlalchemy import text
 
-from db.engine import get_connection
+from db.engine import engine, get_connection
+
+_TABLES_READY = False
+_TABLES_LOCK = Lock()
 
 # 成就配置
 ACHIEVEMENTS = {
@@ -18,27 +22,41 @@ ACHIEVEMENTS = {
 
 
 def _ensure_tables():
-    with get_connection() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS check_ins (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_id TEXT NOT NULL,
-                check_in_date TEXT NOT NULL,
-                summary TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(student_id, check_in_date)
-            )
-        """))
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS achievements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_id TEXT NOT NULL,
-                achievement_key TEXT NOT NULL,
-                unlocked_at TEXT NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(student_id, achievement_key)
-            )
-        """))
-        conn.commit()
+    global _TABLES_READY
+    if _TABLES_READY:
+        return
+
+    with _TABLES_LOCK:
+        if _TABLES_READY:
+            return
+
+        is_postgres = engine.dialect.name == "postgresql"
+        id_column = "SERIAL PRIMARY KEY" if is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
+        now_default = "CURRENT_TIMESTAMP" if is_postgres else "datetime('now')"
+
+        with get_connection() as conn:
+            if is_postgres:
+                conn.execute(text("SELECT pg_advisory_xact_lock(hashtext('edu_agent_check_in_tables'))"))
+            conn.execute(text(f"""
+                CREATE TABLE IF NOT EXISTS check_ins (
+                    id {id_column},
+                    student_id TEXT NOT NULL,
+                    check_in_date TEXT NOT NULL,
+                    summary TEXT,
+                    created_at TEXT NOT NULL DEFAULT ({now_default}),
+                    UNIQUE(student_id, check_in_date)
+                )
+            """))
+            conn.execute(text(f"""
+                CREATE TABLE IF NOT EXISTS achievements (
+                    id {id_column},
+                    student_id TEXT NOT NULL,
+                    achievement_key TEXT NOT NULL,
+                    unlocked_at TEXT NOT NULL DEFAULT ({now_default}),
+                    UNIQUE(student_id, achievement_key)
+                )
+            """))
+        _TABLES_READY = True
 
 
 def check_in(student_id: str) -> dict:
