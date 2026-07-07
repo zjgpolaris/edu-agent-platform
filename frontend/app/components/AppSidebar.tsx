@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 
@@ -18,13 +18,14 @@ type NavItem = {
 
 type Badges = Record<string, number>;
 
+// 学生侧边栏：5 组，最多 6 子项/组
 const studentNav: NavItem[] = [
   { label: "今日学习", href: "/student", icon: "⌂" },
   { label: "自主辅导", href: "/student/auto-tutor", icon: "辅" },
   {
-    label: "学习中心", icon: "◎", children: [
-      { label: "教材同步", href: "/student/textbook", icon: "册" },
-      { label: "资料学习", href: "/student/materials", icon: "纸" },
+    // 教材同步+资料库合并为"学习资源"，用 tab 切换；学习助手独立保留
+    label: "学习资源", icon: "◎", children: [
+      { label: "学习资料", href: "/student/materials", icon: "册" },
       { label: "学习助手", href: "/student/assistant", icon: "问" },
     ],
   },
@@ -37,22 +38,26 @@ const studentNav: NavItem[] = [
     ],
   },
   {
-    label: "我的学情", icon: "析", children: [
+    // 作业→复习中心（今日任务+错题库 合并）→智能练习 闭环链路
+    label: "练习复习", icon: "练", children: [
       { label: "我的作业", href: "/student/assignments", icon: "业", badgeKey: "pending_assignments" },
-      { label: "今日复习", href: "/student/review", icon: "复", badgeKey: "pending_review" },
-      { label: "学情分析", href: "/student/dashboard", icon: "析" },
+      { label: "复习中心", href: "/student/review", icon: "复", badgeKey: "pending_review" },
+      { label: "智能练习", href: "/student/quiz", icon: "练" },
+    ],
+  },
+  {
+    // 学情速览+成长报告已合并到 dashboard（2 tabs），移除独立成长报告入口
+    label: "我的成长", icon: "报", children: [
+      { label: "学情总览", href: "/student/dashboard", icon: "析" },
       { label: "学习路径", href: "/student/learning-path", icon: "路" },
-      { label: "成长报告", href: "/student/report", icon: "报" },
+      { label: "记忆中心", href: "/student/memory", icon: "忆" },
       { label: "学习日历", href: "/student/calendar", icon: "历" },
       { label: "我的成就", href: "/student/achievements", icon: "奖" },
-      { label: "错题本", href: "/student/weakpoints", icon: "错" },
-      { label: "智能练习", href: "/student/quiz", icon: "练" },
-      { label: "记忆中心", href: "/student/memory", icon: "忆" },
-      { label: "偏好设置", href: "/student/settings", icon: "设" },
     ],
   },
 ];
 
+// 教师侧边栏：系统运维→教学分析，Eval 移至 footer
 const teacherNav: NavItem[] = [
   { label: "班级总览", href: "/teacher", icon: "班" },
   {
@@ -63,16 +68,16 @@ const teacherNav: NavItem[] = [
     ],
   },
   {
-    label: "教学备课", icon: "备", children: [
-      { label: "资料生成", href: "/teacher/materials", icon: "生" },
-      { label: "资源库", href: "/teacher/resources", icon: "库" },
+    // 班级学情/命题质量 是教学核心分析，不是"运维"
+    label: "教学分析", icon: "析", children: [
+      { label: "班级学情", href: "/teacher/class-analytics", icon: "析" },
+      { label: "命题质量", href: "/teacher/quality-dashboard", icon: "质" },
     ],
   },
   {
-    label: "系统运维", icon: "运", children: [
-      { label: "Eval Dashboard", href: "/eval", icon: "测" },
-      { label: "班级学情", href: "/teacher/class-analytics", icon: "析" },
-      { label: "命题质量", href: "/teacher/quality-dashboard", icon: "质" },
+    label: "教学备课", icon: "备", children: [
+      { label: "资料生成", href: "/teacher/materials", icon: "生" },
+      { label: "资源库", href: "/teacher/resources", icon: "库" },
     ],
   },
 ];
@@ -88,6 +93,20 @@ function navBadgeCount(item: NavItem, badges: Badges): number {
   return n;
 }
 
+function isActivePath(pathname: string, href: string, currentSearch?: string): boolean {
+  const [path, query] = href.split("?");
+  const pathActive = path === "/student" || path === "/teacher" ? pathname === path : pathname.startsWith(path);
+  if (!pathActive) return false;
+  return query && currentSearch !== undefined ? currentSearch === query : true;
+}
+
+function isPreciseMobileActive(pathname: string, href: string, currentSearch: string, siblings: MobileNavItem[]): boolean {
+  const [path, query] = href.split("?");
+  if (!isActivePath(pathname, href, currentSearch)) return false;
+  if (query) return true;
+  return !siblings.some((item) => item.href !== href && item.href.startsWith(`${path}?`) && isActivePath(pathname, item.href, currentSearch));
+}
+
 function Badge({ count, collapsed }: { count: number; collapsed: boolean }) {
   if (count <= 0) return null;
   if (collapsed) return <span className="sidebar-badge-dot" aria-label={`${count} 项待处理`} />;
@@ -97,7 +116,7 @@ function Badge({ count, collapsed }: { count: number; collapsed: boolean }) {
 function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boolean; badges: Badges }) {
   const pathname = usePathname();
   const isChildActive = item.children?.some(
-    (c) => c.href && pathname.startsWith(c.href.split("?")[0])
+    (c) => c.href && isActivePath(pathname, c.href)
   );
   const storageKey = `sidebar-group-${item.label}`;
   const [open, setOpen] = useState(() => {
@@ -117,9 +136,7 @@ function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boole
   }
 
   if (!item.children) {
-    const active = item.href === "/student" || item.href === "/teacher"
-      ? pathname === item.href
-      : item.href && pathname.startsWith(item.href.split("?")[0]);
+    const active = item.href ? isActivePath(pathname, item.href) : false;
     const count = navBadgeCount(item, badges);
     return (
       <Link href={item.href!} className={`sidebar-item${active ? " active" : ""}`} title={collapsed ? item.label : undefined}>
@@ -134,9 +151,11 @@ function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boole
   return (
     <div className="sidebar-group">
       <button
+        type="button"
         className={`sidebar-item sidebar-group-btn${isChildActive ? " active" : ""}`}
         onClick={toggleGroup}
         title={collapsed ? item.label : undefined}
+        aria-expanded={open}
       >
         <span className="sidebar-icon">{item.icon}{collapsed && <Badge count={groupCount} collapsed />}</span>
         {!collapsed && (
@@ -150,7 +169,7 @@ function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boole
       {open && !collapsed && (
         <div className="sidebar-children">
           {item.children.map((child) => {
-            const active = child.href && pathname.startsWith(child.href.split("?")[0]);
+            const active = child.href ? isActivePath(pathname, child.href) : false;
             const count = navBadgeCount(child, badges);
             return (
               <Link
@@ -262,6 +281,13 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
             <span className={`sidebar-role-badge ${role}`}>{role === "teacher" ? "教师" : "学生"}</span>
           </div>
         )}
+        {/* 偏好设置（学生）/ Eval Dashboard（教师）移至 footer，降低视觉权重 */}
+        {role === "student" && (
+          <Link href="/student/settings" className="sidebar-footer-link" title="偏好设置">⚙</Link>
+        )}
+        {role === "teacher" && (
+          <Link href="/eval" className="sidebar-footer-link" title="Eval Dashboard">测</Link>
+        )}
         <button className="sidebar-logout" onClick={handleLogout} title="退出登录">⏻</button>
       </div>
     </aside>
@@ -270,35 +296,39 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
 
 type MobileNavItem = { href: string; icon: string; label: string; badgeKey?: string; badgeKeys?: string[] };
 
+// 移动端主导航：4 个高频入口（首页/辅导/复习中心/作业）
 const STUDENT_MOBILE_NAV: MobileNavItem[] = [
   { href: "/student", icon: "主", label: "首页" },
   { href: "/student/auto-tutor", icon: "辅", label: "辅导" },
-  { href: "/student/assistant", icon: "问", label: "助手" },
   { href: "/student/review", icon: "复", label: "复习", badgeKey: "pending_review" },
+  { href: "/student/assignments", icon: "业", label: "作业", badgeKey: "pending_assignments" },
 ];
+// 更多抽屉：其余功能，错题库并入复习中心，教材并入学习资料
 const STUDENT_MORE_NAV: MobileNavItem[] = [
-  { href: "/student/assignments", icon: "业", label: "我的作业" },
+  { href: "/student/assistant", icon: "问", label: "学习助手" },
+  { href: "/student/materials", icon: "册", label: "学习资料" },
+  { href: "/student/materials?tab=textbook", icon: "本", label: "教材目录" },
   { href: "/student/history/chat", icon: "人", label: "历史对话" },
   { href: "/student/history/games", icon: "弈", label: "历史游戏" },
-  { href: "/student/textbook", icon: "册", label: "教材学习" },
-  { href: "/student/materials", icon: "纸", label: "资料学习" },
-  { href: "/student/weakpoints", icon: "错", label: "错题本" },
-  { href: "/student/report", icon: "报", label: "成长报告" },
-  { href: "/student/calendar", icon: "历", label: "学习日历" },
-  { href: "/student/learning-path", icon: "路", label: "学习路径" },
-  { href: "/student/memory", icon: "忆", label: "记忆中心" },
+  { href: "/student/review?tab=weakpoints", icon: "错", label: "错题库" },
   { href: "/student/quiz", icon: "练", label: "智能练习" },
+  { href: "/student/dashboard", icon: "析", label: "学情总览" },
+  { href: "/student/dashboard?tab=report", icon: "报", label: "成长报告" },
+  { href: "/student/memory", icon: "忆", label: "记忆中心" },
+  { href: "/student/settings", icon: "设", label: "偏好设置" },
 ];
+
+// 教师移动端：4 项高频入口（总览/作业/批改/学情）
 const TEACHER_MOBILE_NAV: MobileNavItem[] = [
   { href: "/teacher", icon: "班", label: "总览" },
+  { href: "/teacher/assignments", icon: "业", label: "作业", badgeKeys: ["pending_review", "blind_spots_to_review"] },
   { href: "/teacher/grading", icon: "批", label: "批改" },
   { href: "/teacher/class-analytics", icon: "析", label: "学情" },
 ];
 const TEACHER_MORE_NAV: MobileNavItem[] = [
-  { href: "/teacher/assignments", icon: "业", label: "布置作业", badgeKeys: ["pending_review", "blind_spots_to_review"] },
+  { href: "/teacher/quality-dashboard", icon: "质", label: "命题质量" },
   { href: "/teacher/materials", icon: "生", label: "资料生成" },
   { href: "/teacher/resources", icon: "库", label: "资源库" },
-  { href: "/eval", icon: "测", label: "Eval" },
 ];
 
 function badgeOf(badges: Badges, item: { badgeKey?: string; badgeKeys?: string[] }): number {
@@ -309,13 +339,16 @@ function badgeOf(badges: Badges, item: { badgeKey?: string; badgeKeys?: string[]
   return n;
 }
 
-export function MobileBottomNav({ role }: { role: "student" | "teacher" }) {
+function MobileBottomNavInner({ role }: { role: "student" | "teacher" }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentSearch = searchParams.toString();
   const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [badges, setBadges] = useState<Badges>({});
   const items = role === "teacher" ? TEACHER_MOBILE_NAV : STUDENT_MOBILE_NAV;
   const moreItems = role === "teacher" ? TEACHER_MORE_NAV : STUDENT_MORE_NAV;
+  const allItems = [...items, ...moreItems];
 
   useEffect(() => {
     if (!user?.token) return;
@@ -336,28 +369,35 @@ export function MobileBottomNav({ role }: { role: "student" | "teacher" }) {
   }, [role, user?.actorId, user?.token]);
 
   const moreCount = moreItems.reduce((s, it) => s + badgeOf(badges, it), 0);
+  const activeMoreItem = moreItems.find((item) => isPreciseMobileActive(pathname, item.href, currentSearch, allItems));
 
   return (
     <>
       {menuOpen && (
         <div className="mbn-overlay" onClick={() => setMenuOpen(false)}>
           <div className="mbn-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="mbn-drawer-header">
+              <span>{role === "teacher" ? "教师工具箱" : "学习工具箱"}</span>
+              <button type="button" onClick={() => setMenuOpen(false)} aria-label="关闭更多菜单">×</button>
+            </div>
             <div className="mbn-drawer-grid">
-              {[...items, ...moreItems].map((item) => (
-                <Link key={item.href} href={item.href} className="mbn-drawer-item" onClick={() => setMenuOpen(false)}>
-                  <span className="mbn-icon">{item.icon}</span>
-                  <span className="mbn-label">{item.label}</span>
-                </Link>
-              ))}
+              {allItems.map((item) => {
+                const active = isPreciseMobileActive(pathname, item.href, currentSearch, allItems);
+                const count = badgeOf(badges, item);
+                return (
+                  <Link key={item.href} href={item.href} className={`mbn-drawer-item${active ? " active" : ""}`} onClick={() => setMenuOpen(false)}>
+                    <span className="mbn-icon">{item.icon}{count > 0 && <span className="sidebar-badge-dot" />}</span>
+                    <span className="mbn-label">{item.label}</span>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
       <nav className="mobile-bottom-nav" aria-label="移动端导航">
         {items.map((item) => {
-          const active = item.href === "/student" || item.href === "/teacher"
-            ? pathname === item.href
-            : pathname.startsWith(item.href);
+          const active = isPreciseMobileActive(pathname, item.href, currentSearch, allItems);
           const count = badgeOf(badges, item);
           return (
             <Link key={item.href} href={item.href} className={`mbn-item${active ? " active" : ""}`}>
@@ -366,11 +406,19 @@ export function MobileBottomNav({ role }: { role: "student" | "teacher" }) {
             </Link>
           );
         })}
-        <button type="button" className="mbn-item" onClick={() => setMenuOpen(true)}>
+        <button type="button" className={`mbn-item${activeMoreItem ? " active" : ""}`} onClick={() => setMenuOpen(true)} aria-expanded={menuOpen}>
           <span className="mbn-icon">≡{moreCount > 0 && <span className="sidebar-badge-dot" />}</span>
-          <span className="mbn-label">更多</span>
+          <span className="mbn-label">{activeMoreItem?.label || "更多"}</span>
         </button>
       </nav>
     </>
+  );
+}
+
+export function MobileBottomNav({ role }: { role: "student" | "teacher" }) {
+  return (
+    <Suspense fallback={null}>
+      <MobileBottomNavInner role={role} />
+    </Suspense>
   );
 }

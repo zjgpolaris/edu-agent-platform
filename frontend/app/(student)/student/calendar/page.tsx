@@ -102,7 +102,7 @@ export default function LearningCalendarPage() {
             <p className="section-kicker">LEARNING CALENDAR</p>
             <h2>学习日历</h2>
           </div>
-          <Link className="secondary-link" href="/student/report" style={{ fontSize: "0.85rem" }}>
+          <Link className="secondary-link" href="/student/dashboard?tab=report" style={{ fontSize: "0.85rem" }}>
             查看完整报告 →
           </Link>
         </div>

@@ -384,8 +384,8 @@ export default function StudentReportPage() {
           <div className="rpt-footer-links">
             <Link href="/student/review" className="rpt-footer-btn">📅 今日复习</Link>
             <Link href="/student/auto-tutor" className="rpt-footer-btn">🤖 自主辅导</Link>
-            <Link href="/student/weakpoints" className="rpt-footer-btn">📖 错题本</Link>
-            <Link href="/student/dashboard" className="rpt-footer-btn">📊 学情分析</Link>
+            <Link href="/student/review?tab=weakpoints" className="rpt-footer-btn">📖 错题库</Link>
+            <Link href="/student/dashboard" className="rpt-footer-btn">📊 学情总览</Link>
           </div>
         </main>
       )}

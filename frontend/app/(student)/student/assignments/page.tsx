@@ -46,11 +46,12 @@ export default function StudentAssignmentsPage() {
   const [answers, setAnswers] = useState<Record<number, unknown>>({});
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitWarning, setSubmitWarning] = useState<number[]>([]);
 
   useEffect(() => {
     if (user?.role === "student" && user.actorId) load(user.actorId, user.token);
     else if (user) { setError("请以学生身份登录"); setLoading(false); }
-  }, [user?.role, user?.actorId, user?.token]);
+  }, [user]);
 
   async function load(id: string, token: string | undefined) {
     setLoading(true); setError("");
@@ -80,12 +81,32 @@ export default function StudentAssignmentsPage() {
     } else {
       setActive(a);
     }
-    setAnswers({}); setResult(null);
+    setAnswers({}); setResult(null); setSubmitWarning([]);
   }
 
-  async function submit() {
-    if (!active || !user?.actorId) return;
-    setSubmitting(true); setError("");
+  function setAnswer(index: number, value: unknown) {
+    setAnswers((prev) => ({ ...prev, [index]: value }));
+    if (submitWarning.length > 0) setSubmitWarning([]);
+  }
+
+  function findUnanswered() {
+    if (!active) return [];
+    return active.questions
+      .map((_, i) => i)
+      .filter((i) => {
+        const value = answers[i];
+        return value == null || (typeof value === "string" && value.trim() === "");
+      });
+  }
+
+  async function submit(force = false) {
+    if (!active || !user?.actorId || submitting) return;
+    const missing = findUnanswered();
+    if (!force && missing.length > 0) {
+      setSubmitWarning(missing);
+      return;
+    }
+    setSubmitting(true); setError(""); setSubmitWarning([]);
     try {
       const ordered = active.questions.map((_, i) => answers[i] ?? null);
       const res = await fetch(`${API}/api/student/${user.actorId}/assignments/${active.id}/submit`, {
@@ -169,7 +190,7 @@ export default function StudentAssignmentsPage() {
 
         {active && !result && (
           <section className="asg-quiz">
-            <button className="asg-back" onClick={() => setActive(null)}>← 返回列表</button>
+            <button className="asg-back" onClick={() => { setActive(null); setSubmitWarning([]); }}>← 返回列表</button>
             <h2 className="asg-quiz-title">{active.title}</h2>
             {active.questions.map((q, i) => (
               <div key={i} className="asg-q">
@@ -180,7 +201,7 @@ export default function StudentAssignmentsPage() {
                   return (
                     <label key={oi} className={`asg-opt${selected ? " sel" : ""}`}>
                       <input type="radio" name={`q${i}`} checked={selected}
-                        onChange={() => setAnswers({ ...answers, [i]: label })} />
+                        onChange={() => setAnswer(i, label)} />
                       <span className="asg-opt-badge">{label}</span>
                       <span className="asg-opt-text">{opt}</span>
                       <span className="asg-opt-dot" />
@@ -192,7 +213,7 @@ export default function StudentAssignmentsPage() {
                   return (
                     <label key={opt} className={`asg-opt${selected ? " sel" : ""}`}>
                       <input type="radio" name={`q${i}`} checked={selected}
-                        onChange={() => setAnswers({ ...answers, [i]: opt })} />
+                        onChange={() => setAnswer(i, opt)} />
                       <span className="asg-opt-badge">{["✓","✗"][oi]}</span>
                       <span className="asg-opt-text">{opt}</span>
                       <span className="asg-opt-dot" />
@@ -202,12 +223,27 @@ export default function StudentAssignmentsPage() {
                 {!OBJECTIVE.has(q.type) && (
                   <textarea className="asg-textarea" placeholder="在此作答…"
                     value={(answers[i] as string) || ""}
-                    onChange={(e) => setAnswers({ ...answers, [i]: e.target.value })} />
+                    onChange={(e) => setAnswer(i, e.target.value)} />
                 )}
               </div>
             ))}
             {error && <p className="asg-error">{error}</p>}
-            <button className="asg-submit" onClick={submit} disabled={submitting}>
+            {submitWarning.length > 0 && (
+              <div className="asg-submit-warning" role="alert">
+                <strong>还有 {submitWarning.length} 题未作答</strong>
+                <p>
+                  第 {submitWarning.map((i) => i + 1).join("、")} 题还没有填写。
+                  你可以继续检查，也可以仍然提交。
+                </p>
+                <div className="asg-submit-warning-actions">
+                  <button type="button" onClick={() => setSubmitWarning([])}>继续检查</button>
+                  <button type="button" onClick={() => submit(true)} disabled={submitting}>
+                    {submitting ? "提交中…" : "仍然提交"}
+                  </button>
+                </div>
+              </div>
+            )}
+            <button className="asg-submit" onClick={() => submit(false)} disabled={submitting}>
               {submitting ? "提交中…" : "提交作业"}
             </button>
           </section>
@@ -322,6 +358,13 @@ const CSS = `
   transition:opacity .15s, transform .1s; letter-spacing:.02em; }
 .asg-submit:hover:not(:disabled) { opacity:.9; transform:translateY(-1px); }
 .asg-submit:disabled { opacity:.55; cursor:not-allowed; }
+.asg-submit-warning { margin:18px 0; padding:14px 16px; border-radius:14px; border:1px solid rgba(217,119,6,.24); background:rgba(253,246,224,.82); color:var(--ink,#1a1612); text-align:left; }
+.asg-submit-warning strong { display:block; margin-bottom:4px; color:#92400e; font-size:14px; }
+.asg-submit-warning p { margin:0; color:var(--muted,#7a7068); font-size:13px; line-height:1.7; }
+.asg-submit-warning-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.asg-submit-warning-actions button { border:1px solid rgba(146,64,14,.22); border-radius:999px; background:#fffaf0; color:#92400e; padding:7px 12px; font-size:12px; font-weight:800; cursor:pointer; }
+.asg-submit-warning-actions button:hover:not(:disabled) { border-color:#92400e; }
+.asg-submit-warning-actions button:disabled { opacity:.55; cursor:not-allowed; }
 
 /* 结果面板 */
 .asg-result { text-align:center; padding:48px 20px; }

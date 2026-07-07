@@ -7,7 +7,10 @@ import json
 
 from sqlalchemy import text
 
-from db.engine import get_connection
+from db.engine import DATABASE_URL, get_connection
+
+# ── 数据库方言检测 ──────────────────────────────────────────────────────
+_IS_POSTGRES = DATABASE_URL.startswith(("postgresql://", "postgres://"))
 
 # 偏好维度定义
 PREFERENCE_DIMS = {
@@ -58,14 +61,24 @@ DIFFICULTY_PROMPTS = {
 
 def _ensure_table():
     with get_connection() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS learning_preferences (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_id TEXT NOT NULL UNIQUE,
-                preferences_json TEXT NOT NULL DEFAULT '{}',
-                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-        """))
+        if _IS_POSTGRES:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS learning_preferences (
+                    id BIGSERIAL PRIMARY KEY,
+                    student_id TEXT NOT NULL UNIQUE,
+                    preferences_json TEXT NOT NULL DEFAULT '{}',
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            """))
+        else:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS learning_preferences (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    student_id TEXT NOT NULL UNIQUE,
+                    preferences_json TEXT NOT NULL DEFAULT '{}',
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            """))
         conn.commit()
 
 
@@ -117,10 +130,10 @@ def set_preferences(student_id: str, updates: dict) -> dict:
         conn.execute(
             text("""
                 INSERT INTO learning_preferences (student_id, preferences_json, updated_at)
-                VALUES (:sid, :pref, datetime('now'))
+                VALUES (:sid, :pref, CURRENT_TIMESTAMP)
                 ON CONFLICT(student_id) DO UPDATE SET
                     preferences_json = excluded.preferences_json,
-                    updated_at = excluded.updated_at
+                    updated_at = CURRENT_TIMESTAMP
             """),
             {"sid": student_id, "pref": json.dumps(merged, ensure_ascii=False)},
         )

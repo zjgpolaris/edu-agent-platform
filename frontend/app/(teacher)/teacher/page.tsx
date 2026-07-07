@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import ClassCompletionCard from "./ClassCompletionCard";
+import TeacherTodayQueue from "./TeacherTodayQueue";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 type Student = { actor_id: string; display_name: string | null };
@@ -72,6 +73,7 @@ export default function TeacherPage() {
         <div className="workbench-metric"><strong>{fmt(reviewStats ? reviewStats.edited + reviewStats.rejected : null)}</strong><span>教师修改/驳回</span></div>
       </section>
 
+      <TeacherTodayQueue />
       <ClassCompletionCard />
 
       <section className="workbench-main-grid teacher-main-grid" style={{ display: "block" }}>

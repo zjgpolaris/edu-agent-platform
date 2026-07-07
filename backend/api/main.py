@@ -2747,6 +2747,19 @@ async def student_notifications(
     return {"notifications": items, "count": len(items)}
 
 
+@app.post("/api/students/{student_id}/notifications/{notification_id}/read")
+async def student_notification_read_one(
+    student_id: str,
+    notification_id: str,
+    actor: Actor = Depends(require_auth),
+):
+    """将学生的一条未读通知标为已读。"""
+    assert_student_access(actor, student_id)
+    from services.notification_service import mark_notification_read
+    hit = await run_in_threadpool(mark_notification_read, notification_id, student_id)
+    return {"ok": True, "marked_read": 1 if hit else 0}
+
+
 @app.post("/api/students/{student_id}/notifications/read-all")
 async def student_notifications_read_all(student_id: str, actor: Actor = Depends(require_auth)):
     """将学生所有未读通知标为已读。"""

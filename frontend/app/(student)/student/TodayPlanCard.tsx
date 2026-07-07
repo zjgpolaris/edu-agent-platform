@@ -3,29 +3,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import type { TodayPlan, TodayTask as Task } from "./useStudentWorkbenchData";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-
-type Task = {
-  kind: "assignment" | "review" | "weakpoint";
-  priority: "urgent" | "high" | "normal";
-  title: string;
-  detail: string;
-  href: string;
-  count?: number;
-  ref_id?: string | null;
-};
-type TodayPlan = {
-  date: string;
-  tasks: Task[];
-  summary: {
-    pending_assignments: number;
-    overdue_assignments: number;
-    review_remaining: number;
-    weakpoint_count: number;
-    all_clear: boolean;
-  };
-};
 
 const KIND_MARK: Record<Task["kind"], string> = { assignment: "业", review: "复", weakpoint: "弱" };
 const PRIORITY_LABEL: Record<Task["priority"], string> = { urgent: "紧急", high: "优先", normal: "待办" };
@@ -43,11 +23,16 @@ type Achievement = {
   description: string;
 };
 
+type TodayPlanCardProps = {
+  plan: TodayPlan | null;
+  loading: boolean;
+  error?: boolean;
+  onPlanRefresh?: () => Promise<TodayPlan | null> | void;
+};
+
 /** 学生「今日计划」：把作业到期、今日复习、薄弱点合成一条按优先级排序的待办清单。 */
-export default function TodayPlanCard() {
+export default function TodayPlanCard({ plan, loading, error = false, onPlanRefresh }: TodayPlanCardProps) {
   const { user } = useAuth();
-  const [plan, setPlan] = useState<TodayPlan | null>(null);
-  const [error, setError] = useState(false);
   const [notices, setNotices] = useState<Array<{ id: string; message: string; teacher_id: string }>>([]);
   const [checkInStatus, setCheckInStatus] = useState<CheckInStatus | null>(null);
   const [checkingIn, setCheckingIn] = useState(false);
@@ -55,27 +40,23 @@ export default function TodayPlanCard() {
 
   useEffect(() => {
     if (!user?.actorId) return;
-    setError(false);
-    // 并发获取今日计划 + 未读通知 + 打卡状态
+    // 今日计划由学生首页统一加载；这里仅获取通知 + 打卡状态
     Promise.all([
-      fetch(`${API}/api/students/${user.actorId}/today`, { headers: authHeaders(user.token) })
-        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
       fetch(`${API}/api/students/${user.actorId}/notifications?unread_only=true&limit=3`, { headers: authHeaders(user.token) })
         .then(r => r.ok ? r.json() : { notifications: [] }).catch(() => ({ notifications: [] })),
       fetch(`${API}/api/students/${user.actorId}/check-in/status`, { headers: authHeaders(user.token) })
         .then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([planData, nData, checkInData]) => {
-      setPlan(planData as TodayPlan);
+    ]).then(([nData, checkInData]) => {
       setNotices((nData.notifications || []).slice(0, 3));
       setCheckInStatus(checkInData as CheckInStatus | null);
-    }).catch(() => setError(true));
+    }).catch(() => {});
   }, [user?.actorId, user?.token]);
 
   function dismissNotice(id: string) {
     if (!user?.token || !user?.actorId) return;
     setNotices(prev => prev.filter(n => n.id !== id));
-    // 后台静默标记已读（不阻塞 UI）
-    fetch(`${API}/api/students/${user.actorId}/notifications/read-all`, {
+    // 后台静默标记单条已读（不阻塞 UI）
+    fetch(`${API}/api/students/${user.actorId}/notifications/${encodeURIComponent(id)}/read`, {
       method: "POST", headers: authHeaders(user.token),
     }).catch(() => {});
   }
@@ -98,6 +79,7 @@ export default function TodayPlanCard() {
         if (data.new_achievements?.length > 0) {
           setNewAchievements(data.new_achievements);
         }
+        await onPlanRefresh?.();
       }
     } catch {
       // ignore
@@ -106,13 +88,25 @@ export default function TodayPlanCard() {
     }
   }
 
+  if (!user?.actorId) return null;
   if (error) return (
     <section className="tp-card" aria-label="今日计划">
       <style>{CSS}</style>
       <p className="tp-load-err">今日计划加载失败，请刷新重试。</p>
     </section>
   );
-  if (!plan) return null;
+  if (!plan) return (
+    <section className="tp-card tp-skeleton" aria-label="今日计划加载中" aria-busy="true">
+      <style>{CSS}</style>
+      <div className="tp-skel-head">
+        <span />
+        <i />
+      </div>
+      <div className="tp-skel-line wide" />
+      <div className="tp-skel-task" />
+      <div className="tp-skel-task short" />
+    </section>
+  );
 
   const { tasks, summary } = plan;
 
@@ -183,6 +177,10 @@ export default function TodayPlanCard() {
           <div>
             <strong>今日无待办</strong>
             <p>作业已交、复习已清。可以去读教材或与历史人物对话，拓展新知识。</p>
+            <div className="tp-clear-actions">
+              <Link href="/student/materials?tab=textbook">读一课教材</Link>
+              <Link href="/student/history/chat">找历史人物聊聊</Link>
+            </div>
           </div>
         </div>
       ) : (
@@ -251,6 +249,19 @@ const CSS = `
   display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; }
 .tp-clear strong { font-size:15px; display:block; margin-bottom:2px; }
 .tp-clear p { font-size:13px; color:var(--muted,#7a7068); margin:0; }
+.tp-clear-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.tp-clear-actions a { border:1px solid #e7dcc9; border-radius:999px; padding:5px 10px; color:var(--jade,#2d6a4f); background:#fbf9f4; font-size:12px; font-weight:700; text-decoration:none; }
+.tp-clear-actions a:hover { border-color:var(--jade,#2d6a4f); background:#f0faf5; }
+.tp-skeleton { overflow:hidden; }
+.tp-skel-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.tp-skel-head span, .tp-skel-head i, .tp-skel-line, .tp-skel-task { display:block; border-radius:12px; background:linear-gradient(90deg,#f2eadc 0%,#fffaf0 48%,#f2eadc 100%); background-size:220% 100%; animation:tpShimmer 1.2s ease-in-out infinite; }
+.tp-skel-head span { width:180px; height:28px; }
+.tp-skel-head i { width:82px; height:24px; }
+.tp-skel-line { height:12px; margin-bottom:14px; }
+.tp-skel-line.wide { width:70%; }
+.tp-skel-task { height:56px; margin-top:8px; }
+.tp-skel-task.short { width:82%; }
+@keyframes tpShimmer { 0%{background-position:120% 0} 100%{background-position:-120% 0} }
 .tp-load-err { font-size:13px; color:var(--cinnabar,#b7422b); padding:8px 0; margin:0; }
 /* 催办通知横幅 */
 .tp-notices { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }

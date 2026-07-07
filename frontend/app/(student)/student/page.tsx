@@ -1,16 +1,10 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { authHeaders } from "@/lib/auth";
 import TodayPlanCard from "./TodayPlanCard";
 import WeeklySummaryCard from "./WeeklySummaryCard";
-
-const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-
-type Profile = { recent_topics: string[]; weak_topics: string[]; grade?: string | null };
-type Weakpoint = { knowledge_tag: string; wrong_count: number; last_wrong_at: string; source: string };
-type ReviewPlan = { recommended_actions?: string[]; weakpoints?: Weakpoint[]; priority_topics?: string[] };
+import ContinueLearningCard from "./ContinueLearningCard";
+import { useStudentWorkbenchData } from "./useStudentWorkbenchData";
 type ModuleTone = "jade" | "cinnabar" | "gold" | "ink";
 type ModuleCard = {
   href: string; icon: string; title: string; desc: string; cta: string;
@@ -19,8 +13,8 @@ type ModuleCard = {
 
 const modules: ModuleCard[] = [
   { href: "/student/assistant", icon: "问", title: "学习助手", desc: "把教材、资料和追问整理成一条可执行的学习线索。", cta: "开始探索", tags: ["学习路线", "知识点提问"], eyebrow: "问学", artifact: "策", tone: "jade", featured: true },
-  { href: "/student/textbook", icon: "册", title: "教材同步", desc: "按章节阅读、理解与复盘，适合课前预习和课后查漏。", cta: "进入教材", tags: ["章节学习", "知识理解"], eyebrow: "读史", artifact: "卷", tone: "gold" },
-  { href: "/student/materials", icon: "纸", title: "资料学习", desc: "上传 PDF 或截图，识别文本后生成摘要和随堂练习。", cta: "上传资料", tags: ["OCR 校对", "练习生成"], eyebrow: "研材", artifact: "笺", tone: "ink" },
+  { href: "/student/materials?tab=textbook", icon: "册", title: "教材同步", desc: "按章节阅读、理解与复盘，适合课前预习和课后查漏。", cta: "进入教材", tags: ["章节学习", "知识理解"], eyebrow: "读史", artifact: "卷", tone: "gold" },
+  { href: "/student/materials", icon: "纸", title: "学习资料", desc: "上传 PDF 或截图，识别文本后生成摘要和随堂练习；或切换到教材目录。", cta: "上传资料", tags: ["OCR 校对", "练习生成"], eyebrow: "研材", artifact: "笺", tone: "ink" },
   { href: "/student/history/chat", icon: "人", title: "历史人物对话", desc: "与历史人物展开追问，在角色视角中理解人物与时代。", cta: "开始对话", tags: ["人物理解", "史实速览"], eyebrow: "入境", artifact: "像", tone: "cinnabar", featured: true },
   { href: "/student/history/debate", icon: "辩", title: "历史辩论场", desc: "围绕辩题组织论点、论据和反驳，训练历史思辨能力。", cta: "开始辩论", tags: ["正反论证", "裁判反馈"], eyebrow: "论辩", artifact: "辩", tone: "gold" },
   { href: "/student/history/games", icon: "弈", title: "历史游戏大厅", desc: "时间线、卡牌和多人模拟，把历史知识放进挑战任务。", cta: "进入大厅", tags: ["闯关练习", "知识挑战"], eyebrow: "闯关", artifact: "弈", tone: "jade" },
@@ -29,35 +23,8 @@ const modules: ModuleCard[] = [
 export default function StudentDashboardPage() {
   const { user } = useAuth();
   const displayName = user?.displayName || user?.actorId || "同学";
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [reviewPlan, setReviewPlan] = useState<ReviewPlan | null>(null);
-  const [pendingReview, setPendingReview] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!user?.actorId) return;
-    const headers = authHeaders(user.token);
-    Promise.all([
-      fetch(`${API}/api/students/${user.actorId}/profile`, { headers }),
-      fetch(`${API}/api/students/${user.actorId}/review-plan`, { headers }),
-      fetch(`${API}/api/students/${user.actorId}/review/today`, { headers }),
-    ])
-      .then(async ([profileRes, planRes, reviewRes]) => {
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
-          if (profileData?.profile) setProfile(profileData.profile);
-        }
-        if (planRes.ok) {
-          const planData = await planRes.json();
-          if (planData?.review_plan) setReviewPlan(planData.review_plan);
-        }
-        if (reviewRes.ok) {
-          const reviewData = await reviewRes.json();
-          const remaining = (reviewData?.total ?? 0) - (reviewData?.completed ?? 0);
-          setPendingReview(remaining > 0 ? remaining : 0);
-        }
-      })
-      .catch(() => {});
-  }, [user?.actorId, user?.token]);
+  const { profile, reviewPlan, todayPlan, loading, error, refreshTodayPlan } = useStudentWorkbenchData(user?.actorId, user?.token);
+  const pendingReview = todayPlan ? Math.max(todayPlan.summary.review_remaining || 0, 0) : null;
 
   const recentTopics = profile?.recent_topics ?? [];
   const weakTopics = profile?.weak_topics ?? [];
@@ -93,7 +60,7 @@ export default function StudentDashboardPage() {
               </Link>
             )}
             <Link href="/student/learning-path" className={pendingReview ? "workbench-secondary-link" : "workbench-primary-link"}>查看复习路径</Link>
-            <Link href="/student/weakpoints" className="workbench-secondary-link">打开错题本</Link>
+            <Link href="/student/review?tab=weakpoints" className="workbench-secondary-link">打开错题库</Link>
           </div>
         </div>
         <aside className="workbench-next-card student-dossier-card" aria-label="今日建议">
@@ -122,13 +89,14 @@ export default function StudentDashboardPage() {
               <p>与历史人物对话、做练习或阅读教材，系统会自动记录你的学习轨迹。</p>
             </>
           )}
-          <Link href={priorityWeakpoints.length > 0 || weakTopics.length > 0 ? "/student/learning-path" : "/student/textbook"}>
+          <Link href={priorityWeakpoints.length > 0 || weakTopics.length > 0 ? "/student/learning-path" : "/student/materials?tab=textbook"}>
             {priorityWeakpoints.length > 0 || weakTopics.length > 0 ? "进入复习路径" : "进入教材"}
           </Link>
         </aside>
       </section>
 
-      <TodayPlanCard />
+      <ContinueLearningCard plan={todayPlan} loading={loading} failed={Boolean(error)} />
+      <TodayPlanCard plan={todayPlan} loading={loading} error={Boolean(error)} onPlanRefresh={refreshTodayPlan} />
       <WeeklySummaryCard />
 
       <section className="workbench-overview-grid" aria-label="今日任务">

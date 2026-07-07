@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 
@@ -31,21 +31,37 @@ export default function AchievementsPage() {
   const [data, setData] = useState<AchievementsData | null>(null);
   const [status, setStatus] = useState<CheckInStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
 
-  useEffect(() => {
-    if (!user?.actorId) return;
-    Promise.all([
-      fetch(`${API}/api/students/${user.actorId}/achievements`, { headers: authHeaders(user.token) })
-        .then(r => r.ok ? r.json() : null),
-      fetch(`${API}/api/students/${user.actorId}/check-in/status`, { headers: authHeaders(user.token) })
-        .then(r => r.ok ? r.json() : null),
-    ]).then(([achData, statusData]) => {
+  const loadAchievements = useCallback(async () => {
+    if (!user?.actorId || !user?.token) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(false);
+    try {
+      const [achData, statusData] = await Promise.all([
+        fetch(`${API}/api/students/${user.actorId}/achievements`, { headers: authHeaders(user.token) })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null),
+        fetch(`${API}/api/students/${user.actorId}/check-in/status`, { headers: authHeaders(user.token) })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null),
+      ]);
       setData(achData);
       setStatus(statusData);
-    }).finally(() => setLoading(false));
+      setError(!achData && !statusData);
+    } finally {
+      setLoading(false);
+    }
   }, [user?.actorId, user?.token]);
+
+  useEffect(() => {
+    loadAchievements();
+  }, [loadAchievements]);
 
   async function doCheckIn() {
     if (!user?.actorId || !user?.token || checkingIn) return;
@@ -54,6 +70,7 @@ export default function AchievementsPage() {
       const res = await fetch(`${API}/api/students/${user.actorId}/check-in`, {
         method: "POST", headers: authHeaders(user.token),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
       if (result.success) {
         setStatus({
@@ -64,13 +81,17 @@ export default function AchievementsPage() {
         });
         if (result.new_achievements?.length > 0) {
           setNewAchievements(result.new_achievements);
-          // 刷新成就列表
-          const achRes = await fetch(`${API}/api/students/${user.actorId}/achievements`, {
-            headers: authHeaders(user.token),
-          });
-          if (achRes.ok) setData(await achRes.json());
         }
+        // 刷新成就列表；失败时保留当前 UI，不弹出运行时错误遮罩。
+        fetch(`${API}/api/students/${user.actorId}/achievements`, {
+          headers: authHeaders(user.token),
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(achData => { if (achData) setData(achData); })
+          .catch(() => {});
       }
+    } catch {
+      setError(true);
     } finally {
       setCheckingIn(false);
     }
@@ -83,6 +104,13 @@ export default function AchievementsPage() {
       <style>{CSS}</style>
 
       <h1 className="ach-title">我的成就</h1>
+
+      {error && (
+        <div className="ach-error" role="alert">
+          成就数据暂时加载失败，请确认后端服务已启动后重试。
+          <button type="button" onClick={loadAchievements}>重新加载</button>
+        </div>
+      )}
 
       {/* 新成就弹窗 */}
       {newAchievements.length > 0 && (
@@ -186,6 +214,8 @@ const CSS = `
 .ach-loading { padding:40px; text-align:center; color:var(--muted,#7a7068); }
 .ach-page { max-width:700px; margin:0 auto; padding:24px 20px 48px; }
 .ach-title { font-size:22px; font-weight:700; color:var(--ink,#1a1612); margin:0 0 20px; }
+.ach-error { display:flex; align-items:center; justify-content:space-between; gap:12px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:12px; padding:12px 14px; margin-bottom:18px; font-size:13px; }
+.ach-error button { border:none; border-radius:16px; background:#ea580c; color:#fff; font-size:12px; font-weight:700; padding:6px 12px; cursor:pointer; white-space:nowrap; }
 /* 打卡面板 */
 .ach-checkin-panel { display:flex; align-items:center; gap:20px; background:linear-gradient(135deg,#f0faf5,#e8f5e9); border:1px solid #a5d6a7; border-radius:14px; padding:18px 22px; margin-bottom:28px; flex-wrap:wrap; }
 .ach-streak-display { display:flex; flex-direction:column; align-items:center; gap:2px; min-width:70px; }

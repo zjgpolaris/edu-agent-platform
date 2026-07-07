@@ -48,7 +48,30 @@ export default function WeeklySummaryCard() {
       .catch(() => setFailed(true));
   }, [user?.actorId, user?.token]);
 
-  if (failed || !data) return null;
+  if (!user?.actorId) return null;
+  if (failed) return (
+    <section className="ws-card ws-error-card" aria-label="本周小结加载失败">
+      <style>{CSS}</style>
+      <div className="ws-error">
+        <strong>本周小结暂时加载失败</strong>
+        <p>学习数据仍会正常记录，可以稍后刷新重试。</p>
+      </div>
+    </section>
+  );
+  if (!data) return (
+    <section className="ws-card ws-skeleton" aria-label="本周小结加载中" aria-busy="true">
+      <style>{CSS}</style>
+      <div className="ws-skel-head">
+        <span />
+        <i />
+      </div>
+      <div className="ws-skel-line wide" />
+      <div className="ws-skel-line" />
+      <div className="ws-skel-chips">
+        <b /><b /><b /><b />
+      </div>
+    </section>
+  );
 
   const m = data.metrics;
   const chips: { label: string; value: string }[] = [
@@ -96,6 +119,9 @@ export default function WeeklySummaryCard() {
 
 const CSS = `
 .ws-card { background:#fff; border:1px solid #e5e0d5; border-radius:14px; padding:20px 22px; margin:0 0 24px; }
+.ws-error { border:1px dashed #e5d2bf; border-radius:12px; padding:14px 16px; background:#fffaf0; }
+.ws-error strong { display:block; color:var(--ink,#1a1612); font-size:14px; margin-bottom:4px; }
+.ws-error p { margin:0; color:var(--muted,#7a7068); font-size:13px; line-height:1.6; }
 .ws-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:12px; }
 .ws-eyebrow { font-size:10px; letter-spacing:.24em; color:var(--jade,#2d6a4f); margin:0 0 4px; }
 .ws-title { font-size:18px; font-weight:700; margin:0; color:var(--ink,#1a1612); }
@@ -110,4 +136,14 @@ const CSS = `
 .ws-suggest-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
 .ws-suggest-list li { position:relative; padding-left:18px; font-size:13px; line-height:1.6; color:var(--ink,#3a332c); }
 .ws-suggest-list li::before { content:"→"; position:absolute; left:0; color:var(--jade,#2d6a4f); font-weight:700; }
+.ws-skeleton { overflow:hidden; }
+.ws-skel-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.ws-skel-head span, .ws-skel-head i, .ws-skel-line, .ws-skel-chips b { display:block; border-radius:12px; background:linear-gradient(90deg,#eef4ec 0%,#fffaf0 48%,#eef4ec 100%); background-size:220% 100%; animation:wsShimmer 1.2s ease-in-out infinite; }
+.ws-skel-head span { width:190px; height:28px; }
+.ws-skel-head i { width:86px; height:24px; }
+.ws-skel-line { height:12px; margin-bottom:10px; }
+.ws-skel-line.wide { width:76%; }
+.ws-skel-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.ws-skel-chips b { width:86px; height:42px; }
+@keyframes wsShimmer { 0%{background-position:120% 0} 100%{background-position:-120% 0} }
 `;

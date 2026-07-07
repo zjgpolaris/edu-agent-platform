@@ -39,7 +39,7 @@ export default async function TextbookTocPage({ params }: { params: { bookId: st
         <section className="panel textbook-toc-page" aria-label="教材目录">
           <h1>教材目录暂时无法加载</h1>
           <p>无法连接教材服务，请稍后重试。</p>
-          <a className="hero-game-link" href="/student/textbook">返回教材列表</a>
+          <a className="hero-game-link" href="/student/materials?tab=textbook">返回教材列表</a>
         </section>
       </main>
     );
@@ -57,7 +57,7 @@ export default async function TextbookTocPage({ params }: { params: { bookId: st
             <span>{toc.units.reduce((count, unit) => count + unit.lessons.length, 0)} 课</span>
             <span>知识点卡片</span>
           </div>
-          <a className="hero-game-link" href="/student/textbook">返回教材列表</a>
+          <a className="hero-game-link" href="/student/materials?tab=textbook">返回教材列表</a>
         </div>
         <div className="teaching-card textbook-boundary-card" aria-label="学习建议">
           <div className="seal-mark" aria-hidden="true">目</div>
