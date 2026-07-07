@@ -4,13 +4,12 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { AuthUser, saveAuth } from "@/lib/auth";
 
 type Role = "student" | "teacher";
 
-const DEMO: Record<Role, { username: string; displayName: string; avatar: string; hint: string }> = {
-  student: { username: "student_001", displayName: "李明", avatar: "李", hint: "继续教材学习与错题复盘" },
-  teacher: { username: "teacher_zhang", displayName: "张老师", avatar: "张", hint: "查看班级洞察与批改任务" },
+const DEMO: Record<Role, { username: string; password: string; displayName: string; avatar: string; hint: string }> = {
+  student: { username: "pilot-student", password: "pilot123", displayName: "Pilot 学生A", avatar: "学", hint: "体验今日计划、错题复习与 AutoTutor 精讲" },
+  teacher: { username: "pilot-teacher", password: "pilot123", displayName: "Pilot 张老师", avatar: "师", hint: "体验今日教学队列、欠交催办与质检盲区" },
 };
 
 const PROOF = [
@@ -58,16 +57,20 @@ export default function Home() {
     }
   }
 
-  function enterDemo() {
+  async function enterDemo() {
     const account = DEMO[role];
-    const auth: AuthUser = {
-      actorId: account.username,
-      role,
-      displayName: account.displayName,
-      token: `demo-${role}-token`,
-    };
-    saveAuth(auth);
-    window.location.assign(role === "teacher" ? "/teacher" : "/student");
+    setUsername(account.username);
+    setPassword(account.password);
+    setError("");
+    setLoading(true);
+    try {
+      await login(account.username, account.password);
+      router.push(role === "teacher" ? "/teacher" : "/student");
+    } catch {
+      setError("Pilot 体验账号暂不可用，请先运行 seed_pilot_demo.py");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const copy = COPY[role];

@@ -71,6 +71,7 @@ SMOKE_SUITES = [
     "question_quality_smoke",
     "notification_badges_smoke",
     "quality_dashboard_smoke",
+    "pilot_path_smoke",
     "today_plan_smoke",
     "completion_overview_smoke",
     "tool_registry_smoke",
@@ -109,6 +110,7 @@ SUITE_FILES = {
     "question_quality_smoke": EVAL_DIR / "question_quality_smoke.py",
     "notification_badges_smoke": EVAL_DIR / "notification_badges_smoke.py",
     "quality_dashboard_smoke": EVAL_DIR / "quality_dashboard_smoke.py",
+    "pilot_path_smoke": EVAL_DIR / "pilot_path_smoke.py",
     "today_plan_smoke": EVAL_DIR / "today_plan_smoke.py",
     "completion_overview_smoke": EVAL_DIR / "completion_overview_smoke.py",
     "tool_registry_smoke": EVAL_DIR / "tool_registry_smoke.py",
@@ -241,6 +243,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "category": "teacher",
         "kind": "smoke",
         "priority": "p1",
+    },
+    "pilot_path_smoke": {
+        "label": "Pilot 演示路径 Smoke",
+        "category": "pilot",
+        "kind": "smoke",
+        "priority": "p0",
     },
     "today_plan_smoke": {
         "label": "学生今日计划 Smoke",

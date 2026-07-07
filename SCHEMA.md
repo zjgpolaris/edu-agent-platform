@@ -2,7 +2,7 @@
 
 **创建时间：** 2026-06-23
 **项目名称：** EduAgent - K-12 中文/历史 AI 教学平台
-**最后更新：** 2026-07-06
+**最后更新：** 2026-07-07
 
 ---
 
@@ -80,7 +80,7 @@ edu-agent-platform/
 ├── docs/                      # 开发文档
 ├── eval/                      # 测试脚本
 ├── knowledge_base/            # 知识库（history/corpus.json、geo_events.json 等静态内容源）
-├── scripts/                   # 脚本工具（含 build_pgvector_index.py 离线构建 RAG 向量索引）
+├── scripts/                   # 脚本工具（含 build_pgvector_index.py 离线构建 RAG 向量索引、seed_pilot_demo.py 试点主路径数据）
 ├── textbooks/                 # 教材数据
 ├── .data/                     # 本地 SQLite 开发数据库（未设置 DATABASE_URL 时使用；无 pgvector RAG）
 ├── build_index.py             # RAG 索引构建入口（转发到 scripts/build_pgvector_index.py）
@@ -255,7 +255,7 @@ frontend/
 
 | 路由 | 说明 |
 |------|------|
-| `/` | 首页 + 登录（叙事 + 学生/教师身份切换、账号登录、一键体验；已登录自动跳工作台，退出后回到此页） |
+| `/` | 首页 + 登录（叙事 + 学生/教师身份切换、账号登录、一键体验；v1.25 起一键体验改为真实登录 pilot-student / pilot-teacher seed 账号；已登录自动跳工作台，退出后回到此页） |
 | `/register` | 注册 |
 | `/history-character` | 历史人物对话 |
 | `/history-games` | 历史游戏大厅 |
@@ -736,7 +736,7 @@ frontend/
 - 学习事件
 - 复习计划
 - 错题本
-- 学生首页继续学习主卡：复用 `GET /api/students/{id}/today` 的今日计划，按逾期作业/今日截止作业/今日复习/薄弱点优先级展示一个明确下一步动作，并在无待办时推荐教材或历史人物对话；`useStudentWorkbenchData` 将首页 profile/review-plan/today 聚合为单次数据加载，`ContinueLearningCard` 与 `TodayPlanCard` 共享同一份今日计划，避免重复请求和状态不一致
+- 学生首页继续学习主卡：复用 `GET /api/students/{id}/today` 的今日计划，按逾期作业/今日截止作业/今日复习/薄弱点优先级展示一个明确下一步动作，并在无待办时推荐教材或历史人物对话；`useStudentWorkbenchData` 将首页 profile/review-plan/today 聚合为单次数据加载，`ContinueLearningCard` 与 `TodayPlanCard` 共享同一份今日计划，避免重复请求和状态不一致；v1.25 起主卡补充推荐理由与待交作业/今日复习/薄弱点 summary chips，仍只读 `/today`，不 hydrate 复习题、不在首页自动启动 AutoTutor/LLM
 - 学生端 `TabShell`：`/student/review`、`/student/materials`、`/student/dashboard` 复用统一 query tab 壳，默认 tab 不写 URL，非默认 tab 可刷新保留，并带 ARIA tab 语义与移动端横向滚动/吸顶样式
 - 学习偏好设置由后端 schema 驱动：`/student/settings` 读取 `GET /api/preferences/schema` 渲染维度和选项，再合并学生已保存偏好，避免前后端双写漂移
 - 学生作业提交前未答校验：在 `/student/assignments` 提交前列出未作答题号，学生可继续检查或确认仍然提交，避免无感提交空答案
@@ -758,7 +758,7 @@ frontend/
 - 作业错题-复习-辅导数据闭环：`submit_assignment` 返回 `wrong_tags`，学生结果页展示答错知识点并提供「今日复习」「AutoTutor 辅导」入口；答错知识点会追加到已存在的今日复习 session（`merge_new_weakpoints_to_today`，标 `pending_generate` 占位），学生打开复习页时 `get_today_session(hydrate=True)` 按需生成占位题的真题并落库（徽标轮询用 `hydrate=False` 只计数、不触发 LLM）；从作业跳转 AutoTutor 时经 `focus_tags` 把该知识点提到教学计划最前
 - 基于错题本和学生画像聚合班级高频薄弱点
 - 教师首页前置本轮讲评重点，班级学情页展示薄弱点人数占比
-- 教师首页今日教学队列：`TeacherTodayQueue` 前端聚合待复核批改、作业欠交/逾期、班级高频薄弱点与共性错题，给出教师当天优先处理动作；讲评材料生成仅保留入口，不在首页自动触发 LLM
+- 教师首页今日教学队列：`TeacherTodayQueue` 前端聚合待复核批改、未复核质检盲区、作业欠交/逾期、班级高频薄弱点与共性错题，给出教师当天优先处理动作；质检盲区来自 `GET /api/teacher/quality-dashboard` 的 `effectiveness.blind_spots_open`，讲评材料生成仅保留入口，不在首页自动触发 LLM
 - 教学建议生成基于高频薄弱点人数和占比，输出讲评步骤、课堂活动、重点知识点和分层作业建议
 
 ---
@@ -785,6 +785,7 @@ frontend/
 | `question_quality_smoke.py` | AI 出题质检测试：结构质检（选项数/答案合法性/题干为空/判断题答案/简答参考答案）+ LLM 语义质检合并（stub LLM：检出/降级/merge 取最高 level）+ few-shot 反例注入 prompt 断言，17 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `notification_badges_smoke.py` | 通知徽标聚合测试（教师待评阅/低分学生/未复核质检盲区统计与复核清零、学生未提交/到期统计），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `quality_dashboard_smoke.py` | 命题质量看板跨作业聚合测试（质检分布/有效性漏检误报/复核结论/高频问题/最难题排序/few-shot 反例/teacher 隔离），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
+| `pilot_path_smoke.py` | v1.25 试点主路径测试：验证 `seed_pilot_demo.py` 幂等、pilot 账号登录、学生今日计划/AutoTutor focus 链接、教师待复核/欠交/质检盲区信号、通知去重与 review 占位任务不触发 LLM，6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `today_plan_smoke.py` | 学生今日计划聚合测试（优先级排序/已交排除/逾期置顶/复习余量/薄弱点 focus 编码/DB 集成隔离），8 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `completion_overview_smoke.py` | 教师班级完成情况聚合测试（逐生计数/逾期判定/掉队排序/班级摘要/DB 集成隔离），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
@@ -872,6 +873,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | `.dockerignore` / `frontend/.dockerignore` | 瘦身 Docker 构建上下文 |
 | `docker-compose.yml` | 本地一键起 redis + backend + frontend |
 | `scripts/seed_demo_student.py` | 灌 demo 学生（demo-student/demo123）+ 预置错题本 |
+| `scripts/seed_pilot_demo.py` | 灌 v1.25 试点主路径数据：pilot 教师/学生账号、作业提交、错题、review 占位任务与通知，支持重复运行幂等演示 |
 | `scripts/build_pgvector_index.py` | 离线构建历史 RAG pgvector 索引（corpus.json → OpenAI-compatible embedding → rag_documents） |
 
 关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。production smoke 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
@@ -959,4 +961,5 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-06 | 1.22.4 | UX 优化第二轮：学生首页 `TodayPlanCard`/`WeeklySummaryCard` 增加骨架屏，避免接口加载期间首屏内容跳变；今日无待办状态补“读一课教材/找历史人物聊聊”下一步 CTA；复习中心空状态补“去完成作业/做智能练习”入口，答题按钮未选择时明确提示“先选择一个答案”，选项增加 `aria-pressed`；教材目录加载态改为卡片骨架屏 |
 | 2026-07-06 | 1.23.0 | 学生工作台 UX alpha：新增 `ContinueLearningCard` 接入 `/student` 首页，基于今日计划最高优先级任务展示“继续学习”主动作；教材目录 tab 请求补认证头并区分失败态；复习页移除 Google Fonts 外链改用全局字体变量；周报加载失败时显示失败态；学生作业提交前增加未答题号提示，可继续检查或确认仍然提交 |
 | 2026-07-07 | 1.24.0 | UX 一致性与工作台聚合：新增学生首页 `useStudentWorkbenchData`，让继续学习卡和今日计划共享同一份 `/today` 数据；新增学生端 `TabShell` 统一复习中心/学习资源/学情总览 tab；通知横幅单条关闭新增 `POST /api/students/{id}/notifications/{notification_id}/read`，不再误标全部已读；偏好设置改为读取后端 `/api/preferences/schema` 动态渲染；教师首页新增 `TeacherTodayQueue`，聚合待复核、欠交/逾期、薄弱点和共性错题 |
+| 2026-07-07 | 1.25.0 | 试点主路径 v1：新增 `scripts/seed_pilot_demo.py` 灌 pilot 教师/学生、作业提交、错题、review 占位任务与通知；学生 `ContinueLearningCard` 增加推荐理由和今日计划 summary chips；教师 `TeacherTodayQueue` 接入命题质量看板的未复核质检盲区；新增 `pilot_path_smoke.py`（6 例）验证 seed 幂等、学生今日计划、教师待办信号与不触发 LLM 的 review 占位链路 |
 

@@ -20,7 +20,9 @@ export type TodayPlan = {
   summary: {
     pending_assignments: number;
     overdue_assignments: number;
+    due_today_assignments: number;
     review_remaining: number;
+    review_total: number;
     weakpoint_count: number;
     all_clear: boolean;
   };

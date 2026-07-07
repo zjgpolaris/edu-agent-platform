@@ -8,12 +8,38 @@ type ContinueCopy = {
   eyebrow: string;
   title: string;
   description: string;
+  reason: string;
   primaryHref: string;
   primaryLabel: string;
   secondaryHref?: string;
   secondaryLabel?: string;
   meta?: string;
 };
+
+type SummaryChip = { label: string; value: string; tone: "danger" | "gold" | "jade" | "muted" };
+
+function buildSummaryChips(plan: TodayPlan | null): SummaryChip[] {
+  const summary = plan?.summary;
+  if (!summary) return [];
+  const chips: SummaryChip[] = [];
+  if (summary.pending_assignments > 0) {
+    chips.push({
+      label: summary.overdue_assignments > 0 ? "待交/逾期" : "待交作业",
+      value: summary.overdue_assignments > 0 ? `${summary.pending_assignments} / ${summary.overdue_assignments}` : `${summary.pending_assignments}`,
+      tone: summary.overdue_assignments > 0 ? "danger" : "gold",
+    });
+  }
+  if (summary.review_total > 0 || summary.review_remaining > 0) {
+    chips.push({ label: "今日复习", value: `${summary.review_remaining}/${summary.review_total || summary.review_remaining}`, tone: "jade" });
+  }
+  if (summary.weakpoint_count > 0) {
+    chips.push({ label: "薄弱点", value: `${summary.weakpoint_count}`, tone: "gold" });
+  }
+  if (!chips.length && summary.all_clear) {
+    chips.push({ label: "今日状态", value: "已清空", tone: "jade" });
+  }
+  return chips.slice(0, 3);
+}
 
 function buildContinueCopy(plan: TodayPlan | null): ContinueCopy {
   const task = plan?.tasks?.[0];
@@ -24,6 +50,7 @@ function buildContinueCopy(plan: TodayPlan | null): ContinueCopy {
       eyebrow: "CONTINUE · 今日无硬性待办",
       title: "今天任务已清空",
       description: "作业、复习和错题任务都已清理。可以继续读一课教材，或找历史人物聊聊拓展知识。",
+      reason: "系统没有发现必须立即处理的作业、复习或薄弱点任务，适合做拓展学习。",
       primaryHref: "/student/materials?tab=textbook",
       primaryLabel: "读教材",
       secondaryHref: "/student/history/chat",
@@ -40,6 +67,7 @@ function buildContinueCopy(plan: TodayPlan | null): ContinueCopy {
       eyebrow: urgent ? "URGENT · 先处理逾期" : "NEXT · 作业优先",
       title: urgent ? "先补交逾期作业" : "继续完成作业",
       description: `${task.title}：${task.detail}。提交后系统会根据错题安排后续复习。`,
+      reason: urgent ? "这项作业已经逾期，先补交才能让错题回流到后续复习。" : "这项作业优先级最高，完成后系统会根据答题结果更新今日计划。",
       primaryHref: task.href,
       primaryLabel: "继续作业",
       secondaryHref: "/student/review",
@@ -55,6 +83,7 @@ function buildContinueCopy(plan: TodayPlan | null): ContinueCopy {
       eyebrow: "REVIEW · 间隔复习",
       title: "继续今日复习",
       description: `${task.detail}。完成后，系统会更新你的掌握度和下次复习时间。`,
+      reason: "间隔复习窗口已经到了，现在完成最能巩固最近的错题记忆。",
       primaryHref: task.href,
       primaryLabel: "开始复习",
       secondaryHref: "/student/review?tab=weakpoints",
@@ -69,6 +98,7 @@ function buildContinueCopy(plan: TodayPlan | null): ContinueCopy {
     eyebrow: "FOCUS · 薄弱点攻克",
     title: "攻克薄弱点",
     description: `${task.title}。建议先进入 AutoTutor 精讲，再做变式题巩固。`,
+    reason: "这是错题本当前最需要攻克的知识点；点击进入 AutoTutor 后才会开始针对性规划。",
     primaryHref: task.href,
     primaryLabel: "进入精讲",
     secondaryHref: "/student/review?tab=weakpoints",
@@ -103,6 +133,7 @@ export default function ContinueLearningCard({ plan, loading, failed = false }: 
       <p className="cl-eyebrow">CONTINUE · 暂不可用</p>
       <h2 className="cl-title">暂时无法生成下一步建议</h2>
       <p className="cl-desc">今日计划加载失败，但学习记录仍会正常保存。你可以先进入复习中心或教材目录继续学习。</p>
+      <p className="cl-reason"><strong>推荐理由：</strong>先选择确定入口继续学习，稍后刷新即可恢复个性化建议。</p>
       <div className="cl-actions">
         <Link href="/student/review" className="cl-primary">去复习中心</Link>
         <Link href="/student/materials?tab=textbook" className="cl-secondary">读教材</Link>
@@ -111,6 +142,7 @@ export default function ContinueLearningCard({ plan, loading, failed = false }: 
   );
 
   const copy = buildContinueCopy(plan);
+  const chips = buildSummaryChips(plan);
   return (
     <section className={`cl-card ${copy.tone}`} aria-label="继续学习建议">
       <style>{CSS}</style>
@@ -119,6 +151,16 @@ export default function ContinueLearningCard({ plan, loading, failed = false }: 
         <p className="cl-eyebrow">{copy.eyebrow}</p>
         <h2 className="cl-title">{copy.title}</h2>
         <p className="cl-desc">{copy.description}</p>
+        <p className="cl-reason"><strong>推荐理由：</strong>{copy.reason}</p>
+        {chips.length > 0 && (
+          <div className="cl-chips" aria-label="今日计划摘要">
+            {chips.map((chip) => (
+              <span key={chip.label} className={`cl-chip ${chip.tone}`}>
+                <small>{chip.label}</small><b>{chip.value}</b>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="cl-actions">
           <Link href={copy.primaryHref} className="cl-primary">{copy.primaryLabel}<span aria-hidden="true"> →</span></Link>
           {copy.secondaryHref && copy.secondaryLabel && (
@@ -145,6 +187,16 @@ const CSS = `
 .cl-eyebrow { margin:0 0 7px; color:var(--cinnabar,#b7422b); font-size:11px; font-weight:900; letter-spacing:.22em; }
 .cl-title { margin:0; font-size:clamp(21px, 3vw, 28px); color:var(--ink,#1a1612); letter-spacing:.05em; }
 .cl-desc { max-width:680px; margin:10px 0 0; color:var(--ink-soft,#66584b); line-height:1.78; font-size:14px; }
+.cl-reason { max-width:680px; margin:10px 0 0; color:var(--muted,#887967); line-height:1.7; font-size:13px; }
+.cl-reason strong { color:var(--ink,#1a1612); }
+.cl-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.cl-chip { display:inline-flex; align-items:center; gap:7px; border-radius:999px; padding:6px 10px; border:1px solid rgba(96,72,44,.12); background:rgba(255,252,244,.66); }
+.cl-chip small { color:var(--muted,#887967); font-size:11px; font-weight:800; }
+.cl-chip b { color:var(--ink,#1a1612); font-size:12px; }
+.cl-chip.danger { background:#fee2e2; border-color:#fecaca; }
+.cl-chip.gold { background:#fef3c7; border-color:#fde68a; }
+.cl-chip.jade { background:#dff3eb; border-color:#bfe4d7; }
+.cl-chip.muted { background:rgba(241,234,221,.7); }
 .cl-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
 .cl-primary,.cl-secondary { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:9px 16px; border-radius:999px; font-size:13px; font-weight:850; text-decoration:none; transition:transform var(--ease), box-shadow var(--ease), background var(--ease); }
 .cl-primary { color:#fffaf0; background:linear-gradient(135deg, var(--cinnabar,#b7422b), var(--cinnabar-dark,#8d2d1c)); box-shadow:0 12px 26px rgba(183,66,43,.2); }

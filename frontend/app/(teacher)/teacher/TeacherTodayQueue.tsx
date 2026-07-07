@@ -11,6 +11,7 @@ type CompletionOverview = {
 type HomeworkReviewsResponse = { reviews?: unknown[]; items?: unknown[] } | unknown[];
 type ClassAnalytics = { top_weak_topics?: [string, number][]; weak_topics_distribution?: Record<string, number> };
 type ClassWrongAnalysis = { questions?: Array<{ knowledge_tag?: string | null; accuracy?: number; student_count_wrong?: number; assignment_title?: string }> };
+type QualityDashboard = { effectiveness?: { blind_spots_open?: number } };
 
 type QueueItem = {
   key: string;
@@ -37,6 +38,7 @@ export default function TeacherTodayQueue() {
   const [completion, setCompletion] = useState<CompletionOverview | null>(null);
   const [analytics, setAnalytics] = useState<ClassAnalytics | null>(null);
   const [wrongAnalysis, setWrongAnalysis] = useState<ClassWrongAnalysis | null>(null);
+  const [quality, setQuality] = useState<QualityDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -50,13 +52,15 @@ export default function TeacherTodayQueue() {
       fetchApiJson<CompletionOverview>("/api/teacher/completion-overview", { token: user.token }),
       fetchApiJson<ClassAnalytics>("/api/teacher/class-analytics", { token: user.token }),
       fetchApiJson<ClassWrongAnalysis>("/api/teacher/class-wrong-analysis?limit_assignments=8&top_n=5", { token: user.token }),
+      fetchApiJson<QualityDashboard>("/api/teacher/quality-dashboard", { token: user.token }),
     ]).then((results) => {
       if (cancelled) return;
-      const [reviewRes, completionRes, analyticsRes, wrongRes] = results;
+      const [reviewRes, completionRes, analyticsRes, wrongRes, qualityRes] = results;
       if (reviewRes.status === "fulfilled") setReviews(reviewRes.value);
       if (completionRes.status === "fulfilled") setCompletion(completionRes.value);
       if (analyticsRes.status === "fulfilled") setAnalytics(analyticsRes.value);
       if (wrongRes.status === "fulfilled") setWrongAnalysis(wrongRes.value);
+      if (qualityRes.status === "fulfilled") setQuality(qualityRes.value);
       const firstRejected = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
       if (results.every((r) => r.status === "rejected") && firstRejected) {
         setError(normalizeError(firstRejected.reason, "教学队列加载失败"));
@@ -79,6 +83,19 @@ export default function TeacherTodayQueue() {
         detail: "先处理需要教师判断的 AI 批改结果，避免学生反馈卡在待审核状态。",
         href: "/teacher/grading?tab=homework",
         cta: "进入批改",
+      });
+    }
+
+    const blindSpots = quality?.effectiveness?.blind_spots_open || 0;
+    if (blindSpots > 0) {
+      next.push({
+        key: "quality-blind-spots",
+        tone: "warm",
+        label: "质检盲区",
+        title: `${blindSpots} 处 AI 质检盲区待复核`,
+        detail: "这些题 AI 判为合格但真实正确率异常低，复核后会回流命题质检。",
+        href: "/teacher/quality-dashboard",
+        cta: "去复核",
       });
     }
 
@@ -123,7 +140,7 @@ export default function TeacherTodayQueue() {
       });
     }
     return next.slice(0, 4);
-  }, [reviews, completion, analytics, wrongAnalysis]);
+  }, [reviews, completion, analytics, wrongAnalysis, quality]);
 
   if (!user?.token) return null;
 

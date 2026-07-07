@@ -21,7 +21,7 @@ eval-rag:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/rag_retrieval_eval.py
 
 eval-smoke:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/run_core_evals.py --suite history_character_smoke --suite learning_assistant_smoke --suite material_rag_smoke --suite student_profile_smoke --suite homework_grading_smoke --suite tool_registry_smoke --suite guardrails_smoke
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/run_core_evals.py --suite history_character_smoke --suite learning_assistant_smoke --suite material_rag_smoke --suite student_profile_smoke --suite homework_grading_smoke --suite pilot_path_smoke --suite tool_registry_smoke --suite guardrails_smoke
 
 eval-json:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/run_core_evals.py --json
