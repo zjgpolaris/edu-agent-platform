@@ -558,6 +558,74 @@ async def api_health():
     return {"ok": True, "service": "edu-agent-backend"}
 
 
+@app.get("/api/ready")
+async def api_ready(collection: str = "history", require_rag: bool = False):
+    """发布前 readiness 聚合：浅检查 DB/LLM 配置/RAG 索引/eval 摘要，不触发外部 LLM/Embedding。"""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", collection):
+        raise HTTPException(status_code=400, detail="Invalid collection")
+
+    checks: dict[str, Any] = {}
+
+    try:
+        from sqlalchemy import text as sa_text
+        from db.engine import engine
+        with engine.connect() as conn:
+            conn.execute(sa_text("SELECT 1"))
+        checks["database"] = {"ok": True, "dialect": engine.dialect.name}
+    except Exception as exc:
+        checks["database"] = {"ok": False, "error_type": exc.__class__.__name__, "reason": str(exc)[:300]}
+
+    checks["llm_config"] = {
+        "ok": bool(LLM_PROVIDER and MODEL_FAST and MODEL_QUALITY),
+        "provider": LLM_PROVIDER,
+        "fast_model": MODEL_FAST,
+        "quality_model": MODEL_QUALITY,
+        "fallback_model": MODEL_FALLBACK,
+        "mode": "shallow",
+    }
+
+    try:
+        rag_payload = await run_in_threadpool(lambda: check_rag_health(collection, deep=False))
+        checks["rag"] = {
+            "ok": bool(rag_payload.get("ok")),
+            "status": rag_payload.get("status"),
+            "collection": rag_payload.get("collection"),
+            "deep": False,
+            "checks": rag_payload.get("checks"),
+            "config": rag_payload.get("config"),
+        }
+    except Exception as exc:
+        checks["rag"] = {"ok": False, "error_type": exc.__class__.__name__, "reason": str(exc)[:300], "deep": False}
+
+    eval_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "eval", "reports", "latest.json")
+    try:
+        with open(eval_path, "r", encoding="utf-8") as fh:
+            latest = json.load(fh)
+        checks["latest_eval"] = {
+            "ok": bool(latest.get("ok")),
+            "generated_at": latest.get("generated_at"),
+            "summary": latest.get("summary"),
+            "failed_suites": latest.get("failed_suites", []),
+        }
+    except FileNotFoundError:
+        checks["latest_eval"] = {"ok": False, "missing": True, "reason": "eval report not found"}
+    except Exception as exc:
+        checks["latest_eval"] = {"ok": False, "error_type": exc.__class__.__name__, "reason": str(exc)[:300]}
+
+    required = ["database", "llm_config"] + (["rag"] if require_rag else [])
+    ok = all(bool(checks.get(name, {}).get("ok")) for name in required)
+    warnings = [name for name, payload in checks.items() if name not in required and not payload.get("ok")]
+    return {
+        "ok": ok,
+        "status": "ok" if ok and not warnings else ("degraded" if ok else "failed"),
+        "service": "edu-agent-backend",
+        "mode": "readiness-shallow",
+        "require_rag": require_rag,
+        "checks": checks,
+        "warnings": warnings,
+    }
+
+
 class TraceResponse(BaseModel):
     trace_id: str
     events: list[dict]
@@ -621,61 +689,6 @@ async def rag_health(collection: str = "history", deep: bool = True, actor: Acto
                 },
             }
         return {**payload, "trace_id": current_trace_id()}
-
-
-# --- Eval Dashboard ---
-
-class EvalReport(BaseModel):
-    generated_at: str
-    suite: str
-    summary: dict[str, Any]
-    suites: list[dict[str, Any]]
-    failed_cases: list[dict[str, Any]]
-
-
-@app.get("/api/eval/latest")
-async def get_latest_eval_report(actor: Actor = Depends(require_auth)):
-    """Get the latest evaluation report."""
-    from eval.report_generator import load_latest_report
-    report = load_latest_report()
-    if report is None:
-        return {"error": "No eval report found"}
-    return report
-
-
-@app.post("/api/eval/run")
-async def run_eval(actor: Actor = Depends(require_auth)):
-    """Run evaluation and generate report."""
-    import subprocess
-    from eval.report_generator import generate_report, save_report
-
-    # Run existing smoke tests
-    result = subprocess.run(
-        ["python3", "eval/run_smoke_tests.py"],
-        capture_output=True,
-        text=True,
-        cwd=os.path.dirname(os.path.dirname(__file__)),
-    )
-
-    # Generate report from results (simplified)
-    # In production, this would parse actual test results
-    mock_results = [
-        {"suite": "material_rag", "case": "basic_retrieval", "success": True, "metrics": {"retrieval_hit_rate": 0.95}},
-        {"suite": "material_rag", "case": "isolation", "success": True, "metrics": {"source_correctness": 0.92}},
-        {"suite": "learning_assistant", "case": "tool_call", "success": True, "metrics": {"tool_call_accuracy": 0.85}},
-        {"suite": "learning_assistant", "case": "confirmation", "success": True, "metrics": {"guardrail_pass_rate": 1.0}},
-        {"suite": "tool_permission", "case": "role_check", "success": True, "metrics": {"role_check_accuracy": 1.0}},
-    ]
-
-    report = generate_report(mock_results, "core_evals")
-    save_report(report)
-
-    return {
-        "success": result.returncode == 0,
-        "output": result.stdout,
-        "error": result.stderr if result.returncode != 0 else None,
-        "report": report,
-    }
 
 
 @app.get("/api/history/games")
@@ -2702,6 +2715,15 @@ async def teacher_completion_overview(actor: Actor = Depends(require_auth)):
     from services.completion_overview import get_class_completion_overview
     today = _date.today().isoformat()
     return await run_in_threadpool(get_class_completion_overview, actor.actor_id, today)
+
+
+@app.get("/api/teacher/today-queue")
+async def teacher_today_queue(actor: Actor = Depends(require_auth)):
+    """教师今日教学队列：聚合待复核、质检盲区、欠交、薄弱点与共性错题。"""
+    require_teacher_actor(actor)
+    from services.teacher_today_queue import get_teacher_today_queue
+    today = _date.today().isoformat()
+    return await run_in_threadpool(get_teacher_today_queue, actor.actor_id, today)
 
 
 class UrgeStudentsRequest(BaseModel):

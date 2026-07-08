@@ -1,7 +1,7 @@
 PYTHONPATH := backend
 PYTHON := python3
 
-.PHONY: verify verify-core verify-core-full eval eval-quick eval-rag eval-smoke eval-json index index-incremental
+.PHONY: verify verify-core verify-core-full release-gate release-gate-fast release-gate-prod eval eval-quick eval-rag eval-smoke eval-json index index-incremental
 
 verify: verify-core
 
@@ -10,6 +10,15 @@ verify-core:
 
 verify-core-full:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/verify_core.py --quick --frontend
+
+release-gate:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/release_gate.py
+
+release-gate-fast:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/release_gate.py --fast
+
+release-gate-prod:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/release_gate.py --production
 
 eval:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/run_core_evals.py

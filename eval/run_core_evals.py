@@ -77,6 +77,7 @@ SMOKE_SUITES = [
     "tool_registry_smoke",
     "guardrails_smoke",
     "trace_smoke",
+    "readiness_smoke",
     "variant_question_smoke",
     "lecture_review_smoke",
     "mastery_heatmap_smoke",
@@ -117,6 +118,7 @@ SUITE_FILES = {
     "guardrails_smoke": EVAL_DIR / "guardrails_smoke.py",
     "ragas_eval": EVAL_DIR / "ragas_eval.py",
     "trace_smoke": EVAL_DIR / "trace_smoke.py",
+    "readiness_smoke": EVAL_DIR / "readiness_smoke.py",
     "trajectory_eval": EVAL_DIR / "trajectory_eval.py",
     "auto_tutor_trajectory_eval": EVAL_DIR / "auto_tutor_trajectory_eval.py",
     "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
@@ -357,6 +359,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "category": "observability",
         "kind": "smoke",
         "priority": "p1",
+    },
+    "readiness_smoke": {
+        "label": "Readiness / Eval 路由 Smoke",
+        "category": "observability",
+        "kind": "smoke",
+        "priority": "p0",
     },
     "knowledge_graph_smoke": {
         "label": "知识图谱前置依赖 Smoke",

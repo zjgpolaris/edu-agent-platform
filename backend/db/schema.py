@@ -156,6 +156,7 @@ weakpoints = Table(
     Column("wrong_count", Integer, nullable=False, server_default="1"),
     Column("last_wrong_at", Text, nullable=False),
     Column("source", Text, nullable=False),
+    Column("correct_streak", Integer, nullable=False, server_default="0"),
     Index("idx_weakpoints_student", "student_id"),
 )
 
@@ -222,5 +223,39 @@ assignment_submissions = Table(
     Column("reviewed_at", Text),
     Index("idx_assignment_submissions_assignment", "assignment_id"),
     Index("idx_assignment_submissions_student", "student_id", "assignment_id", unique=True),
+)
+
+student_notifications = Table(
+    "student_notifications", metadata,
+    Column("id", Text, primary_key=True),
+    Column("student_id", Text, nullable=False),
+    Column("teacher_id", Text, nullable=False),
+    Column("message", Text, nullable=False),
+    Column("assignment_ids_json", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("read_at", Text),
+    Index("idx_student_notifications_student", "student_id", "created_at"),
+)
+
+learning_preferences = Table(
+    "learning_preferences", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("student_id", Text, nullable=False, unique=True),
+    Column("preferences_json", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
+root_cause_records = Table(
+    "root_cause_records", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("student_id", Text, nullable=False),
+    Column("knowledge_tag", Text, nullable=False),
+    Column("question_text", Text),
+    Column("student_answer", Text),
+    Column("correct_answer", Text),
+    Column("root_cause", Text, nullable=False),
+    Column("confidence", Float, nullable=False),
+    Column("analyzed_at", Text, nullable=False),
+    Index("idx_root_cause_student_tag", "student_id", "knowledge_tag", "analyzed_at"),
 )
 

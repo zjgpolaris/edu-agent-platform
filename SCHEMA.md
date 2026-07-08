@@ -2,7 +2,7 @@
 
 **创建时间：** 2026-06-23
 **项目名称：** EduAgent - K-12 中文/历史 AI 教学平台
-**最后更新：** 2026-07-07
+**最后更新：** 2026-07-08
 
 ---
 
@@ -148,6 +148,7 @@ backend/
 │   ├── review_service.py          # SM-2 自适应复习调度（wrong_count>=2 时自动改用变式题）
 │   ├── today_plan.py              # 学生今日计划：作业到期/复习/薄弱点按优先级合成待办（纯函数+装配）
 │   ├── lecture_review_service.py  # 讲评课 AI 辅助：跨作业聚合错误→LLM 生成讲解提示/板书关键词/即时练习形式
+│   ├── teacher_today_queue.py     # 教师今日教学队列：聚合待复核、质检盲区、欠交/逾期、薄弱点与共性错题
 │   ├── variant_service.py         # 错题变式生成：wrong_count>=VARIANT_THRESHOLD 时 LLM 生成同 tag 不同题面变式题，含当日缓存
 │   ├── knowledge_graph_service.py # 知识图谱前置依赖：静态 DAG + 画像/错题推导节点状态（mastered/weak/available/locked）、下一步建议、薄弱点风险预测（前置链含 weak 的下游高风险点）与班级地基薄弱点聚合（aggregate_class_risks）
 │   └── weakpoint_service.py       # 错题本服务（掌握度证据计数：答错强化，连续答对达阈值才移除）
@@ -387,6 +388,12 @@ frontend/
 | GET | `/api/students/{student_id}/review/today` | 获取今日自适应复习任务（无则生成） |
 | POST | `/api/students/{student_id}/review/submit` | 提交复习答题结果 |
 | GET | `/api/students/{student_id}/mastery-overview` | 知识点掌握度总览 + 连续打卡天数（strength 纳入 correct_streak 加成） |
+| GET | `/api/students/{student_id}/preferences` | 读取学生 AI 学伴偏好（pace/style/interaction/difficulty 等，选项 schema 由后端统一定义） |
+| PUT | `/api/students/{student_id}/preferences` | 保存学生 AI 学伴偏好，AutoTutor 规划时注入偏好提示 |
+| GET | `/api/preferences/schema` | 学习偏好配置 schema：返回维度、选项、默认值，供前端动态渲染 |
+| POST | `/api/students/{student_id}/weakpoints/{knowledge_tag}/analyze` | 对某薄弱知识点做根因诊断（concept/memory/comprehension/careless），LLM 失败时规则降级 |
+| GET | `/api/students/{student_id}/weakpoints/{knowledge_tag}/root-cause` | 获取某薄弱知识点最近一次根因诊断结果 |
+| GET | `/api/students/{student_id}/root-cause/summary` | 根因诊断汇总：按根因类型统计分布与最近记录 |
 | PUT | `/api/teacher/assignments/{assignment_id}/difficulty-groups` | 为作业的学生设置难度分层（`{student_id: "easy"/"medium"/"hard"}`），传 `{}` 清除分层 |
 | GET | `/api/student/{student_id}/assignments/{assignment_id}/my-questions` | 返回学生应作答的题目：有分层按难度筛选，无分层返回全部，降级（无匹配题）返回全部 |
 | GET | `/api/students/{student_id}/review/variant-question` | 为指定 tag 生成（或返回今日缓存的）变式题；`wrong_count>=2` 时复习 session 也自动使用（`?tag=xxx`） |
@@ -416,6 +423,7 @@ frontend/
 | GET | `/api/teacher/badges` | 教师侧边栏通知徽标：`{pending_review, below_threshold, blind_spots_to_review}`（复用作业列表聚合，`blind_spots_to_review`＝各作业未复核质检盲区数之和，前端 60s 轮询；「布置作业」入口显示 pending_review + blind_spots_to_review 之和） |
 | GET | `/api/teacher/quality-dashboard` | 命题质量看板：跨作业聚合 AI 质检分布(error/warn/ok/unchecked)、有效性(主动预警/疑似误报/盲区待复核·确认漏检·其实没掌握)、复核结论分布、高频问题类型、最难题 Top 与近期 few-shot 反例；只读确定性 |
 | GET | `/api/teacher/completion-overview` | 班级作业完成情况：跨作业按学生聚合 已交/欠交/逾期(掉队优先) + 班级摘要(总体提交率/有逾期学生数/已全交数)；只读确定性 |
+| GET | `/api/teacher/today-queue` | 教师今日教学队列：后端聚合待复核、质检盲区、欠交/逾期、班级薄弱点与共性错题，返回已排序行动项、summary 与 source_errors；教师首页单接口消费 |
 | GET | `/api/student/{student_id}/badges` | 学生侧边栏通知徽标：`{pending_assignments, due_soon, pending_review}`（未提交作业/临近到期/今日复习待完成，前端 60s 轮询） |
 | GET | `/api/teacher/materials` | 教师资料库 |
 | POST | `/api/teacher/teaching-suggestions` | 教学建议生成 |
@@ -453,7 +461,8 @@ frontend/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/health` | 轻量服务健康检查，不触发 LLM/RAG，供 Render 等部署平台使用 |
+| GET | `/api/health` | 轻量 liveness 检查，不触发 LLM/RAG，供 Render 等部署平台使用 |
+| GET | `/api/ready` | 发布前 readiness 浅检查：聚合 DB、LLM 配置、RAG 浅状态和最新 eval 摘要；默认不触发外部 LLM/Embedding，`?require_rag=true` 时把 RAG 浅检查纳入硬门槛 |
 | GET | `/api/debug/llm/health` | LLM 健康检查默认浅检查不调用模型；显式 `?deep=true` 才实际调用 fast 模型做连通性诊断 |
 | GET | `/api/debug/rag/health` | 生产 RAG 健康检查：验证 PostgreSQL/pgvector、`rag_documents`、embedding API 与直接向量查询 |
 | GET | `/api/traces/{trace_id}` | 获取 Agent 执行轨迹 |
@@ -467,7 +476,7 @@ frontend/
 | GET | `/api/eval/latest` | 最新评估报告 |
 | GET | `/api/eval/report/json` | 评估报告 JSON |
 | GET | `/api/eval/report/markdown` | 评估报告 Markdown |
-| POST | `/api/eval/run` | 运行评估 |
+| POST | `/api/eval/run` | 运行评估；统一调用 `eval/run_core_evals.py` 的 suite 注册与报告生成，不再使用旧 mock report_generator 路径 |
 | GET | `/api/eval/history` | 评估历史 |
 | GET | `/api/eval/candidate-cases` | 候选测试用例 |
 | POST | `/api/eval/save-case` | 保存测试用例 |
@@ -590,6 +599,7 @@ frontend/
 | wrong_count | INTEGER | 出错次数 |
 | last_wrong_at | TEXT | 最近出错时间 |
 | source | TEXT | 来源 |
+| correct_streak | INTEGER | 连续答对次数；答错时清零，达到掌握阈值后移出错题本 |
 
 #### accounts 表
 
@@ -643,6 +653,47 @@ frontend/
 | teacher_feedback | TEXT | 教师人工评语 |
 | reviewed_at | TEXT | 人工评阅时间 |
 
+#### student_notifications 表
+
+学生站内通知表；`read_at IS NULL` 表示未读。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT | 通知 ID |
+| student_id | TEXT | 接收学生 ID |
+| teacher_id | TEXT | 发送教师 ID |
+| message | TEXT | 通知内容 |
+| assignment_ids_json | TEXT | 关联作业 ID 列表（JSON） |
+| created_at | TEXT | 创建时间 |
+| read_at | TEXT | 已读时间，空值表示未读 |
+
+#### learning_preferences 表
+
+学生 AI 学伴偏好表；选项维度与默认值由 `GET /api/preferences/schema` 返回，表内只保存学生当前选择。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 自增 ID |
+| student_id | TEXT | 学生 ID（唯一） |
+| preferences_json | TEXT | 偏好选择（JSON） |
+| updated_at | TEXT | 更新时间 |
+
+#### root_cause_records 表
+
+薄弱点根因诊断历史表；`root_cause` 枚举为 `concept` / `memory` / `comprehension` / `careless`。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 自增 ID |
+| student_id | TEXT | 学生 ID |
+| knowledge_tag | TEXT | 知识点标签 |
+| question_text | TEXT | 题干 |
+| student_answer | TEXT | 学生答案 |
+| correct_answer | TEXT | 正确答案 |
+| root_cause | TEXT | 根因类型 |
+| confidence | REAL | 诊断置信度 |
+| analyzed_at | TEXT | 诊断时间 |
+
 #### question_review_flags 表
 
 教师对质检盲区题的复核判定（每题至多一条，UPSERT）。
@@ -664,7 +715,7 @@ frontend/
 | game_rounds | 游戏回合记录，含 TTL 过期时间 |
 | card_game_wrong_records | 卡牌游戏错题记录 |
 | card_game_reports | 卡牌游戏学习报告 |
-| review_sessions | 每日自适应复习会话，每学生每天一条，含任务列表与完成进度 |
+| review_sessions | 每日自适应复习会话，每学生每天一条，含任务列表与完成进度；`tasks_json` 可包含 `pending_generate=true` 占位题，首页/徽标/今日计划使用 `hydrate=false` 只读不触发 LLM，复习页使用 `hydrate=true` 时才按需生成真题并落库 |
 
 ---
 
@@ -758,7 +809,7 @@ frontend/
 - 作业错题-复习-辅导数据闭环：`submit_assignment` 返回 `wrong_tags`，学生结果页展示答错知识点并提供「今日复习」「AutoTutor 辅导」入口；答错知识点会追加到已存在的今日复习 session（`merge_new_weakpoints_to_today`，标 `pending_generate` 占位），学生打开复习页时 `get_today_session(hydrate=True)` 按需生成占位题的真题并落库（徽标轮询用 `hydrate=False` 只计数、不触发 LLM）；从作业跳转 AutoTutor 时经 `focus_tags` 把该知识点提到教学计划最前
 - 基于错题本和学生画像聚合班级高频薄弱点
 - 教师首页前置本轮讲评重点，班级学情页展示薄弱点人数占比
-- 教师首页今日教学队列：`TeacherTodayQueue` 前端聚合待复核批改、未复核质检盲区、作业欠交/逾期、班级高频薄弱点与共性错题，给出教师当天优先处理动作；质检盲区来自 `GET /api/teacher/quality-dashboard` 的 `effectiveness.blind_spots_open`，讲评材料生成仅保留入口，不在首页自动触发 LLM
+- 教师首页今日教学队列：`GET /api/teacher/today-queue` 后端聚合待复核批改、未复核质检盲区、作业欠交/逾期、班级高频薄弱点与共性错题，返回已排序行动项、summary 与 source_errors；`TeacherTodayQueue` 前端单接口消费，给出教师当天优先处理动作；质检盲区来自 `GET /api/teacher/quality-dashboard` 的 `effectiveness.blind_spots_open`，讲评材料生成仅保留入口，不在首页自动触发 LLM
 - 教学建议生成基于高频薄弱点人数和占比，输出讲评步骤、课堂活动、重点知识点和分层作业建议
 
 ---
@@ -785,10 +836,11 @@ frontend/
 | `question_quality_smoke.py` | AI 出题质检测试：结构质检（选项数/答案合法性/题干为空/判断题答案/简答参考答案）+ LLM 语义质检合并（stub LLM：检出/降级/merge 取最高 level）+ few-shot 反例注入 prompt 断言，17 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `notification_badges_smoke.py` | 通知徽标聚合测试（教师待评阅/低分学生/未复核质检盲区统计与复核清零、学生未提交/到期统计），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `quality_dashboard_smoke.py` | 命题质量看板跨作业聚合测试（质检分布/有效性漏检误报/复核结论/高频问题/最难题排序/few-shot 反例/teacher 隔离），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
-| `pilot_path_smoke.py` | v1.25 试点主路径测试：验证 `seed_pilot_demo.py` 幂等、pilot 账号登录、学生今日计划/AutoTutor focus 链接、教师待复核/欠交/质检盲区信号、通知去重与 review 占位任务不触发 LLM，6 例离线，已接入 `run_core_evals.py`（SMOKE） |
+| `pilot_path_smoke.py` | v1.25 试点主路径测试：验证 `seed_pilot_demo.py` 幂等、pilot 账号登录、学生今日计划/AutoTutor focus 链接、教师待复核/欠交/质检盲区信号、`/api/teacher/today-queue` 后端聚合队列、通知去重与 review 占位任务不触发 LLM，7 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `today_plan_smoke.py` | 学生今日计划聚合测试（优先级排序/已交排除/逾期置顶/复习余量/薄弱点 focus 编码/DB 集成隔离），8 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `completion_overview_smoke.py` | 教师班级完成情况聚合测试（逐生计数/逾期判定/掉队排序/班级摘要/DB 集成隔离），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
+| `readiness_smoke.py` | Readiness / Eval 路由测试：验证 `/api/ready` 浅检查结构，以及 `/api/eval/latest`、`/api/eval/run` 只注册新版 `run_core_evals.py` 路由，避免旧 mock report_generator 遮蔽 |
 | `trajectory_eval.py` | 学习助手工具调用轨迹准确率，已接入 `run_core_evals.py`（CORE/QUICK） |
 | `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中、focus_tags 优先规划、连错降难度、空错题本兜底），7 例，已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
 | `production_rag_health_smoke.py` | 生产 RAG HTTP smoke，显式通过 `API_BASE` 指向线上后端，不进入默认本地 smoke/core 套件 |
@@ -805,6 +857,18 @@ PYTHONPATH=backend python3 scripts/verify_core.py --smoke --no-report
 
 # 运行 quick 套件
 python3 eval/run_core_evals.py --quick
+
+# 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build
+npm run release:gate
+
+# 本地快速发布闸门：关键试点/教师/今日计划 smoke + 前端 build
+npm run release:gate:fast
+
+# 生产发布闸门：在本地闸门后追加 production RAG smoke（需线上 API_BASE + token 或 smoke 账号）
+API_BASE=https://<render-backend> SMOKE_USERNAME=<user> SMOKE_PASSWORD=<password> npm run release:gate:prod
+
+# 可选：发布闸门追加线上 readiness 浅检查（不触发外部 LLM/Embedding）
+npm run release:gate:fast -- --ready-url https://<render-backend>/api/ready
 
 # 运行学习闭环 smoke
 python3 eval/run_core_evals.py --suite learning_closure_smoke
@@ -874,9 +938,10 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | `docker-compose.yml` | 本地一键起 redis + backend + frontend |
 | `scripts/seed_demo_student.py` | 灌 demo 学生（demo-student/demo123）+ 预置错题本 |
 | `scripts/seed_pilot_demo.py` | 灌 v1.25 试点主路径数据：pilot 教师/学生账号、作业提交、错题、review 占位任务与通知，支持重复运行幂等演示 |
+| `scripts/release_gate.py` | 发布前统一闸门：Python 语法检查、后端 smoke/关键 smoke、前端 build，可选生产 RAG smoke；配合 `/api/ready` 做线上浅 readiness 检查 |
 | `scripts/build_pgvector_index.py` | 离线构建历史 RAG pgvector 索引（corpus.json → OpenAI-compatible embedding → rag_documents） |
 
-关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。production smoke 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
+关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。production smoke / `npm run release:gate:prod` 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
 
 ---
 

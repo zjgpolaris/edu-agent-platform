@@ -40,6 +40,7 @@ from services.completion_overview import get_class_completion_overview  # noqa: 
 from services.notification_service import get_student_notifications  # noqa: E402
 from services.quality_dashboard import get_teacher_quality_dashboard  # noqa: E402
 from services.review_service import get_today_session  # noqa: E402
+from services.teacher_today_queue import get_teacher_today_queue  # noqa: E402
 from services.today_plan import get_student_today_plan  # noqa: E402
 from services.weakpoint_service import get_weakpoints  # noqa: E402
 
@@ -102,6 +103,21 @@ def teacher_queue_backend_signals_exist() -> None:
     assert quality["hardest_questions"], quality
 
 
+def teacher_today_queue_api_matches_pilot_signals() -> None:
+    queue = get_teacher_today_queue(TEACHER_ID, TODAY)
+    items = queue.get("items") or []
+    keys = {item.get("key") for item in items}
+    summary = queue.get("summary") or {}
+    assert items, queue
+    assert len(items) <= 4, items
+    assert {"reviews", "quality-blind-spots", "completion"}.issubset(keys), queue
+    assert int(summary.get("pending_reviews") or 0) > 0, summary
+    assert int(summary.get("blind_spots_open") or 0) > 0, summary
+    assert int(summary.get("students_with_overdue") or 0) > 0, summary
+    priorities = {item["key"]: int(item.get("priority") or 999) for item in items}
+    assert priorities["reviews"] < priorities.get("completion", 999), priorities
+
+
 def notification_banner_seeded_once() -> None:
     unread = [n for n in get_student_notifications(MAIN_STUDENT, limit=50, unread_only=True) if n.get("message") == NOTIFICATION_MESSAGE]
     assert len(unread) == 1, unread
@@ -126,6 +142,7 @@ if __name__ == "__main__":
         ("pilot_accounts_authenticate", pilot_accounts_authenticate),
         ("student_today_plan_has_next_step_without_llm", student_today_plan_has_next_step_without_llm),
         ("teacher_queue_backend_signals_exist", teacher_queue_backend_signals_exist),
+        ("teacher_today_queue_api_matches_pilot_signals", teacher_today_queue_api_matches_pilot_signals),
         ("notification_banner_seeded_once", notification_banner_seeded_once),
         ("weakpoints_and_review_are_connected", weakpoints_and_review_are_connected),
     ]
