@@ -9,7 +9,7 @@ verify-core:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/verify_core.py --smoke
 
 verify-core-full:
-	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/verify_core.py --quick --frontend
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/release_gate.py
 
 release-gate:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/release_gate.py

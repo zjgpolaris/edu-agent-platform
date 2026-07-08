@@ -6,14 +6,20 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
+    inputs:
+      ready_url:
+        description: Deployed backend /api/ready URL for manual production readiness, e.g. https://host/api/ready
+        required: false
+        default: ''
 
 permissions:
   contents: read
   pull-requests: write
 
 jobs:
-  frontend:
-    name: Frontend lint and build
+  frontend-lint:
+    name: Frontend lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,11 +38,8 @@ jobs:
       - name: Lint frontend
         run: npm run lint --prefix frontend
 
-      - name: Build frontend
-        run: npm run build --prefix frontend
-
-  backend-verify:
-    name: Backend syntax and smoke verify
+  release-gate:
+    name: Release gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,15 +52,23 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Run backend smoke verifier
-        env:
-          PYTHONPATH: backend
-        run: python3 scripts/verify_core.py --smoke
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Run release gate
+        run: npm run release:gate
 
   quick-eval:
     name: Quick eval report
@@ -113,19 +124,24 @@ jobs:
             const fullBody = `${marker}\n${body}`;
             if (existing) {
               await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body: fullBody,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: fullBody,
               });
             } else {
               await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body: fullBody,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: fullBody,
               });
             }
 
   docker-build:
     name: Docker builds
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -135,3 +151,45 @@ jobs:
 
       - name: Build frontend image
         run: docker build -f frontend/Dockerfile -t eduagent-frontend:ci frontend
+
+  production-readiness:
+    name: Production readiness
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.ready_url != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Run production readiness gate
+        env:
+          READY_URL: ${{ inputs.ready_url }}
+          API_BASE: ${{ secrets.API_BASE }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+          SMOKE_USERNAME: ${{ secrets.SMOKE_USERNAME }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        run: |
+          export API_BASE="${API_BASE:-${READY_URL%/api/ready}}"
+          npm run release:gate:prod -- --skip-frontend --ready-url "$READY_URL"

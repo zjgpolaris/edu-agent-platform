@@ -47,7 +47,7 @@
    - `LLM_PROVIDER` 已在 `render.yaml` 设为 `bailian`
    > 注：本地 LLM 网关是 qima-inc 内网，Render 公网访问不到；线上必须用百炼/阿里云**公网**地址。
 3. 部署完成后记下后端公网 URL，例如 `https://edu-agent-backend.onrender.com`。
-4. 健康检查：先访问 `https://<后端>/api/debug/llm/health` 确认 LLM 连通，再访问 `https://<后端>/api/debug/rag/health?collection=history&deep=true` 或运行 `API_BASE=https://<后端> npm run test:prod-rag` 验证 embedding API、pgvector 与 `rag_documents` 索引。
+4. 健康检查：先访问 `https://<后端>/api/ready` 做 shallow readiness，再按需访问 `https://<后端>/api/debug/llm/health` 确认 LLM 配置/连通，最后访问 `https://<后端>/api/debug/rag/health?collection=history&deep=true` 或运行 `API_BASE=https://<后端> npm run test:prod-rag` 验证 embedding API、pgvector 与 `rag_documents` 索引。
 
 > 免费档冷启动有几十秒延迟，演示前先打开一次预热。
 
@@ -92,8 +92,10 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 
 ## 七、上线检查清单
 
+- [ ] 本地或 CI 默认 gate 通过：`npm run release:gate`
+- [ ] 部署后 shallow readiness 通过：访问 `https://<后端>/api/ready`，或运行 `npm run release:gate:fast -- --skip-frontend --ready-url https://<后端>/api/ready`
+- [ ] 生产 RAG strict gate 通过：`API_BASE=https://<后端> SMOKE_USERNAME=<user> SMOKE_PASSWORD=<password> npm run release:gate:prod -- --skip-frontend --ready-url https://<后端>/api/ready`，确认 embedding API + pgvector + `rag_documents` 可用
 - [ ] Render 后端 `/api/debug/llm/health` 返回正常
-- [ ] `API_BASE=https://<后端> npm run test:prod-rag` 通过，确认 embedding API + pgvector + `rag_documents` 可用
 - [ ] Vercel `NEXT_PUBLIC_API_BASE_URL` 指向后端、无结尾斜杠
 - [ ] 浏览器 Network 无 CORS 报错（看前端域名是否被后端放行）
 - [ ] `scripts/seed_demo_student.py` 已对线上 DB 跑过一次

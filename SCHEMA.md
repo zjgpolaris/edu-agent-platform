@@ -858,17 +858,20 @@ PYTHONPATH=backend python3 scripts/verify_core.py --smoke --no-report
 # 运行 quick 套件
 python3 eval/run_core_evals.py --quick
 
-# 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build
+# 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build；默认 PR CI 主门禁复用该入口
 npm run release:gate
 
 # 本地快速发布闸门：关键试点/教师/今日计划 smoke + 前端 build
 npm run release:gate:fast
 
-# 生产发布闸门：在本地闸门后追加 production RAG smoke（需线上 API_BASE + token 或 smoke 账号）
+# 生产发布闸门：在本地闸门后追加 production RAG smoke（需线上 API_BASE + token 或 smoke 账号；不属于默认 PR CI）
 API_BASE=https://<render-backend> SMOKE_USERNAME=<user> SMOKE_PASSWORD=<password> npm run release:gate:prod
 
 # 可选：发布闸门追加线上 readiness 浅检查（不触发外部 LLM/Embedding）
 npm run release:gate:fast -- --ready-url https://<render-backend>/api/ready
+
+# GitHub Actions 手动 production-readiness job 等价命令：跳过重复前端 build，检查线上 /api/ready 与 production RAG
+API_BASE=https://<render-backend> SMOKE_USERNAME=<user> SMOKE_PASSWORD=<password> npm run release:gate:prod -- --skip-frontend --ready-url https://<render-backend>/api/ready
 
 # 运行学习闭环 smoke
 python3 eval/run_core_evals.py --suite learning_closure_smoke
@@ -938,10 +941,10 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | `docker-compose.yml` | 本地一键起 redis + backend + frontend |
 | `scripts/seed_demo_student.py` | 灌 demo 学生（demo-student/demo123）+ 预置错题本 |
 | `scripts/seed_pilot_demo.py` | 灌 v1.25 试点主路径数据：pilot 教师/学生账号、作业提交、错题、review 占位任务与通知，支持重复运行幂等演示 |
-| `scripts/release_gate.py` | 发布前统一闸门：Python 语法检查、后端 smoke/关键 smoke、前端 build，可选生产 RAG smoke；配合 `/api/ready` 做线上浅 readiness 检查 |
+| `scripts/release_gate.py` | 发布前统一闸门：Python 语法检查、后端 smoke/关键 smoke、前端 build；默认 PR CI 主门禁复用该入口，可选生产 RAG smoke；配合 `/api/ready` 做线上浅 readiness 检查 |
 | `scripts/build_pgvector_index.py` | 离线构建历史 RAG pgvector 索引（corpus.json → OpenAI-compatible embedding → rag_documents） |
 
-关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。production smoke / `npm run release:gate:prod` 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
+关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。默认 PR CI 不要求生产 `API_BASE`、线上 RAG、真实 LLM deep health 或生产认证；production smoke / `npm run release:gate:prod` / 手动 `production-readiness` 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
 
 ---
 
@@ -1027,4 +1030,5 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-06 | 1.23.0 | 学生工作台 UX alpha：新增 `ContinueLearningCard` 接入 `/student` 首页，基于今日计划最高优先级任务展示“继续学习”主动作；教材目录 tab 请求补认证头并区分失败态；复习页移除 Google Fonts 外链改用全局字体变量；周报加载失败时显示失败态；学生作业提交前增加未答题号提示，可继续检查或确认仍然提交 |
 | 2026-07-07 | 1.24.0 | UX 一致性与工作台聚合：新增学生首页 `useStudentWorkbenchData`，让继续学习卡和今日计划共享同一份 `/today` 数据；新增学生端 `TabShell` 统一复习中心/学习资源/学情总览 tab；通知横幅单条关闭新增 `POST /api/students/{id}/notifications/{notification_id}/read`，不再误标全部已读；偏好设置改为读取后端 `/api/preferences/schema` 动态渲染；教师首页新增 `TeacherTodayQueue`，聚合待复核、欠交/逾期、薄弱点和共性错题 |
 | 2026-07-07 | 1.25.0 | 试点主路径 v1：新增 `scripts/seed_pilot_demo.py` 灌 pilot 教师/学生、作业提交、错题、review 占位任务与通知；学生 `ContinueLearningCard` 增加推荐理由和今日计划 summary chips；教师 `TeacherTodayQueue` 接入命题质量看板的未复核质检盲区；新增 `pilot_path_smoke.py`（6 例）验证 seed 幂等、学生今日计划、教师待办信号与不触发 LLM 的 review 占位链路 |
+| 2026-07-08 | 1.25.1 | CI Release Gate 收口：GitHub Actions 默认 PR/push 主门禁改为 `release-gate` 统一执行 `npm run release:gate`，前端 lint 独立快速反馈，quick-eval 保留为报告信号，Docker build 移至 main/manual；新增手动 `production-readiness` job 通过 `ready_url` 串联 `release:gate:prod --skip-frontend --ready-url`；修正 `Makefile verify-core-full` 转发到 `scripts/release_gate.py`；README/CI 文档/部署文档同步 release gate 与 shallow readiness / production RAG strict gate 边界 |
 

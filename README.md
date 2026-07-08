@@ -79,7 +79,7 @@ plan ──> act ──> observe ──> judge ──┬── pass ──> next
 | LLM | 阿里云百炼（qwen3.7-plus / deepseek-v4-flash） |
 | Embedding | Jina Embeddings v3（1024维，2850文档） |
 | 会话存储 | Redis（本地）/ 进程内存兜底（生产） |
-| CI/CD | GitHub Actions：lint + build + smoke + quick-eval |
+| CI/CD | GitHub Actions：frontend lint + release gate + quick-eval；Docker build 在 main/manual 验证 |
 
 ---
 
@@ -110,13 +110,21 @@ python3 scripts/build_pgvector_index.py
 python3 build_index.py
 ```
 
-### Smoke 测试
+### Smoke / 发布前验证
 
 ```bash
 npm run test                          # 全套 smoke
-npm run test:prod-rag                 # 生产 RAG 健康检查
+npm run release:gate                  # 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build
+npm run release:gate:fast             # 快速关键路径发布闸门
 python3 eval/auto_tutor_trajectory_eval.py  # AutoTutor 轨迹评测
+
+# 生产 RAG / readiness 验收：不属于默认 PR CI，需线上 API_BASE 与认证
+API_BASE=https://<后端> SMOKE_USERNAME=<user> SMOKE_PASSWORD=<password> \
+  npm run release:gate:prod -- --skip-frontend --ready-url https://<后端>/api/ready
+npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 ```
+
+健康检查分层：`/api/health` 是 liveness；`/api/ready` 是 shallow readiness，默认不触发外部 LLM/Embedding；`/api/debug/rag/health?deep=true` 与 `production_rag_health_smoke.py` 用于生产 RAG 深度检查。
 
 ---
 
