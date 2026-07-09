@@ -2,7 +2,7 @@
 
 **创建时间：** 2026-06-23
 **项目名称：** EduAgent - K-12 中文/历史 AI 教学平台
-**最后更新：** 2026-07-08
+**最后更新：** 2026-07-09
 
 ---
 
@@ -49,6 +49,7 @@ edu-agent-platform/
 │   ├── agent_ops.py           # Agent 运维
 │   ├── game_store.py          # 游戏状态存储
 │   ├── llm_config.py          # LLM 配置
+│   ├── mcp_server.py          # stdio MCP 工具协议适配
 │   ├── session_store.py       # 会话存储
 │   ├── student_profile.py     # 学生档案
 │   ├── structured_output.py   # 结构化输出
@@ -78,7 +79,7 @@ edu-agent-platform/
 │   └── public/                # 静态资源
 │
 ├── docs/                      # 开发文档
-├── eval/                      # 测试脚本
+├── eval/                      # 测试脚本（含 mcp_server_smoke.py）
 ├── knowledge_base/            # 知识库（history/corpus.json、geo_events.json 等静态内容源）
 ├── scripts/                   # 脚本工具（含 build_pgvector_index.py 离线构建 RAG 向量索引、seed_pilot_demo.py 试点主路径数据）
 ├── textbooks/                 # 教材数据
@@ -176,6 +177,7 @@ backend/
 ├── agent_ops.py               # Agent 运维
 ├── game_store.py              # 游戏状态存储
 ├── llm_config.py              # LLM 配置
+├── mcp_server.py              # stdio MCP 工具协议适配
 ├── session_store.py           # 会话存储
 ├── student_profile.py         # 学生档案
 ├── structured_output.py       # 结构化输出
@@ -197,6 +199,7 @@ backend/
 | `services/` | 业务服务，批量批改、错题本 |
 | `textbook_learning/` | 教材学习，章节浏览、AI 问答、测验 |
 | `tools/` | 工具注册表，供学习助手调用 |
+| `mcp_server.py` | 轻量 stdio MCP server，向标准 Agent/MCP 客户端暴露 `search_history_knowledge`、`get_textbook_lesson`、`suggest_review_plan`、`generate_quiz` 4 个只读/低风险教育工具，并复用 Tool Registry 的 schema 校验、角色策略、确认元数据、审计与 trace；可用 `npm run mcp:server` 启动 |
 
 ---
 
@@ -845,12 +848,19 @@ frontend/
 | `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中、focus_tags 优先规划、连错降难度、空错题本兜底），7 例，已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
 | `production_rag_health_smoke.py` | 生产 RAG HTTP smoke，显式通过 `API_BASE` 指向线上后端，不进入默认本地 smoke/core 套件 |
 | `tool_permission_smoke.py` | 工具权限确认测试 |
+| `mcp_server_smoke.py` | MCP stdio 协议 smoke：验证 initialize、tools/list、教材读取、历史检索与未暴露工具拒绝；可通过 `npm run test:mcp` 单独运行 |
 
 ### 运行测试
 
 ```bash
 # 运行主 smoke 套件（同 npm test）
 npm test
+
+# 运行 MCP server 协议 smoke
+npm run test:mcp
+
+# 本地启动 stdio MCP server
+npm run mcp:server
 
 # CI 后端验证入口（语法检查 + smoke）
 PYTHONPATH=backend python3 scripts/verify_core.py --smoke --no-report

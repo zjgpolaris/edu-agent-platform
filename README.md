@@ -138,6 +138,7 @@ python3 build_index.py
 
 ```bash
 npm run test                          # 全套 smoke
+npm run test:mcp                      # MCP server 协议 smoke
 npm run release:gate                  # 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build
 npm run release:gate:fast             # 快速关键路径发布闸门
 python3 eval/auto_tutor_trajectory_eval.py  # AutoTutor 轨迹评测
@@ -149,6 +150,29 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 ```
 
 健康检查分层：`/api/health` 是 liveness；`/api/ready` 是 shallow readiness，默认不触发外部 LLM/Embedding；`/api/debug/rag/health?deep=true` 与 `production_rag_health_smoke.py` 用于生产 RAG 深度检查。
+
+### MCP Server
+
+EduAgent 提供一个轻量 stdio MCP server，用于展示标准 Agent 工具协议适配。它只暴露现有 Tool Registry 中的 4 个工具，并继续复用 `run_tool()` 的 schema 校验、角色策略、确认元数据、审计与 trace：
+
+| MCP tool | 说明 |
+|----------|------|
+| `search_history_knowledge` | 检索历史知识库 |
+| `get_textbook_lesson` | 读取结构化教材课文 |
+| `suggest_review_plan` | 基于学生画像生成复习建议 |
+| `generate_quiz` | 基于教材课文生成自测题 |
+
+本地启动：
+
+```bash
+npm run mcp:server
+```
+
+本地协议 smoke：
+
+```bash
+npm run test:mcp
+```
 
 ---
 
