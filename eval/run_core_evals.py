@@ -819,17 +819,21 @@ def build_markdown_report(summary: dict[str, Any]) -> str:
     audit = agent_ops.get("audit") or {}
     learning = agent_ops.get("learning") or {}
     tools = agent_ops.get("tools") or {}
+    readiness = agent_ops.get("readiness") or {}
     lines.extend([
         "",
         "## AgentOps",
         "",
         f"Status: {agent_ops.get('status', 'unknown')}",
+        f"Readiness: {readiness.get('status', 'unknown')} ({', '.join(readiness.get('reasons') or []) or 'no blocking reasons'})",
         f"Trace coverage: {trace.get('coverage_rate', 0)} ({trace.get('audit_with_trace', 0) + trace.get('learning_with_trace', 0)}/{trace.get('audit_total', 0) + trace.get('learning_total', 0)} events)",
-        f"Audit events: {audit.get('total', 0)} total, {audit.get('failure', 0)} failed",
-        f"Learning events: {learning.get('total', 0)} total, {learning.get('failure', 0)} failed",
+        f"Audit events: {audit.get('total', 0)} total, {audit.get('failure', 0)} failed, success_rate={audit.get('success_rate', 0)}",
+        f"Learning events: {learning.get('total', 0)} total, {learning.get('failure', 0)} failed, success_rate={learning.get('success_rate', 0)}",
+        f"Tool calls: {tools.get('total', 0)} total, {tools.get('failure', 0)} failed, success_rate={tools.get('success_rate', 0)}",
         f"Top actions: {', '.join((audit.get('by_action') or {}).keys()) or 'None'}",
         f"Top features: {', '.join((learning.get('by_feature') or {}).keys()) or 'None'}",
         f"Top tools: {', '.join((tools.get('by_tool_name') or {}).keys()) or 'None'}",
+        f"Failing tools: {', '.join((tools.get('by_failure') or {}).keys()) or 'None'}",
         "",
     ])
     return "\n".join(lines)

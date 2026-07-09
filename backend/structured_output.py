@@ -258,7 +258,42 @@ def invoke_structured(
 ) -> Any:
     schema_name = model.__name__ if model is not None else None
     span = start_span(name="structured_output.invoke_structured", metadata={"expect": expect, "schema": schema_name, "repair": repair})
-    response = llm.invoke(messages)
+    try:
+        response = llm.invoke(messages)
+    except Exception as exc:
+        if fallback is not _FALLBACK_UNSET:
+            end_span(
+                span,
+                metadata={
+                    "expect": expect,
+                    "schema": schema_name,
+                    "success": False,
+                    "fallback_used": True,
+                    "repair_attempted": False,
+                    "repair_success": False,
+                    "raw_chars": 0,
+                    "error_type": _error_type(exc),
+                },
+                level="WARNING",
+                status_message=str(exc),
+            )
+            return fallback
+        end_span(
+            span,
+            metadata={
+                "expect": expect,
+                "schema": schema_name,
+                "success": False,
+                "fallback_used": False,
+                "repair_attempted": False,
+                "repair_success": False,
+                "raw_chars": 0,
+                "error_type": _error_type(exc),
+            },
+            level="ERROR",
+            status_message=str(exc),
+        )
+        raise
     raw = getattr(response, "content", response)
     raw_text = str(raw)
     repair_attempted = False

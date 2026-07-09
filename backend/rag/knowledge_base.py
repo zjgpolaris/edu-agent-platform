@@ -669,29 +669,72 @@ def _doc_key(doc: Document) -> tuple[str, str, str, str]:
     )
 
 
-def _keyword_candidates(collection: str, metadata_filter: MetadataFilter | None, limit: int) -> list[Document]:
-    vs = load_vectorstore(collection)
-    where = build_chroma_where(metadata_filter)
+def _metadata_filter_matches(metadata: dict, metadata_filter: MetadataFilter | None) -> bool:
+    if not metadata_filter:
+        return True
+    for key, expected in metadata_filter.items():
+        actual = metadata.get(key)
+        expected_values = expected if isinstance(expected, list) else [expected]
+        actual_values = actual if isinstance(actual, list) else [actual]
+        if not any(str(actual_value or "") == str(expected_value or "") for actual_value in actual_values for expected_value in expected_values):
+            return False
+    return True
+
+
+def _corpus_path(collection: str) -> Path:
+    return Path("knowledge_base") / collection / "corpus.json"
+
+
+def _corpus_keyword_candidates(collection: str, metadata_filter: MetadataFilter | None, limit: int) -> list[Document]:
+    path = _corpus_path(collection)
+    if not path.exists():
+        return []
     try:
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    docs: list[Document] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        text = row.get("text") or row.get("content") or ""
+        metadata = row.get("meta") or row.get("metadata") or {}
+        if not text or not isinstance(metadata, dict):
+            continue
+        if not _metadata_filter_matches(metadata, metadata_filter):
+            continue
+        docs.append(Document(page_content=text, metadata=metadata))
+    return docs
+
+
+def _keyword_candidates(collection: str, metadata_filter: MetadataFilter | None, limit: int) -> list[Document]:
+    where = build_chroma_where(metadata_filter)
+    vs = None
+    try:
+        vs = load_vectorstore(collection)
         payload = vs.get(where=where, include=["documents", "metadatas"], limit=limit) if where else vs.get(
             include=["documents", "metadatas"],
             limit=limit,
         )
     except Exception:
         if not where:
-            return []
+            return _corpus_keyword_candidates(collection, metadata_filter, limit)
         try:
+            if vs is None:
+                return _corpus_keyword_candidates(collection, None, limit)
             payload = vs.get(include=["documents", "metadatas"], limit=limit)
         except Exception:
-            return []
+            return _corpus_keyword_candidates(collection, None, limit)
 
     documents = payload.get("documents") or []
     metadatas = payload.get("metadatas") or [{} for _ in documents]
-    return [
+    docs = [
         Document(page_content=content or "", metadata=metadata or {})
         for content, metadata in zip(documents, metadatas)
         if content
     ]
+    return docs or _corpus_keyword_candidates(collection, metadata_filter, limit)
 
 
 def keyword_search(

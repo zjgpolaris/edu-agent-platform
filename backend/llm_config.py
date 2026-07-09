@@ -48,6 +48,13 @@ class ZodeChatModel:
             chain.extend(("anthropic", model) for model in [ANTHROPIC_MODEL_QUALITY, ANTHROPIC_MODEL_FAST, ANTHROPIC_MODEL_FALLBACK])
         return list(dict.fromkeys(chain))
 
+    def _provider_available(self, provider: str) -> bool:
+        if provider == "anthropic":
+            return bool(os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY"))
+        if provider in {"bailian", "dashscope"}:
+            return bool(os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY"))
+        return True
+
     def _trace_metadata(self, provider: str, model: str, attempt_index: int, operation: str, stream: bool) -> dict[str, Any]:
         return {
             "provider": provider,
@@ -66,6 +73,10 @@ class ZodeChatModel:
         import time
         last_error = None
         for attempt_index, (provider, model) in enumerate(self._provider_model_chain(), start=1):
+            if not self._provider_available(provider):
+                last_error = RuntimeError(f"{provider} credentials are not configured")
+                logger.info("llm_invoke_provider_unavailable provider=%s model=%s reason=%s", provider, model, last_error)
+                continue
             metadata = self._trace_metadata(provider, model, attempt_index, "invoke", False)
             for retry in range(max_retries):
                 generation = start_generation(
@@ -101,6 +112,10 @@ class ZodeChatModel:
     def stream(self, messages: Any) -> Iterator[str]:
         last_error = None
         for attempt_index, (provider, model) in enumerate(self._provider_model_chain(), start=1):
+            if not self._provider_available(provider):
+                last_error = RuntimeError(f"{provider} credentials are not configured")
+                logger.info("llm_stream_provider_unavailable provider=%s model=%s reason=%s", provider, model, last_error)
+                continue
             emitted = False
             completed = False
             generation_ended = False

@@ -49,9 +49,11 @@ def _build_trace_groups(audit_events: list[dict[str, Any]], learning_events: lis
             "trace_id": "",
             "audit_count": 0,
             "learning_count": 0,
+            "failure_count": 0,
             "actions": set(),
             "features": set(),
             "tools": set(),
+            "errors": [],
             "latest_at": "",
         }
     )
@@ -65,6 +67,9 @@ def _build_trace_groups(audit_events: list[dict[str, Any]], learning_events: lis
         group["audit_count"] += 1
         if event.get("action"):
             group["actions"].add(event["action"])
+        if event.get("success") is False:
+            group["failure_count"] += 1
+            group["errors"].append(str(event.get("action") or "audit_failed"))
         group["latest_at"] = max(group["latest_at"], _event_time(event))
 
     for event in learning_events:
@@ -79,6 +84,10 @@ def _build_trace_groups(audit_events: list[dict[str, Any]], learning_events: lis
         tool_name = (event.get("metadata") or {}).get("tool_name")
         if isinstance(tool_name, str) and tool_name:
             group["tools"].add(tool_name)
+        if event.get("success") is False:
+            group["failure_count"] += 1
+            error_code = (event.get("metadata") or {}).get("error_code") or event.get("event_type") or "learning_failed"
+            group["errors"].append(str(error_code))
         group["latest_at"] = max(group["latest_at"], _event_time(event))
 
     normalized = []
@@ -88,6 +97,9 @@ def _build_trace_groups(audit_events: list[dict[str, Any]], learning_events: lis
                 "trace_id": group["trace_id"],
                 "audit_count": group["audit_count"],
                 "learning_count": group["learning_count"],
+                "status": "failed" if group["failure_count"] else "ok",
+                "failure_count": group["failure_count"],
+                "error_summary": "; ".join(group["errors"][:3]),
                 "actions": sorted(group["actions"]),
                 "features": sorted(group["features"]),
                 "tools": sorted(group["tools"]),
@@ -103,6 +115,34 @@ def _status(total_events: int, coverage_rate: float) -> str:
     if coverage_rate < 0.5:
         return "partial_trace_coverage"
     return "ok"
+
+
+def _rate(success: int, total: int) -> float:
+    return round(success / total, 3) if total else 0.0
+
+
+def _readiness_status(*, coverage_rate: float, audit_failure: int, learning_failure: int, tool_failure: int, total_events: int) -> dict[str, Any]:
+    reasons = []
+    if total_events == 0:
+        reasons.append("no_runtime_events")
+    if coverage_rate < 0.5 and total_events:
+        reasons.append("trace_coverage_below_50_percent")
+    if audit_failure:
+        reasons.append("audit_failures_present")
+    if learning_failure:
+        reasons.append("learning_failures_present")
+    if tool_failure:
+        reasons.append("tool_failures_present")
+
+    if audit_failure or learning_failure or tool_failure:
+        status = "fail"
+    elif total_events and coverage_rate >= 0.8:
+        status = "pass"
+    elif total_events:
+        status = "warn"
+    else:
+        status = "unknown"
+    return {"status": status, "reasons": reasons}
 
 
 def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
@@ -130,6 +170,16 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
     learning_feature_counts = Counter(str(event.get("feature") or "unknown") for event in learning_events)
     learning_type_counts = Counter(str(event.get("event_type") or "unknown") for event in learning_events)
     tool_counts = Counter(tool_name for event in learning_events if (tool_name := _tool_name(event)))
+    tool_success_counts = Counter(
+        tool_name
+        for event in learning_events
+        if (tool_name := _tool_name(event)) and event.get("success") is True
+    )
+    tool_failure_counts = Counter(
+        tool_name
+        for event in learning_events
+        if (tool_name := _tool_name(event)) and event.get("success") is False
+    )
     tool_failures = [
         {
             "tool_name": (event.get("metadata") or {}).get("tool_name"),
@@ -148,12 +198,22 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
     learning_unknown = len(learning_events) - learning_success - learning_failure
     audit_success = sum(1 for event in audit_events if event.get("success") is True)
     audit_failure = len(audit_events) - audit_success
+    total_tool_calls = sum(tool_counts.values())
+    total_tool_failures = sum(tool_failure_counts.values())
+    readiness = _readiness_status(
+        coverage_rate=coverage_rate,
+        audit_failure=audit_failure,
+        learning_failure=learning_failure,
+        tool_failure=total_tool_failures,
+        total_events=total_events,
+    )
 
     return {
         "schema_version": 1,
         "generated_at": _generated_at(),
         "window": {"limit": limit},
         "status": _status(total_events, coverage_rate),
+        "readiness": readiness,
         "trace_correlation": {
             "audit_total": len(audit_events),
             "audit_with_trace": audit_with_trace,
@@ -166,6 +226,7 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
             "total": len(audit_events),
             "success": audit_success,
             "failure": audit_failure,
+            "success_rate": _rate(audit_success, len(audit_events)),
             "by_action": _top(audit_action_counts),
             "by_resource_type": _top(audit_resource_counts),
             "recent": _compact_recent(audit_events, fields=["id", "action", "actor_id", "resource_type", "resource_id", "success", "created_at"]),
@@ -175,12 +236,18 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
             "success": learning_success,
             "failure": learning_failure,
             "unknown": learning_unknown,
+            "success_rate": _rate(learning_success, len(learning_events)),
             "by_feature": _top(learning_feature_counts),
             "by_event_type": _top(learning_type_counts),
             "recent": _compact_recent(learning_events, fields=["id", "student_id", "feature", "event_type", "success", "created_at"]),
         },
         "tools": {
+            "total": total_tool_calls,
+            "failure": total_tool_failures,
+            "success_rate": _rate(total_tool_calls - total_tool_failures, total_tool_calls),
             "by_tool_name": _top(tool_counts),
+            "by_success": _top(tool_success_counts),
+            "by_failure": _top(tool_failure_counts),
             "failures": tool_failures,
         },
         "traces": {

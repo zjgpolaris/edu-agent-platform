@@ -52,6 +52,10 @@ type SuiteResult = {
 };
 type AgentOpsSummary = {
   status: string;
+  readiness?: {
+    status: string;
+    reasons?: string[];
+  };
   trace_correlation?: {
     audit_total: number;
     audit_with_trace: number;
@@ -60,10 +64,10 @@ type AgentOpsSummary = {
     coverage_rate: number;
     unique_trace_ids: number;
   };
-  audit?: { total: number; failure: number; by_action?: Record<string, number> };
-  learning?: { total: number; failure: number; by_feature?: Record<string, number> };
-  tools?: { by_tool_name?: Record<string, number> };
-  traces?: { recent?: Array<{ trace_id: string; latest_at?: string; actions?: string[]; features?: string[]; tools?: string[] }> };
+  audit?: { total: number; failure: number; success_rate?: number; by_action?: Record<string, number> };
+  learning?: { total: number; failure: number; success_rate?: number; by_feature?: Record<string, number> };
+  tools?: { total?: number; failure?: number; success_rate?: number; by_tool_name?: Record<string, number>; by_failure?: Record<string, number> };
+  traces?: { recent?: Array<{ trace_id: string; latest_at?: string; status?: string; error_summary?: string; actions?: string[]; features?: string[]; tools?: string[] }> };
   error?: string;
 };
 
@@ -856,6 +860,8 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
   const coverage = trace ? Math.round((trace.coverage_rate || 0) * 100) : 0;
   const coverageHealth = !trace ? "waiting" : coverage >= 80 ? "healthy" : coverage >= 30 ? "partial" : "needs attention";
   const coverageHint = trace ? `${traced}/${total} events · ${coverageHealth}` : "等待数据";
+  const readiness = summary?.readiness;
+  const readinessHint = readiness?.reasons?.length ? readiness.reasons.slice(0, 2).join(" · ") : "release signal";
   return (
     <div style={{
       border: "1px solid var(--border)", borderRadius: "var(--radius-sm)",
@@ -870,22 +876,25 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem", marginBottom: "0.85rem" }}>
+            <OpsCard label="Readiness" value={readiness?.status || "--"} hint={readinessHint} />
             <OpsCard label="Trace 覆盖率" value={trace ? `${coverage}%` : "--"} hint={coverageHint} />
-            <OpsCard label="Audit Events" value={String(summary?.audit?.total ?? "--")} hint={`${summary?.audit?.failure ?? 0} failed`} />
-            <OpsCard label="Learning Events" value={String(summary?.learning?.total ?? "--")} hint={`${summary?.learning?.failure ?? 0} failed`} />
+            <OpsCard label="Audit Events" value={String(summary?.audit?.total ?? "--")} hint={`${summary?.audit?.failure ?? 0} failed · ${Math.round((summary?.audit?.success_rate ?? 0) * 100)}% ok`} />
+            <OpsCard label="Learning Events" value={String(summary?.learning?.total ?? "--")} hint={`${summary?.learning?.failure ?? 0} failed · ${Math.round((summary?.learning?.success_rate ?? 0) * 100)}% ok`} />
+            <OpsCard label="Tool Calls" value={String(summary?.tools?.total ?? "--")} hint={`${summary?.tools?.failure ?? 0} failed · ${Math.round((summary?.tools?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="Trace IDs" value={String(trace?.unique_trace_ids ?? "--")} hint="recent window" />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
             <Rollup title="Top actions" items={summary?.audit?.by_action} />
             <Rollup title="Top features" items={summary?.learning?.by_feature} />
             <Rollup title="Top tools" items={summary?.tools?.by_tool_name} />
+            <Rollup title="Tool failures" items={summary?.tools?.by_failure} />
           </div>
           <div style={{ marginTop: "0.75rem", fontSize: "0.78rem", color: coverage >= 80 ? "var(--jade-dark)" : coverage >= 30 ? "#7a5524" : "var(--cinnabar-dark)" }}>
             Trace coverage 是 Agent 工程质量信号：{coverageHealth}。
           </div>
           {summary?.traces?.recent?.length ? (
             <div style={{ marginTop: "0.85rem", fontSize: "0.78rem", color: "var(--ink-soft)" }}>
-              最近 trace：{summary.traces.recent.slice(0, 3).map(item => item.trace_id.slice(0, 10)).join("、")}
+              最近 trace：{summary.traces.recent.slice(0, 3).map(item => `${item.trace_id.slice(0, 10)}${item.status === "failed" ? "!" : ""}`).join("、")}
             </div>
           ) : null}
         </>

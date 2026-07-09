@@ -48,6 +48,27 @@ def source_to_dict(doc) -> dict:
     }
 
 
+def item_to_source(lesson, item) -> dict:
+    return {
+        "topic": item.topic,
+        "source": f"{lesson.book} · {lesson.lesson_title}",
+        "grade": lesson.grade,
+        "unit": lesson.unit_title,
+        "lesson": lesson.lesson_title,
+        "type": item.type,
+        "page": item.page,
+        "content": item.text,
+    }
+
+
+def lesson_fallback_sources(lesson, item_id: str | None = None) -> list[dict]:
+    if item_id:
+        for item in lesson.items:
+            if item.id == item_id:
+                return [item_to_source(lesson, item)]
+    return [item_to_source(lesson, item) for item in lesson.items[:4]]
+
+
 def build_lesson_metadata_filter(lesson) -> MetadataFilter:
     grade = lesson.grade.strip()
     grade_values = [grade]
@@ -96,6 +117,44 @@ def build_sources_context(sources: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def fallback_ask_response(lesson, question: str, item_text: str | None, sources: list[dict]) -> str:
+    focus = item_text
+    if not focus and sources:
+        first = sources[0]
+        focus = f"{first.get('topic') or lesson.lesson_title}：{first.get('content') or ''}"
+    if not focus and lesson.items:
+        first_item = lesson.items[0]
+        focus = f"{first_item.topic}：{first_item.text}"
+
+    source_lines = []
+    for index, source in enumerate(sources[:3], start=1):
+        source_lines.append(
+            f"{index}. {source.get('topic') or lesson.lesson_title}：{source.get('content') or ''}"
+        )
+    source_text = "\n".join(source_lines) or "1. 当前课程学习文档暂无可用知识点。"
+
+    if "考" in question:
+        answer = (
+            "这个知识点常见考法是让你说明时间、人物、原因、经过或影响，并判断它在历史发展中的作用。"
+            "答题时先写清核心史实，再补一句影响或启示。"
+        )
+    elif "重要" in question or "为什么" in question:
+        answer = (
+            "它的重要性主要体现在帮助我们理解本课事件之间的因果关系，以及这一知识点对后续历史发展的影响。"
+            "复习时要把它放回单元主题中记忆。"
+        )
+    else:
+        answer = "可以把这个知识点拆成“是什么、为什么、有什么影响”三步理解，先掌握核心史实，再看它和本课其他内容的联系。"
+
+    return (
+        f"### {lesson.lesson_title}\n\n"
+        f"**问题**：{question}\n\n"
+        f"**核心解释**：{answer}\n\n"
+        f"**当前知识点**：{focus or lesson.lesson_title}\n\n"
+        f"**依据**：\n{source_text}"
+    )
+
+
 def stream_ask_events(req: TextbookAskRequest) -> Iterator[tuple[str, dict]]:
     lesson = get_lesson(req.book_id, req.lesson_id)
     question = resolve_question(req)
@@ -104,17 +163,25 @@ def stream_ask_events(req: TextbookAskRequest) -> Iterator[tuple[str, dict]]:
 
     yield "status", {"phase": "retrieving", "message": "正在检索相关教材知识"}
     sources = retrieve_sources(query, build_lesson_metadata_filter(lesson), build_lesson_metadata_hints(lesson, item_text))
+    if not sources:
+        sources = lesson_fallback_sources(lesson, req.item_id)
     yield "sources", {"sources": sources}
     yield "status", {"phase": "generating", "message": "正在生成学习辅助回答"}
 
     history = load_messages(req.session_id) if req.session_id else []
     messages = ask_messages(lesson, question, req.selected_text, item_text, build_sources_context(sources), history)
     chunks: list[str] = []
-    for chunk in llm_quality.stream(messages):
-        chunks.append(chunk)
-        yield "delta", {"text": chunk}
+    try:
+        for chunk in llm_quality.stream(messages):
+            chunks.append(chunk)
+            yield "delta", {"text": chunk}
+    except Exception:
+        chunks = []
 
     response = "".join(chunks).strip()
+    if not response:
+        response = fallback_ask_response(lesson, question, item_text, sources)
+        yield "delta", {"text": response}
     final = {"response": response, "sources": sources, "lesson_id": req.lesson_id, "book_id": req.book_id}
     yield "final", final
     yield "status", {"phase": "done", "message": "已完成"}

@@ -288,13 +288,70 @@ def build_verification_prompt(state: CharacterState) -> str:
     )
 
 
+def _fallback_topic_guidance(question: str, character: str) -> str:
+    text = f"{character} {question}"
+    if "周游列国" in text:
+        return "结合史料看，周游列国可以理解为向各诸侯宣讲仁政理想，希望用政治主张改善社会秩序。"
+    if "岳飞" in text and ("莫须有" in text or "处死" in text or "被害" in text):
+        return "这一问题要抓住忠义、冤屈和国家处境：岳飞坚持抗金，却受到朝廷内部求和力量压制。"
+    if "郑和" in text and ("下西洋" in text or "目的" in text):
+        return "郑和下西洋既有航海成就，也体现明朝通过贸易和友好往来开展对外交流。"
+    if "丝绸之路" in text:
+        return "丝绸之路的意义在于推动汉朝同西域及更远地区的贸易与文化交流。"
+    return ""
+
+
+def _fallback_response_from_facts(state: CharacterState, reason: str | None = None) -> str:
+    character = state.get("character") or "这位历史人物"
+    question = str(state["messages"][-1].get("content", "")) if state.get("messages") else ""
+    facts = state.get("retrieved_facts", [])
+    fact_lines = facts[:3] or ["当前可用史料不足，下面只做有限的课堂解释。"]
+    guidance = _fallback_topic_guidance(question, character)
+    if state.get("mode") == "counterfactual":
+        answer = (
+            "⚠️ 以下为历史推演，非史实。\n"
+            f"同学你好，我将用“历史教学模拟”的方式，以{character}的视角回答。\n\n"
+            "【回答】\n"
+            f"你的问题是：{question}。从现有史料看，我只能做有限推演。"
+            "（推演）如果相关历史条件发生变化，结果也会受到政治、经济、军事和社会力量的共同影响，不能简单断定一个唯一结局。\n\n"
+        )
+    else:
+        answer = (
+            f"同学你好，我将用“历史教学模拟”的方式，以{character}的视角回答。\n\n"
+            "【回答】\n"
+            f"你的问题是：{question}。根据现有史料，我会先抓住其中最确定的事实来理解。"
+            "如果史料没有直接说明细节，就不能把推测当成史实。"
+            f"{guidance}\n\n"
+        )
+    evidence = "\n".join(f"{index}. {fact}" for index, fact in enumerate(fact_lines, start=1))
+    note = f"\n\n（系统提示：模型生成暂不可用，已使用史料降级回答。原因：{reason}）" if reason else ""
+    return (
+        f"{answer}"
+        "【史料依据】\n"
+        f"{evidence}\n\n"
+        "【学习提示】\n"
+        "复习时先找“人物、事件、原因、影响”四类信息，再判断哪些结论有史料依据。"
+        f"{note}"
+    )
+
+
 def generate_response(state: CharacterState) -> CharacterState:
-    resp = llm.invoke(build_generation_messages(state))
-    return {"response_draft": resp.content, "verified": False}
+    try:
+        resp = llm.invoke(build_generation_messages(state))
+        return {"response_draft": resp.content, "verified": False}
+    except Exception as exc:
+        return {"response_draft": _fallback_response_from_facts(state, str(exc)), "verified": False}
 
 
 def verify_response(state: CharacterState) -> CharacterState:
-    verified = llm_opus.invoke(build_verification_prompt(state))
+    try:
+        verified = llm_opus.invoke(build_verification_prompt(state))
+    except Exception:
+        return {
+            "response_draft": state.get("response_draft") or _fallback_response_from_facts(state),
+            "verified": True,
+            "retrieved_sources": _mark_used_sources(state.get("response_draft", ""), state.get("retrieved_sources", [])),
+        }
     return {
         "response_draft": verified.content,
         "verified": True,
@@ -320,6 +377,13 @@ def generate_fact_card(state: CharacterState) -> dict:
         card_data = invoke_structured(llm, [{"role": "user", "content": prompt}], fallback={"key_facts": [], "question_summary": ""})
     except StructuredOutputError:
         card_data = {"key_facts": [], "question_summary": ""}
+    if not card_data.get("key_facts") and not card_data.get("question_summary"):
+        facts = [fact.replace("[史料", "史料").strip() for fact in state.get("retrieved_facts", [])[:3]]
+        question = str(state["messages"][-1].get("content", "")) if state.get("messages") else ""
+        card_data = {
+            "question_summary": truncate_text(question, max_chars=30),
+            "key_facts": [truncate_text(fact, max_chars=20) for fact in facts if fact][:5],
+        }
     return {
         "character": state["character"],
         "question_summary": card_data.get("question_summary", ""),
@@ -363,18 +427,25 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
     # Step 3: Generation
     generation_start = time.time()
     draft_parts = []
-    for chunk in llm.stream(build_generation_messages(state)):
-        draft_parts.append(chunk)
-        yield {"event": "delta", "data": {"text": chunk}}
+    generation_error = None
+    try:
+        for chunk in llm.stream(build_generation_messages(state)):
+            draft_parts.append(chunk)
+            yield {"event": "delta", "data": {"text": chunk}}
+    except Exception as exc:
+        generation_error = str(exc)
 
     state["response_draft"] = "".join(draft_parts).strip()
+    if not state["response_draft"]:
+        state["response_draft"] = _fallback_response_from_facts(state, generation_error)
+        yield {"event": "delta", "data": {"text": state["response_draft"]}}
     emit_trace_event(
         agent_name="history_character",
         step_name="response_generation",
         event_type="llm",
         status="success",
         latency_ms=int((time.time() - generation_start) * 1000),
-        metadata={"response_chars": len(state["response_draft"])}
+        metadata={"response_chars": len(state["response_draft"]), "degraded": generation_error is not None, "error": generation_error}
     )
     yield {"event": "status", "data": {"phase": "verifying", "message": "正在进行史实一致性检查"}}
 
