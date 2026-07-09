@@ -25,6 +25,9 @@ if str(BACKEND) not in sys.path:
 from security.accounts import create_account  # noqa: E402
 from services.weakpoint_service import clear_weakpoints, get_weakpoints, record_weakpoint  # noqa: E402
 from student_profile import LearningEvent, try_record_learning_event  # noqa: E402
+from db.engine import get_connection  # noqa: E402
+from security.auth import hash_password  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 # (知识点, 错误次数) —— 错得多的会被 AutoTutor 排在前面、从更低难度起步
 DEMO_WEAKPOINTS = [
@@ -34,14 +37,31 @@ DEMO_WEAKPOINTS = [
     ("辛亥革命", 1),
 ]
 DEMO_RECENT_TOPICS = ["第二次鸦片战争", "甲午中日战争"]
+DEMO_FOCUS_TAG = DEMO_WEAKPOINTS[0][0]
+
+
+def ensure_account(actor_id: str, password: str, role: str, display_name: str) -> None:
+    try:
+        create_account(actor_id, actor_id, password, role, display_name)
+        print(f"[account] created {actor_id} / {password}")
+    except Exception:
+        with get_connection() as conn:
+            conn.execute(
+                text("""UPDATE accounts
+                     SET password_hash=:password_hash, role=:role, display_name=:display_name
+                     WHERE actor_id=:actor_id"""),
+                {
+                    "password_hash": hash_password(password),
+                    "role": role,
+                    "display_name": display_name,
+                    "actor_id": actor_id,
+                },
+            )
+        print(f"[account] reset {actor_id} / {password}")
 
 
 def seed(student_id: str, password: str, grade: str = "八年级上册") -> None:
-    try:
-        create_account(student_id, student_id, password, "student", "Demo 学生")
-        print(f"[account] created {student_id} / {password}")
-    except Exception as exc:  # 已存在则跳过
-        print(f"[account] skipped ({exc})")
+    ensure_account(student_id, password, "student", "Demo 学生")
 
     clear_weakpoints(student_id)
     for tag, count in DEMO_WEAKPOINTS:
@@ -66,7 +86,10 @@ def seed(student_id: str, password: str, grade: str = "八年级上册") -> None
     print("\nDemo 学生就绪：")
     print(f"  登录：{student_id} / {password}")
     print(f"  错题本：{[w['knowledge_tag'] for w in get_weakpoints(student_id)]}")
-    print("  打开 /student/auto-tutor 即可让 AutoTutor 现场规划本节课。")
+    print("  首页：/student")
+    print("  复习路径：/student/learning-path")
+    print(f"  针对性 AutoTutor：/student/auto-tutor?focus={DEMO_FOCUS_TAG}")
+    print("  评测与 AgentOps：/eval")
 
 
 if __name__ == "__main__":
@@ -76,21 +99,9 @@ if __name__ == "__main__":
     seed(sid, pwd)
 
     # 教师 demo 账号（确保每次 seed 都存在且密码已知）
-    try:
-        create_account("teacher_zhang", "teacher_zhang", "teacher123", "teacher", "张老师")
-        print("\n[account] teacher_zhang created")
-    except Exception:
-        # 已存在时更新密码，保证密码始终是 teacher123
-        from security.auth import hash_password
-        from db.engine import get_connection
-        from sqlalchemy import text
-        with get_connection() as conn:
-            conn.execute(
-                text("UPDATE accounts SET password_hash=:h WHERE actor_id='teacher_zhang'"),
-                {"h": hash_password("teacher123")},
-            )
-        print("\n[account] teacher_zhang password reset to teacher123")
+    ensure_account("teacher_zhang", "teacher123", "teacher", "张老师")
 
     print("\nDemo 教师就绪：")
     print("  登录：teacher_zhang / teacher123")
-    print("  打开 /teacher/assignments 可布置作业（支持 AI 出题）。")
+    print("  教师首页：/teacher")
+    print("  布置作业：/teacher/assignments")

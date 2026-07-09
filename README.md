@@ -26,6 +26,30 @@ plan ──> act ──> observe ──> judge ──┬── pass ──> next
 
 ---
 
+## 5 分钟主线 Demo
+
+先灌入稳定演示数据：
+
+```bash
+PYTHONPATH=backend python3 scripts/seed_demo_student.py
+```
+
+学生主线：
+
+1. 登录 `demo-student` / `demo123`，进入 `/student` 查看今日计划和薄弱点。
+2. 打开 `/student/learning-path` 或 `/student/review?tab=weakpoints`，确认错题本已预置「鸦片战争」等知识点。
+3. 打开 `/student/auto-tutor?focus=鸦片战争`，让 AutoTutor 围绕指定薄弱点启动教学。
+4. 故意答错一次，观察 Agent 进入 `reflect` / `re_plan`，并在右侧 TraceTimeline 看到节点轨迹。
+5. 打开 `/eval`，展示 Eval / AgentOps 的 readiness、成功率、trace 与工具调用统计。
+
+教师补充：
+
+1. 登录 `teacher_zhang` / `teacher123`。
+2. 打开 `/teacher` 或 `/teacher/assignments`，展示教师端布置作业与班级工作流入口。
+3. 如需完整 pilot 教师工作流，可运行 `PYTHONPATH=backend python3 scripts/seed_pilot_demo.py` 后使用脚本输出的 pilot 账号。
+
+---
+
 ## 功能全景
 
 ### 学生端
