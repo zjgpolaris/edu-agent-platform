@@ -80,8 +80,8 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 | 功能 | 说明 |
 |------|------|
 | Agent Trace | TraceTimeline 可视化每个 node 执行状态与耗时 |
-| Eval Dashboard | `/eval` 页面，快速查看各 agent 指标 |
-| RAG Inspector | 检索来源面板，每条引用可溯源 |
+| Eval Dashboard | `/eval` 页面，快速查看各 agent 指标、readiness 与 AgentOps 聚合 |
+| RAG Inspector | 检索来源面板，每条引用可溯源，并区分 retrieval / generation 失败归因 |
 | Tool 确认治理 | 高危工具调用弹出确认对话框 |
 
 ---
@@ -139,6 +139,11 @@ python3 build_index.py
 ```bash
 npm run test                          # 全套 smoke
 npm run test:mcp                      # MCP server 协议 smoke
+npm run test:rag-inspector            # RAG Inspector 检索调试 smoke
+npm run test:agent-ops                # AgentOps 成本/延迟/fallback 聚合 smoke
+npm run test:textbook-trace           # 教材问答 trace / rag_inspector 埋点 smoke
+npm run test:autotutor-recovery       # AutoTutor 会话恢复 smoke
+npm run test:release-gate             # release gate / readiness summary smoke
 npm run release:gate                  # 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build
 npm run release:gate:fast             # 快速关键路径发布闸门
 python3 eval/auto_tutor_trajectory_eval.py  # AutoTutor 轨迹评测
@@ -150,6 +155,9 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 ```
 
 健康检查分层：`/api/health` 是 liveness；`/api/ready` 是 shallow readiness，默认不触发外部 LLM/Embedding；`/api/debug/rag/health?deep=true` 与 `production_rag_health_smoke.py` 用于生产 RAG 深度检查。
+传入 `--ready-url` 时，release gate 现在会输出 required / failed / warnings 摘要；若带 `--production`、`--ready-require-rag` 或 `--ready-require-external`，会把 RAG / 外部依赖配置作为 blocking readiness check。
+
+AgentOps 的 production summary 现在会额外聚合最近 trace 中的 RAG 诊断口径，包括 `diagnosis_code` 分布和 `failure_stage` 分布，便于区分问题主要发生在检索阶段还是生成阶段；教材问答与历史人物两条链路都已接入该统计。
 
 ### MCP Server
 

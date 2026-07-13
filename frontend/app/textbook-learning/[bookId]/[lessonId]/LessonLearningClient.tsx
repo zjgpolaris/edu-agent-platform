@@ -25,6 +25,7 @@ type TocUnit = { title: string; lessons: TocLesson[] };
 type Toc = { book_id: string; grade: string; book: string; units: TocUnit[] };
 
 type Source = {
+  rank?: number;
   topic?: string;
   source?: string;
   grade?: string;
@@ -32,7 +33,42 @@ type Source = {
   lesson?: string;
   type?: string;
   page?: string | number;
+  score?: number;
+  final_score?: number;
+  retrieval_score?: number | null;
+  keyword_score?: number | null;
+  vector_rank?: number | null;
+  vector_rank_score?: number | null;
+  rerank_score?: number | null;
+  source_mode?: string;
   content?: string;
+};
+
+type RagInspectorChunk = {
+  rank?: number;
+  topic?: string;
+  source?: string;
+  source_mode?: string;
+  final_score?: number;
+  retrieval_score?: number;
+  keyword_score?: number;
+  vector_rank?: number | null;
+  rerank_score?: number | null;
+  used_in_context?: boolean;
+};
+
+type RagInspector = {
+  original_query?: string;
+  rewritten_query?: string | null;
+  retrieval_strategy?: string;
+  source_count?: number;
+  total_chunks_retrieved?: number;
+  top_score?: number;
+  top_mode?: string;
+  failure_stage?: string;
+  diagnosis_code?: string;
+  diagnosis_summary?: string;
+  chunks?: RagInspectorChunk[];
 };
 
 type StreamEvent = { event: string; data: Record<string, unknown> };
@@ -103,6 +139,19 @@ function sourceTypeLabel(type?: string) {
   return "教材知识";
 }
 
+function formatScore(value?: number | null) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  return value.toFixed(2);
+}
+
+function sourceModeLabel(mode?: string) {
+  if (mode === "hybrid") return "混合命中";
+  if (mode === "vector") return "向量命中";
+  if (mode === "keyword") return "关键词命中";
+  if (mode === "lesson") return "课文兜底";
+  return mode || "未标注";
+}
+
 export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; toc: Toc }) {
   const [tab, setTab] = useState<AssistantTab>("ask");
   const [status, setStatus] = useState("选择知识点操作，或在右侧输入问题开始学习。");
@@ -110,6 +159,7 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
   const [summaryAnswer, setSummaryAnswer] = useState("");
   const [question, setQuestion] = useState("");
   const [sources, setSources] = useState<Source[]>([]);
+  const [ragInspector, setRagInspector] = useState<RagInspector | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -168,6 +218,7 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
       }
       if (event === "sources") {
         setSources(Array.isArray(data.sources) ? data.sources as Source[] : []);
+        setRagInspector(data.rag_inspector && typeof data.rag_inspector === "object" ? data.rag_inspector as RagInspector : null);
         return;
       }
       if (event === "delta") {
@@ -177,6 +228,7 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
       }
       if (event === "final") {
         if (typeof data.response === "string") setTargetAnswer(() => data.response as string);
+        if (data.rag_inspector && typeof data.rag_inspector === "object") setRagInspector(data.rag_inspector as RagInspector);
         setStatus("已完成。");
         return;
       }
@@ -210,6 +262,7 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
     setErrorMessage("");
     setAskAnswer("");
     setSources([]);
+    setRagInspector(null);
     setStatus("正在连接教材问答接口...");
 
     try {
@@ -245,6 +298,7 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
     setErrorMessage("");
     setAskAnswer("");
     setSources([]);
+    setRagInspector(null);
     setStatus("正在连接教材问答接口...");
 
     try {
@@ -269,6 +323,7 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
     setErrorMessage("");
     setSummaryAnswer("");
     setSources([]);
+    setRagInspector(null);
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/textbook-learning/summary`, {
@@ -295,6 +350,7 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
     setQuizAnswers({});
     setQuizRevealed({});
     setSources([]);
+    setRagInspector(null);
     setStatus("正在生成本课自测题...");
 
     try {
@@ -518,6 +574,21 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
           {sources.length > 0 && (
             <section className="assistant-sources" aria-label="参考资料">
               <h3>参考资料</h3>
+              {ragInspector && (
+                <div className="rag-inspector-card">
+                  <div className="source-kicker">RAG Inspector</div>
+                  <strong>检索过程</strong>
+                  {ragInspector.original_query && <p>原查询：{ragInspector.original_query}</p>}
+                  {ragInspector.rewritten_query && <p>改写查询：{ragInspector.rewritten_query}</p>}
+                  <p>
+                    策略：{ragInspector.retrieval_strategy || "hybrid"} ·
+                    {ragInspector.source_count ?? sources.length} 条片段 ·
+                    top {formatScore(ragInspector.top_score)} ·
+                    {sourceModeLabel(ragInspector.top_mode)}
+                  </p>
+                  {ragInspector.diagnosis_summary && <p>诊断：{ragInspector.diagnosis_summary}</p>}
+                </div>
+              )}
               {sources.slice(0, 3).map((source, index) => (
                 <article className="source-card" key={`${source.topic || "source"}-${index}`}>
                   <div className="source-card-header">
@@ -528,6 +599,17 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
                     </div>
                     <span className="source-type">{sourceTypeLabel(source.type)}</span>
                   </div>
+                  <details className="source-score-details">
+                    <summary>检索分数</summary>
+                    <div className="source-score-grid">
+                      <span>final {formatScore(source.final_score ?? source.score)}</span>
+                      <span>retrieval {formatScore(source.retrieval_score)}</span>
+                      <span>keyword {formatScore(source.keyword_score)}</span>
+                      <span>vector #{source.vector_rank ?? "—"}</span>
+                      <span>rerank {formatScore(source.rerank_score)}</span>
+                      <span>{sourceModeLabel(source.source_mode)}</span>
+                    </div>
+                  </details>
                   <div className="source-content">{source.content || "暂无内容"}</div>
                 </article>
               ))}

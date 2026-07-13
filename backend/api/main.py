@@ -16,7 +16,7 @@ from agents.essay_grader import build_grader_graph, EssayState
 from agents.debate_supervisor import build_debate_graph, DebateState, stream_debate
 from agents.character_recommender import recommend_characters
 from agents.learning_assistant import stream_learning_assistant_events
-from agents.auto_tutor import start_session as autotutor_start, submit_answer as autotutor_answer, get_session as autotutor_get
+from agents.auto_tutor import start_session as autotutor_start, submit_answer as autotutor_answer, get_session as autotutor_get, get_latest_session as autotutor_get_latest
 from agents.history_games import (
     get_card_game_report,
     list_history_games,
@@ -559,7 +559,7 @@ async def api_health():
 
 
 @app.get("/api/ready")
-async def api_ready(collection: str = "history", require_rag: bool = False):
+async def api_ready(collection: str = "history", require_rag: bool = False, require_external: bool = False):
     """发布前 readiness 聚合：浅检查 DB/LLM 配置/RAG 索引/eval 摘要，不触发外部 LLM/Embedding。"""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", collection):
         raise HTTPException(status_code=400, detail="Invalid collection")
@@ -582,6 +582,10 @@ async def api_ready(collection: str = "history", require_rag: bool = False):
         "quality_model": MODEL_QUALITY,
         "fallback_model": MODEL_FALLBACK,
         "mode": "shallow",
+        "credentials_configured": bool(
+            (LLM_PROVIDER in {"bailian", "dashscope"} and (os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")))
+            or (LLM_PROVIDER not in {"bailian", "dashscope"} and (os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY")))
+        ),
     }
 
     try:
@@ -612,8 +616,32 @@ async def api_ready(collection: str = "history", require_rag: bool = False):
     except Exception as exc:
         checks["latest_eval"] = {"ok": False, "error_type": exc.__class__.__name__, "reason": str(exc)[:300]}
 
-    required = ["database", "llm_config"] + (["rag"] if require_rag else [])
+    rag_config = (checks.get("rag") or {}).get("config") if isinstance(checks.get("rag"), dict) else {}
+    embedding_config = rag_config.get("embedding") if isinstance(rag_config, dict) else {}
+    checks["external_dependencies"] = {
+        "ok": bool(checks["llm_config"].get("credentials_configured")) and bool(
+            isinstance(embedding_config, dict) and embedding_config.get("api_key_configured")
+        ),
+        "mode": "config-only",
+        "llm_provider": checks["llm_config"].get("provider"),
+        "llm_credentials_configured": bool(checks["llm_config"].get("credentials_configured")),
+        "embedding_api_configured": bool(isinstance(embedding_config, dict) and embedding_config.get("api_key_configured")),
+        "dependencies": {
+            "llm_provider": {
+                "configured": bool(checks["llm_config"].get("credentials_configured")),
+                "provider": checks["llm_config"].get("provider"),
+            },
+            "embedding_api": {
+                "configured": bool(isinstance(embedding_config, dict) and embedding_config.get("api_key_configured")),
+                "api_base_configured": bool(isinstance(embedding_config, dict) and embedding_config.get("api_base_configured")),
+                "model": embedding_config.get("model") if isinstance(embedding_config, dict) else None,
+            },
+        },
+    }
+
+    required = ["database", "llm_config"] + (["rag"] if require_rag else []) + (["external_dependencies"] if require_external else [])
     ok = all(bool(checks.get(name, {}).get("ok")) for name in required)
+    failed_required_checks = [name for name in required if not bool(checks.get(name, {}).get("ok"))]
     warnings = [name for name, payload in checks.items() if name not in required and not payload.get("ok")]
     return {
         "ok": ok,
@@ -621,6 +649,9 @@ async def api_ready(collection: str = "history", require_rag: bool = False):
         "service": "edu-agent-backend",
         "mode": "readiness-shallow",
         "require_rag": require_rag,
+        "required_checks": required,
+        "failed_required_checks": failed_required_checks,
+        "warning_checks": warnings,
         "checks": checks,
         "warnings": warnings,
     }
@@ -1927,6 +1958,15 @@ async def autotutor_get_session(session_id: str, actor: Actor = Depends(require_
     if req_student := state.get("student_id"):
         assert_student_access(actor, req_student)
     return state
+
+
+@app.get("/api/autotutor/student/{student_id}/latest-session")
+async def autotutor_get_latest_session(student_id: str, include_completed: bool = False, actor: Actor = Depends(require_auth)):
+    assert_student_access(actor, student_id)
+    try:
+        return await run_in_threadpool(autotutor_get_latest, student_id, include_completed=include_completed)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="暂无可恢复的辅导会话。")
 
 
 @app.post("/api/history/character/recommend")

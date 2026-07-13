@@ -36,6 +36,11 @@ type RagInspector = {
   expanded_queries?: string[];
   retrieval_strategy?: string;
   source_count?: number;
+  used_source_count?: number;
+  unused_source_count?: number;
+  failure_stage?: string;
+  diagnosis_code?: string;
+  diagnosis_summary?: string;
 };
 
 type CharacterResponse = {
@@ -448,6 +453,11 @@ function asRagInspector(value: unknown): RagInspector | null {
     expanded_queries: Array.isArray(item.expanded_queries) ? item.expanded_queries.filter((q): q is string => typeof q === "string") : undefined,
     retrieval_strategy: typeof item.retrieval_strategy === "string" ? item.retrieval_strategy : undefined,
     source_count: typeof item.source_count === "number" ? item.source_count : undefined,
+    used_source_count: typeof item.used_source_count === "number" ? item.used_source_count : undefined,
+    unused_source_count: typeof item.unused_source_count === "number" ? item.unused_source_count : undefined,
+    failure_stage: typeof item.failure_stage === "string" ? item.failure_stage : undefined,
+    diagnosis_code: typeof item.diagnosis_code === "string" ? item.diagnosis_code : undefined,
+    diagnosis_summary: typeof item.diagnosis_summary === "string" ? item.diagnosis_summary : undefined,
   };
 }
 
@@ -459,6 +469,7 @@ function getRetrievalStrategyLabel(strategy?: string) {
   if (strategy === "tool_primary") return "主检索工具";
   if (strategy === "multi_query_fallback") return "多查询兜底";
   if (strategy === "retriever_fallback") return "基础检索兜底";
+  if (strategy === "degraded_no_rag") return "无史料降级";
   return strategy || "未知策略";
 }
 
@@ -1282,6 +1293,10 @@ export default function Home() {
               {activeInspector.original_question && <p>原问题：{activeInspector.original_question}</p>}
               {activeInspector.rewritten_query && <p>改写查询：{activeInspector.rewritten_query}</p>}
               <p>策略：{getRetrievalStrategyLabel(activeInspector.retrieval_strategy)} · {activeInspector.source_count ?? activeSources.length} 条片段</p>
+              {activeInspector.diagnosis_summary && <p>诊断：{activeInspector.diagnosis_summary}</p>}
+              {typeof activeInspector.used_source_count === "number" && typeof activeInspector.unused_source_count === "number" ? (
+                <p>引用情况：已引用 {activeInspector.used_source_count} 条 · 未引用 {activeInspector.unused_source_count} 条</p>
+              ) : null}
               {activeInspector.expanded_queries?.length ? (
                 <div className="learning-runtime-chips">
                   {activeInspector.expanded_queries.map((query) => <small key={query}>{query}</small>)}

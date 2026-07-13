@@ -67,6 +67,32 @@ type AgentOpsSummary = {
   audit?: { total: number; failure: number; success_rate?: number; by_action?: Record<string, number> };
   learning?: { total: number; failure: number; success_rate?: number; by_feature?: Record<string, number> };
   tools?: { total?: number; failure?: number; success_rate?: number; by_tool_name?: Record<string, number>; by_failure?: Record<string, number> };
+  production?: {
+    trace_window?: number;
+    total_steps?: number;
+    latency?: {
+      sample_count?: number;
+      p50_ms?: number | null;
+      p95_ms?: number | null;
+      llm_p50_ms?: number | null;
+      llm_p95_ms?: number | null;
+    };
+    llm?: {
+      calls?: number;
+      fallback_count?: number;
+      error_count?: number;
+      models?: Record<string, number>;
+    };
+    rag?: {
+      diagnosis?: Record<string, number>;
+      failure_stage?: Record<string, number>;
+    };
+    cost?: {
+      sample_count?: number;
+      total_usd_estimated?: number;
+      avg_usd_per_llm_call_estimated?: number;
+    };
+  };
   traces?: { recent?: Array<{ trace_id: string; latest_at?: string; status?: string; error_summary?: string; actions?: string[]; features?: string[]; tools?: string[] }> };
   error?: string;
 };
@@ -862,6 +888,11 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
   const coverageHint = trace ? `${traced}/${total} events · ${coverageHealth}` : "等待数据";
   const readiness = summary?.readiness;
   const readinessHint = readiness?.reasons?.length ? readiness.reasons.slice(0, 2).join(" · ") : "release signal";
+  const production = summary?.production;
+  const latency = production?.latency;
+  const llm = production?.llm;
+  const rag = production?.rag;
+  const cost = production?.cost;
   return (
     <div style={{
       border: "1px solid var(--border)", borderRadius: "var(--radius-sm)",
@@ -882,12 +913,20 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="Learning Events" value={String(summary?.learning?.total ?? "--")} hint={`${summary?.learning?.failure ?? 0} failed · ${Math.round((summary?.learning?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="Tool Calls" value={String(summary?.tools?.total ?? "--")} hint={`${summary?.tools?.failure ?? 0} failed · ${Math.round((summary?.tools?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="Trace IDs" value={String(trace?.unique_trace_ids ?? "--")} hint="recent window" />
+            <OpsCard label="p95 latency" value={latency?.p95_ms != null ? `${Math.round(latency.p95_ms)}ms` : "--"} hint={`${latency?.sample_count ?? 0} trace steps`} />
+            <OpsCard label="LLM p95" value={latency?.llm_p95_ms != null ? `${Math.round(latency.llm_p95_ms)}ms` : "--"} hint={`${llm?.calls ?? 0} calls`} />
+            <OpsCard label="Cost est." value={cost?.total_usd_estimated != null ? `$${cost.total_usd_estimated.toFixed(6)}` : "--"} hint={`${cost?.sample_count ?? 0} priced calls`} />
+            <OpsCard label="LLM fallback" value={String(llm?.fallback_count ?? "--")} hint={`${llm?.error_count ?? 0} errors`} />
+            <OpsCard label="RAG retrieval fail" value={String(rag?.failure_stage?.retrieval ?? 0)} hint={`${rag?.failure_stage?.generation ?? 0} generation issues`} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
             <Rollup title="Top actions" items={summary?.audit?.by_action} />
             <Rollup title="Top features" items={summary?.learning?.by_feature} />
             <Rollup title="Top tools" items={summary?.tools?.by_tool_name} />
             <Rollup title="Tool failures" items={summary?.tools?.by_failure} />
+            <Rollup title="LLM models" items={llm?.models} />
+            <Rollup title="RAG diagnosis" items={rag?.diagnosis} />
+            <Rollup title="RAG failure stage" items={rag?.failure_stage} />
           </div>
           <div style={{ marginTop: "0.75rem", fontSize: "0.78rem", color: coverage >= 80 ? "var(--jade-dark)" : coverage >= 30 ? "#7a5524" : "var(--cinnabar-dark)" }}>
             Trace coverage 是 Agent 工程质量信号：{coverageHealth}。

@@ -120,6 +120,7 @@ function AutoTutorInner() {
   const [selected, setSelected] = useState<string | null>(null);
   const [rootCause, setRootCause] = useState<RootCauseInfo>(null);
   const [rootCauseChecked, setRootCauseChecked] = useState(false);
+  const [restored, setRestored] = useState(false);
   const traceRef = useRef<HTMLDivElement>(null);
   const autoStartedFocusRef = useRef<string | null>(null);
 
@@ -234,6 +235,27 @@ function AutoTutorInner() {
     traceRef.current?.scrollTo({ top: traceRef.current.scrollHeight, behavior: "smooth" });
   }, [session?.runtime_steps.length]);
 
+  useEffect(() => {
+    if (!studentId || !user?.token || focusTag || session || loading || restored) return;
+    let cancelled = false;
+    setRestored(true);
+    (async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/autotutor/student/${studentId}/latest-session`, { headers });
+        if (!res.ok) return;
+        const data = (await res.json()) as SessionState;
+        if (cancelled) return;
+        setSession(data);
+        setStatus(data.status === "completed" ? "已恢复最近一节已完成课程" : "已恢复最近一节未完成课程");
+      } catch {
+        /* 无可恢复会话时静默跳过 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [studentId, user?.token, focusTag, session, loading, restored, headers]);
+
   const plan = session?.lesson_plan ?? [];
   const q = session?.current_question ?? null;
   const lastReflection = session?.reflection ?? null;
@@ -266,6 +288,11 @@ function AutoTutorInner() {
               ? `已规划 ${plan.length} 个知识点 · 触发 ${session.replans} 次重规划`
               : "点击下方按钮，让 agent 现场为你规划一节课。"}
           </p>
+          {session && session.status === "awaiting_answer" && (
+            <p style={{ fontSize: 12, color: "var(--jade-dark,#2f6f4f)", margin: "4px 0 0" }}>
+              已自动恢复最近一节未完成课程，可继续作答当前题目。
+            </p>
+          )}
           {!session && (
             <>
               {focusTag && (

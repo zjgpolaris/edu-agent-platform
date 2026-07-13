@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import json
 import threading
 import time
 from time import perf_counter
@@ -23,7 +24,9 @@ from typing import Any, Iterator, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
+from db.engine import get_connection
 from llm_config import llm_fast, llm_quality
 from security.prompt_injection import build_untrusted_context_block
 from structured_output import invoke_structured
@@ -119,11 +122,20 @@ class _SessionStore:
             self._cleanup_locked()
             self._sessions[state.session_id] = state
             self._timestamps[state.session_id] = time.time()
+        _persist_session(state)
 
     def get(self, session_id: str) -> AutoTutorState | None:
         with self._lock:
             self._cleanup_locked()
-            return self._sessions.get(session_id)
+            existing = self._sessions.get(session_id)
+        if existing is not None:
+            return existing
+        restored = _load_persisted_session(session_id)
+        if restored is not None:
+            with self._lock:
+                self._sessions[session_id] = restored
+                self._timestamps[session_id] = time.time()
+        return restored
 
     def _cleanup_locked(self) -> None:
         now = time.time()
@@ -134,6 +146,92 @@ class _SessionStore:
 
 
 _store = _SessionStore()
+
+
+def _ensure_session_table() -> None:
+    with get_connection() as conn:
+        conn.execute(
+            text(
+                """CREATE TABLE IF NOT EXISTS autotutor_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    student_id TEXT NOT NULL,
+                    trace_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    state_json TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )"""
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_autotutor_sessions_student_updated ON autotutor_sessions(student_id, updated_at DESC)"))
+
+
+def _restore_state(payload: dict[str, Any]) -> AutoTutorState:
+    state = AutoTutorState.model_validate(payload)
+    state._sequence = max((step.sequence for step in state.runtime_steps), default=0)
+    return state
+
+
+def _persist_session(state: AutoTutorState) -> None:
+    _ensure_session_table()
+    payload = state.model_dump()
+    with get_connection() as conn:
+        conn.execute(
+            text(
+                """INSERT INTO autotutor_sessions (
+                    session_id, student_id, trace_id, status, state_json, created_at, updated_at
+                ) VALUES (
+                    :session_id, :student_id, :trace_id, :status, :state_json, :created_at, :updated_at
+                )
+                ON CONFLICT(session_id) DO UPDATE SET
+                    student_id=excluded.student_id,
+                    trace_id=excluded.trace_id,
+                    status=excluded.status,
+                    state_json=excluded.state_json,
+                    created_at=excluded.created_at,
+                    updated_at=excluded.updated_at"""
+            ),
+            {
+                "session_id": state.session_id,
+                "student_id": state.student_id,
+                "trace_id": state.trace_id,
+                "status": state.status,
+                "state_json": json.dumps(payload, ensure_ascii=False),
+                "created_at": state.created_at,
+                "updated_at": state.updated_at,
+            },
+        )
+
+
+def _load_persisted_session(session_id: str) -> AutoTutorState | None:
+    _ensure_session_table()
+    with get_connection() as conn:
+        row = conn.execute(
+            text("SELECT state_json FROM autotutor_sessions WHERE session_id=:session_id"),
+            {"session_id": session_id},
+        ).mappings().first()
+    if not row:
+        return None
+    try:
+        return _restore_state(json.loads(row["state_json"]))
+    except Exception:
+        return None
+
+
+def _load_latest_persisted_session(student_id: str, *, include_completed: bool = False) -> AutoTutorState | None:
+    _ensure_session_table()
+    sql = "SELECT state_json FROM autotutor_sessions WHERE student_id=:student_id"
+    if not include_completed:
+        sql += " AND status != 'completed'"
+    sql += " ORDER BY updated_at DESC LIMIT 1"
+    with get_connection() as conn:
+        row = conn.execute(text(sql), {"student_id": student_id}).mappings().first()
+    if not row:
+        return None
+    try:
+        return _restore_state(json.loads(row["state_json"]))
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------------- #
@@ -843,4 +941,14 @@ def get_session(session_id: str) -> dict[str, Any]:
     state = _store.get(session_id)
     if state is None:
         raise LookupError("autotutor session not found")
+    return _public_state(state)
+
+
+def get_latest_session(student_id: str, *, include_completed: bool = False) -> dict[str, Any]:
+    state = _load_latest_persisted_session(student_id, include_completed=include_completed)
+    if state is None:
+        raise LookupError("autotutor session not found")
+    with _store._lock:
+        _store._sessions[state.session_id] = state
+        _store._timestamps[state.session_id] = time.time()
     return _public_state(state)

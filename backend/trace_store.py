@@ -65,6 +65,19 @@ class TraceStore:
         with self._lock:
             return self._traces.get(trace_id, [])
 
+    def list_recent_traces(self, limit: int = 20) -> list[dict]:
+        """Return recent traces with their in-memory events."""
+        with self._lock:
+            ordered = sorted(self._timestamps.items(), key=lambda item: item[1], reverse=True)[: max(1, int(limit))]
+            return [
+                {
+                    "trace_id": trace_id,
+                    "latest_at": datetime.fromtimestamp(timestamp, timezone.utc).isoformat(),
+                    "events": list(self._traces.get(trace_id, [])),
+                }
+                for trace_id, timestamp in ordered
+            ]
+
     def cleanup_old(self) -> int:
         """Clean up expired traces. Returns number of traces removed."""
         now = time.time()

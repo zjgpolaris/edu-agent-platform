@@ -5,6 +5,7 @@ from typing import Any, Iterator, Literal, TypedDict
 from uuid import uuid4
 
 from llm_config import llm_fast
+from utils.cost_estimator import estimate_cost_from_chars
 from security.prompt_injection import build_untrusted_context_block, check_user_input
 from tracing import current_trace_id, set_trace_id
 from trace_store import emit_trace_event
@@ -158,12 +159,14 @@ def _tool_summary(result: Any) -> dict[str, Any]:
 
 
 def _llm_runtime_metadata(*, generation_mode: str, response_chars: int) -> dict[str, Any]:
+    model = getattr(llm_fast, "model", None)
     return {
         "llm_name": getattr(llm_fast, "name", "llm_fast"),
-        "configured_model": getattr(llm_fast, "model", None),
+        "configured_model": model,
         "fallback_models": getattr(llm_fast, "fallback_models", []),
         "generation_mode": generation_mode,
         "response_chars": response_chars,
+        **estimate_cost_from_chars(str(model or ""), output_chars=response_chars),
     }
 
 

@@ -44,10 +44,15 @@ async def ready_endpoint_shape() -> None:
     assert payload["service"] == "edu-agent-backend", payload
     assert payload["mode"] == "readiness-shallow", payload
     assert isinstance(payload.get("checks"), dict), payload
+    assert isinstance(payload.get("required_checks"), list), payload
+    assert isinstance(payload.get("failed_required_checks"), list), payload
+    assert isinstance(payload.get("warning_checks"), list), payload
     for name in ("database", "llm_config", "rag", "latest_eval"):
         assert name in payload["checks"], payload
+    assert "external_dependencies" in payload["checks"], payload
     assert payload["checks"]["llm_config"]["mode"] == "shallow", payload
     assert payload["checks"]["rag"].get("deep") is False, payload
+    assert payload["checks"]["external_dependencies"]["mode"] == "config-only", payload
 
 
 def eval_routes_registered_once() -> None:

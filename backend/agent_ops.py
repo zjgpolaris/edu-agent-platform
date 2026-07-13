@@ -6,6 +6,7 @@ from typing import Any
 
 from security.audit_log import list_audit_events
 from student_profile import list_learning_events
+from trace_store import get_trace_store
 
 
 def _generated_at() -> str:
@@ -121,7 +122,106 @@ def _rate(success: int, total: int) -> float:
     return round(success / total, 3) if total else 0.0
 
 
-def _readiness_status(*, coverage_rate: float, audit_failure: int, learning_failure: int, tool_failure: int, total_events: int) -> dict[str, Any]:
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, round((len(ordered) - 1) * percentile)))
+    return round(ordered[index], 2)
+
+
+def _metadata_number(metadata: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return None
+
+
+def _metadata_text(metadata: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _build_production_summary(trace_limit: int = 20) -> dict[str, Any]:
+    recent_traces = get_trace_store().list_recent_traces(limit=trace_limit)
+    step_latencies: list[float] = []
+    llm_latencies: list[float] = []
+    llm_costs: list[float] = []
+    model_counts: Counter[str] = Counter()
+    rag_diagnosis_counts: Counter[str] = Counter()
+    rag_failure_stage_counts: Counter[str] = Counter()
+    fallback_count = 0
+    llm_error_count = 0
+    total_steps = 0
+    llm_calls = 0
+
+    for trace in recent_traces:
+        for event in trace.get("events") or []:
+            total_steps += 1
+            metadata = event.get("metadata") or {}
+            latency = event.get("latency_ms")
+            if isinstance(latency, (int, float)):
+                step_latencies.append(float(latency))
+            rag_inspector = metadata.get("rag_inspector")
+            if isinstance(rag_inspector, dict):
+                diagnosis_code = _metadata_text(rag_inspector, "diagnosis_code")
+                failure_stage = _metadata_text(rag_inspector, "failure_stage")
+                if diagnosis_code:
+                    rag_diagnosis_counts[diagnosis_code] += 1
+                if failure_stage and failure_stage != "none":
+                    rag_failure_stage_counts[failure_stage] += 1
+            if event.get("event_type") == "llm":
+                llm_calls += 1
+                if isinstance(latency, (int, float)):
+                    llm_latencies.append(float(latency))
+                model = metadata.get("configured_model") or metadata.get("attempt_model") or metadata.get("model")
+                if isinstance(model, str) and model:
+                    model_counts[model] += 1
+                cost = _metadata_number(metadata, "cost_usd_estimated", "cost_usd")
+                if cost is not None:
+                    llm_costs.append(cost)
+                attempt_index = metadata.get("attempt_index")
+                fallback_attempt = isinstance(attempt_index, (int, float)) and attempt_index > 1
+                if metadata.get("degraded") or metadata.get("fallback_used") or metadata.get("partial_output") or fallback_attempt:
+                    fallback_count += 1
+                if metadata.get("error") or event.get("status") == "error":
+                    llm_error_count += 1
+
+    total_cost = round(sum(llm_costs), 6)
+    avg_cost = round(total_cost / len(llm_costs), 6) if llm_costs else 0.0
+    return {
+        "trace_window": len(recent_traces),
+        "total_steps": total_steps,
+        "latency": {
+            "sample_count": len(step_latencies),
+            "p50_ms": _percentile(step_latencies, 0.5),
+            "p95_ms": _percentile(step_latencies, 0.95),
+            "llm_p50_ms": _percentile(llm_latencies, 0.5),
+            "llm_p95_ms": _percentile(llm_latencies, 0.95),
+        },
+        "llm": {
+            "calls": llm_calls,
+            "fallback_count": fallback_count,
+            "error_count": llm_error_count,
+            "models": _top(model_counts),
+        },
+        "rag": {
+            "diagnosis": _top(rag_diagnosis_counts),
+            "failure_stage": _top(rag_failure_stage_counts),
+        },
+        "cost": {
+            "sample_count": len(llm_costs),
+            "total_usd_estimated": total_cost,
+            "avg_usd_per_llm_call_estimated": avg_cost,
+        },
+    }
+
+
+def _readiness_status(*, coverage_rate: float, audit_failure: int, learning_failure: int, tool_failure: int, total_events: int, llm_error_count: int = 0) -> dict[str, Any]:
     reasons = []
     if total_events == 0:
         reasons.append("no_runtime_events")
@@ -133,8 +233,10 @@ def _readiness_status(*, coverage_rate: float, audit_failure: int, learning_fail
         reasons.append("learning_failures_present")
     if tool_failure:
         reasons.append("tool_failures_present")
+    if llm_error_count:
+        reasons.append("llm_errors_present")
 
-    if audit_failure or learning_failure or tool_failure:
+    if audit_failure or learning_failure or tool_failure or llm_error_count:
         status = "fail"
     elif total_events and coverage_rate >= 0.8:
         status = "pass"
@@ -200,12 +302,14 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
     audit_failure = len(audit_events) - audit_success
     total_tool_calls = sum(tool_counts.values())
     total_tool_failures = sum(tool_failure_counts.values())
+    production = _build_production_summary(trace_limit=20)
     readiness = _readiness_status(
         coverage_rate=coverage_rate,
         audit_failure=audit_failure,
         learning_failure=learning_failure,
         tool_failure=total_tool_failures,
         total_events=total_events,
+        llm_error_count=int((production.get("llm") or {}).get("error_count") or 0),
     )
 
     return {
@@ -250,6 +354,7 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
             "by_failure": _top(tool_failure_counts),
             "failures": tool_failures,
         },
+        "production": production,
         "traces": {
             "recent": _build_trace_groups(audit_events, learning_events),
         },
