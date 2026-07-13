@@ -19,6 +19,7 @@ type PlanStep = {
   replanned: boolean;
 };
 type CurrentQuestion = {
+  kind?: "lesson" | "exit_ticket";
   knowledge_point: string;
   difficulty: string;
   strategy: string;
@@ -46,18 +47,39 @@ type RuntimeStep = {
   metadata?: Record<string, unknown>;
   error?: { message?: string } | null;
 };
+type ExitTicketResult = {
+  knowledge_point: string;
+  source_tag?: string | null;
+  selected_answer: string;
+  correct_answer: string;
+  is_correct: boolean;
+  explanation?: string;
+  mastery_signal: "exit_ticket_passed" | "exit_ticket_failed";
+};
+
+type EvidenceSummary = {
+  exit_ticket_recorded: boolean;
+  learning_event_types: string[];
+  weakpoint_action: string;
+  review_action: string;
+  tutor_effectiveness_ready: boolean;
+};
+
 type SessionState = {
   session_id: string;
   trace_id: string;
   student_id: string;
   grade?: string | null;
   status: "awaiting_answer" | "completed";
+  phase?: "lesson" | "exit_ticket" | "completed";
   lesson_plan: PlanStep[];
   current_step_index: number;
   current_question: CurrentQuestion | null;
   reflect_log: Reflection[];
   replans: number;
   summary?: string | null;
+  exit_ticket_result?: ExitTicketResult | null;
+  evidence?: EvidenceSummary | null;
   runtime_steps: RuntimeStep[];
   reflection?: Reflection;
   last_answer_correct?: boolean;
@@ -94,6 +116,7 @@ const runtimeStatusLabel: Record<string, string> = {
 };
 
 function eventTone(eventType: string): string {
+  if (eventType === "exit_ticket") return "#7a4bb0";
   if (eventType === "reflect") return "#b8004d";
   if (eventType === "re_plan") return "#b87a00";
   if (eventType === "plan") return "#2f6f4f";
@@ -219,7 +242,8 @@ function AutoTutorInner() {
       const data = (await res.json()) as SessionState;
       setSession(data);
       setSelected(null);
-      if (data.status === "completed") setStatus("本节课已完成 🎉");
+      if (data.status === "completed") setStatus("本节课已完成，学习证据已写入");
+      else if (data.phase === "exit_ticket") setStatus("进入退出票检验，请完成最后一题证明掌握");
       else if (data.reflection) setStatus("Agent 反思后调整了计划，请再试一次");
       else setStatus(data.last_answer_correct ? "答对了，进入下一个知识点" : "请作答当前题目");
     } catch (e) {
@@ -269,14 +293,15 @@ function AutoTutorInner() {
           <h1>AutoTutor 自主辅导</h1>
           <p>
             Agent 自己读你的画像和错题本、规划本节课、出题检验；答错时会反思「是讲得不对还是题超纲」并实时调整计划。
-            全程的规划与反思都在右侧轨迹里可见。
+            教学结束前还会完成退出票检验，把学习证据写回错题、复习与教师端分析。
           </p>
           <div className="hero-flow" aria-label="AutoTutor 闭环">
             <span>读学情</span>
             <span>规划</span>
             <span>出题检验</span>
             <span>反思重规划</span>
-            <span>课后复习</span>
+            <span>退出票检验</span>
+            <span>证据入库</span>
           </div>
         </div>
         <div className="teaching-card" aria-label="辅导状态">
@@ -355,6 +380,24 @@ function AutoTutorInner() {
             <div className="autotutor-summary" style={{ padding: 8 }}>
               <h2>本节课小结</h2>
               <p style={{ marginTop: 8 }}>{session.summary}</p>
+              {session.exit_ticket_result && (
+                <div style={{ border: "1px solid #d8c8f0", background: "rgba(122,75,176,0.06)", borderRadius: 12, padding: "12px 14px", marginTop: 12 }}>
+                  <strong style={{ color: session.exit_ticket_result.is_correct ? "#2f6f4f" : "#b8004d" }}>
+                    退出票{session.exit_ticket_result.is_correct ? "通过" : "未通过"}：{session.exit_ticket_result.knowledge_point}
+                  </strong>
+                  <p style={{ margin: "6px 0", fontSize: "0.86rem" }}>
+                    你的答案 {session.exit_ticket_result.selected_answer || "—"}；正确答案 {session.exit_ticket_result.correct_answer}。
+                    {session.exit_ticket_result.explanation ? ` ${session.exit_ticket_result.explanation}` : ""}
+                  </p>
+                  {session.evidence && (
+                    <div className="learning-runtime-chips">
+                      <small>{session.evidence.exit_ticket_recorded ? "学习事件已记录" : "学习事件未记录"}</small>
+                      <small>{session.evidence.weakpoint_action === "correct_evidence_recorded" ? "已累积掌握证据" : session.evidence.weakpoint_action === "weakpoint_recorded" ? "已回流错题本" : session.evidence.weakpoint_action}</small>
+                      <small>{session.evidence.tutor_effectiveness_ready ? "教师端可见" : "等待同步"}</small>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="learning-suggestion-row" style={{ marginTop: 16 }}>
                 <a href="/student/review" className="learning-tool-action">去今日复习</a>
                 <a href="/student/memory" className="learning-tool-action">查看记忆中心</a>
@@ -364,9 +407,15 @@ function AutoTutorInner() {
           ) : q ? (
             <div className="autotutor-question" style={{ padding: 8 }}>
               <div className="learning-message-meta">
-                <span>第 {q.step_index + 1} 题 · {q.knowledge_point}</span>
+                <span>{q.kind === "exit_ticket" ? "退出票检验" : `第 ${q.step_index + 1} 题`} · {q.knowledge_point}</span>
                 <em>{difficultyLabel[q.difficulty] || q.difficulty}{q.replanned ? " · 调整后" : ""}</em>
               </div>
+              {q.kind === "exit_ticket" && (
+                <div style={{ border: "1px solid #d8c8f0", background: "rgba(122,75,176,0.06)", borderRadius: 10, padding: "10px 12px", margin: "10px 0" }}>
+                  <strong style={{ color: "#7a4bb0" }}>退出票检验</strong>
+                  <p style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>这是本节课的最后一题，用于确认辅导是否真正生效；结果会写入复习计划与教师端学习证据。</p>
+                </div>
+              )}
               {lastReflection && (
                 <div
                   className="autotutor-reflection"

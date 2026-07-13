@@ -48,6 +48,7 @@ MAX_ATTEMPTS_PER_STEP = 3
 Difficulty = Literal["easy", "medium", "hard"]
 AdjustmentAction = Literal["reteach", "lower_difficulty", "change_example", "advance"]
 SessionStatus = Literal["awaiting_answer", "completed"]
+SessionPhase = Literal["lesson", "exit_ticket", "completed"]
 
 
 # --------------------------------------------------------------------------- #
@@ -88,6 +89,34 @@ class ReflectionRecord(BaseModel):
     explanation: str
 
 
+class ExitTicket(BaseModel):
+    knowledge_point: str
+    source_tag: str | None = None
+    difficulty: Difficulty = "medium"
+    strategy: str = "课后退出票检验"
+    question: dict[str, Any] = Field(default_factory=dict)
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    generated_from: Literal["struggling_step", "replanned_step", "mastered_step", "fallback"] = "fallback"
+
+
+class ExitTicketResult(BaseModel):
+    knowledge_point: str
+    source_tag: str | None = None
+    selected_answer: str
+    correct_answer: str
+    is_correct: bool
+    explanation: str = ""
+    mastery_signal: Literal["exit_ticket_passed", "exit_ticket_failed"]
+
+
+class EvidenceSummary(BaseModel):
+    exit_ticket_recorded: bool = False
+    learning_event_types: list[str] = Field(default_factory=list)
+    weakpoint_action: str = "not_recorded"
+    review_action: str = "not_scheduled"
+    tutor_effectiveness_ready: bool = False
+
+
 class AutoTutorState(BaseModel):
     session_id: str
     trace_id: str
@@ -101,6 +130,10 @@ class AutoTutorState(BaseModel):
     mastery_delta: dict[str, float] = Field(default_factory=dict)
     runtime_steps: list[RuntimeStep] = Field(default_factory=list)
     status: SessionStatus = "awaiting_answer"
+    phase: SessionPhase = "lesson"
+    exit_ticket: ExitTicket | None = None
+    exit_ticket_result: ExitTicketResult | None = None
+    evidence: EvidenceSummary | None = None
     summary: str | None = None
     created_at: float = 0.0
     updated_at: float = 0.0
@@ -168,6 +201,9 @@ def _ensure_session_table() -> None:
 
 def _restore_state(payload: dict[str, Any]) -> AutoTutorState:
     state = AutoTutorState.model_validate(payload)
+    if state.status == "completed" and state.phase != "completed":
+        # 兼容 v1.26 之前持久化的已完成会话（当时还没有 phase 字段）。
+        state.phase = "completed"
     state._sequence = max((step.sequence for step in state.runtime_steps), default=0)
     return state
 
@@ -664,12 +700,100 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
 
 
 # --------------------------------------------------------------------------- #
+# exit ticket：课后退出票检验
+# --------------------------------------------------------------------------- #
+def _select_exit_ticket_target(state: AutoTutorState) -> tuple[LessonStep | None, str]:
+    for step in state.lesson_plan:
+        if step.status == "struggling":
+            return step, "struggling_step"
+    for step in state.lesson_plan:
+        if step.replanned:
+            return step, "replanned_step"
+    for step in state.lesson_plan:
+        if step.status == "mastered":
+            return step, "mastered_step"
+    return (state.lesson_plan[0], "fallback") if state.lesson_plan else (None, "fallback")
+
+
+def _start_exit_ticket(state: AutoTutorState, ctx: ToolExecutionContext) -> None:
+    ticket_started = perf_counter()
+    target, generated_from = _select_exit_ticket_target(state)
+    if target is None:
+        _finalize(state)
+        return
+    difficulty: Difficulty = "easy" if target.status == "struggling" else "medium"
+    sources = target.sources[:4]
+    question = _generate_question(target.knowledge_point, difficulty, sources)
+    state.exit_ticket = ExitTicket(
+        knowledge_point=target.knowledge_point,
+        source_tag=target.source_tag,
+        difficulty=difficulty,
+        strategy="课后退出票检验：用一道迁移题确认本节辅导是否真正生效。",
+        question=question,
+        sources=sources,
+        generated_from=generated_from,  # type: ignore[arg-type]
+    )
+    state.phase = "exit_ticket"
+    state.status = "awaiting_answer"
+    _emit(
+        state,
+        "exit_ticket",
+        "Exit Ticket · 生成退出票",
+        "exit_ticket",
+        "waiting_answer",
+        started_at=ticket_started,
+        metadata={
+            "knowledge_point": state.exit_ticket.knowledge_point,
+            "source_tag": state.exit_ticket.source_tag,
+            "difficulty": state.exit_ticket.difficulty,
+            "generated_from": generated_from,
+            "result_summary": f"为「{state.exit_ticket.knowledge_point}」生成课后退出票，等待学生完成最后检验",
+        },
+    )
+
+
+def _submit_exit_ticket_answer(state: AutoTutorState, answer: str) -> tuple[bool, str]:
+    if state.exit_ticket is None:
+        raise RuntimeError("exit ticket not prepared")
+    given = (answer or "").strip()[:1].upper()
+    correct_letter = str(state.exit_ticket.question.get("answer", "A")).strip()[:1].upper()
+    is_correct = bool(given) and given == correct_letter
+    state.exit_ticket_result = ExitTicketResult(
+        knowledge_point=state.exit_ticket.knowledge_point,
+        source_tag=state.exit_ticket.source_tag,
+        selected_answer=given,
+        correct_answer=correct_letter,
+        is_correct=is_correct,
+        explanation=str(state.exit_ticket.question.get("explanation", "")),
+        mastery_signal="exit_ticket_passed" if is_correct else "exit_ticket_failed",
+    )
+    _emit(
+        state,
+        "exit_ticket_judge",
+        "Exit Ticket · 判定学习证据",
+        "exit_ticket",
+        "success" if is_correct else "failed",
+        metadata={
+            "knowledge_point": state.exit_ticket.knowledge_point,
+            "answer": given,
+            "correct": correct_letter,
+            "is_correct": is_correct,
+            "result_summary": "退出票通过，记录掌握证据" if is_correct else "退出票未通过，回流错题与复习",
+        },
+    )
+    return is_correct, correct_letter
+
+
+# --------------------------------------------------------------------------- #
 # finalize：落 memory + 错题进 SM-2 复习池
 # --------------------------------------------------------------------------- #
 def _finalize(state: AutoTutorState) -> None:
+    if state.status == "completed":
+        return
     finalize_started = perf_counter()
     mastered = [s.knowledge_point for s in state.lesson_plan if s.status == "mastered"]
     struggling = [s.knowledge_point for s in state.lesson_plan if s.status == "struggling"]
+    event_types = ["auto_tutor_step"]
 
     for step in state.lesson_plan:
         if step.status not in ("mastered", "struggling"):
@@ -699,20 +823,73 @@ def _finalize(state: AutoTutorState) -> None:
         except Exception:
             pass
 
+    weakpoint_action = "not_recorded"
+    review_action = "no_new_review_needed"
+    exit_ticket_summary = "退出票未生成"
+    if state.exit_ticket and state.exit_ticket_result:
+        event_types.append("auto_tutor_exit_ticket")
+        ticket_tag = state.exit_ticket.source_tag or state.exit_ticket.knowledge_point
+        ticket_ok = state.exit_ticket_result.is_correct
+        try_record_learning_event(
+            LearningEvent(
+                student_id=state.student_id,
+                session_id=state.session_id,
+                feature="auto_tutor",
+                event_type="auto_tutor_exit_ticket",
+                grade=state.grade,
+                topic=ticket_tag,
+                success=ticket_ok,
+                score=1.0 if ticket_ok else 0.0,
+                metadata={
+                    "session_phase": "exit_ticket",
+                    "difficulty": state.exit_ticket.difficulty,
+                    "generated_from": state.exit_ticket.generated_from,
+                    "replans": state.replans,
+                    "selected_answer": state.exit_ticket_result.selected_answer,
+                    "correct_answer": state.exit_ticket_result.correct_answer,
+                },
+            )
+        )
+        try:
+            if ticket_ok:
+                record_correct_evidence(state.student_id, ticket_tag)
+                weakpoint_action = "correct_evidence_recorded"
+            else:
+                record_weakpoint(state.student_id, ticket_tag, source="auto_tutor_exit_ticket")
+                weakpoint_action = "weakpoint_recorded"
+                review_action = "weakpoint_added_to_review_pool"
+        except Exception:
+            weakpoint_action = "record_failed"
+        exit_ticket_summary = f"退出票{'通过' if ticket_ok else '未通过'}：{state.exit_ticket.knowledge_point}"
+
+    state.evidence = EvidenceSummary(
+        exit_ticket_recorded=bool(state.exit_ticket_result),
+        learning_event_types=event_types,
+        weakpoint_action=weakpoint_action,
+        review_action=review_action,
+        tutor_effectiveness_ready=bool(state.exit_ticket_result),
+    )
+
     summary = (
         f"AutoTutor 本节课：掌握 {('、'.join(mastered) or '无')}；"
-        f"仍需巩固 {('、'.join(struggling) or '无')}；触发 {state.replans} 次重规划。"
+        f"仍需巩固 {('、'.join(struggling) or '无')}；触发 {state.replans} 次重规划；{exit_ticket_summary}。"
     )
     state.summary = summary
     # 课后记忆：本节课目标 + 结果
     record_typed_memory(
         state.student_id,
         memory_type="review_goal",
-        content={"mastered": mastered, "struggling": struggling, "session_id": state.session_id},
+        content={
+            "mastered": mastered,
+            "struggling": struggling,
+            "session_id": state.session_id,
+            "exit_ticket": state.exit_ticket_result.model_dump() if state.exit_ticket_result else None,
+            "evidence": state.evidence.model_dump() if state.evidence else None,
+        },
         source_feature="auto_tutor",
-        confidence=0.8,
-        reason="AutoTutor 自主辅导课后小结，用于排下一次复习。",
-        metadata={"replans": state.replans},
+        confidence=0.85 if state.exit_ticket_result and state.exit_ticket_result.is_correct else 0.75,
+        reason="AutoTutor 自主辅导课后退出票与学习证据，用于排下一次复习。",
+        metadata={"replans": state.replans, "exit_ticket_recorded": bool(state.exit_ticket_result)},
     )
 
     _emit(
@@ -725,11 +902,14 @@ def _finalize(state: AutoTutorState) -> None:
             "mastered": mastered,
             "struggling": struggling,
             "replans": state.replans,
+            "exit_ticket_result": state.exit_ticket_result.model_dump() if state.exit_ticket_result else None,
+            "evidence": state.evidence.model_dump() if state.evidence else None,
             "wrote_memory": True,
             "scheduled_review_tags": struggling,
             "result_summary": summary,
         },
     )
+    state.phase = "completed"
     state.status = "completed"
 
 
@@ -739,9 +919,21 @@ def _finalize(state: AutoTutorState) -> None:
 def _public_state(state: AutoTutorState) -> dict[str, Any]:
     current = state.lesson_plan[state.current_step_index] if state.current_step_index < len(state.lesson_plan) else None
     current_question = None
-    if current and current.question and state.status == "awaiting_answer":
+    if state.phase == "exit_ticket" and state.exit_ticket and state.status == "awaiting_answer":
+        current_question = {
+            "kind": "exit_ticket",
+            "knowledge_point": state.exit_ticket.knowledge_point,
+            "difficulty": state.exit_ticket.difficulty,
+            "strategy": state.exit_ticket.strategy,
+            "question": state.exit_ticket.question.get("question"),
+            "options": state.exit_ticket.question.get("options"),
+            "step_index": len(state.lesson_plan),
+            "replanned": False,
+        }
+    elif current and current.question and state.status == "awaiting_answer":
         # 不向前端泄露答案
         current_question = {
+            "kind": "lesson",
             "knowledge_point": current.knowledge_point,
             "difficulty": current.difficulty,
             "strategy": current.strategy,
@@ -756,6 +948,7 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         "student_id": state.student_id,
         "grade": state.grade,
         "status": state.status,
+        "phase": state.phase,
         "lesson_plan": [
             {
                 "knowledge_point": s.knowledge_point,
@@ -774,6 +967,8 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         "reflect_log": [r.model_dump() for r in state.reflect_log],
         "replans": state.replans,
         "summary": state.summary,
+        "exit_ticket_result": state.exit_ticket_result.model_dump() if state.exit_ticket_result else None,
+        "evidence": state.evidence.model_dump() if state.evidence else None,
         "runtime_steps": [s.model_dump() for s in state.runtime_steps],
     }
 
@@ -853,6 +1048,15 @@ def submit_answer(
     set_trace_id(state.trace_id)
     ctx = _tool_context(state.student_id, actor_id, actor_role)
 
+    if state.phase == "exit_ticket":
+        is_correct, _correct_letter = _submit_exit_ticket_answer(state, answer)
+        _finalize(state)
+        state.updated_at = time.time()
+        _store.save(state)
+        result = _public_state(state)
+        result["last_answer_correct"] = is_correct
+        return result
+
     step = state.lesson_plan[state.current_step_index]
     step.attempts += 1
 
@@ -917,10 +1121,13 @@ def submit_answer(
 
 
 def _advance(state: AutoTutorState, ctx: ToolExecutionContext) -> None:
-    """进入下一步；若已无步骤则 finalize。"""
+    """进入下一步；若已无教学步骤则先进入退出票检验，再 finalize。"""
     next_index = state.current_step_index + 1
     if next_index >= len(state.lesson_plan) or next_index >= MAX_STEPS:
-        _finalize(state)
+        if state.phase == "lesson" and state.exit_ticket is None:
+            _start_exit_ticket(state, ctx)
+        else:
+            _finalize(state)
         return
     state.current_step_index = next_index
     _emit(

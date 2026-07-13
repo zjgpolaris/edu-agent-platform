@@ -207,6 +207,7 @@ W1 + W1.5 + W2 已落地，W2.5 留种子脚本待部署：
 | 取材 / 出题 | 经 `tools.registry.run_tool("search_history_knowledge")` 走治理+审计+RAG；据难度出四选一题 | ✅ |
 | 反思 / 重规划 | 答错→quality 模型诊断(reteach/lower_difficulty/change_example)→当前步与后续步真实降难度+重新出题 | ✅ |
 | 课后自适应 | 写 `review_goal` memory；按掌握度记 learning event；已掌握移出错题本、仍薄弱进错题本（接 SM-2 今日复习） | ✅ |
+| 退出票证据闭环 | v1.26 新增 `phase=exit_ticket`：最后教学步骤后先完成退出票检验，写 `auto_tutor_exit_ticket` learning event，并回流掌握证据/错题本/教师端辅导效果看板 | ✅ |
 | 可观测 | 每个 node `emit_trace_event` 写 trace_store，可经 `/api/traces/{trace_id}` 查询 | ✅ |
 | API | `POST /api/autotutor/start`、`POST /api/autotutor/answer`、`GET /api/autotutor/session/{id}`（auth + 限流 + 审计 + trace_context） | ✅ |
 | 前端 | `frontend/app/(student)/student/auto-tutor/page.tsx`：计划进度 + 当前题/反思 + runtime steps/TraceTimeline；AppSidebar/MobileBottomNav 新增「自主辅导」入口 | ✅ |
@@ -214,5 +215,22 @@ W1 + W1.5 + W2 已落地，W2.5 留种子脚本待部署：
 | Demo 种子 | `scripts/seed_demo_student.py`（demo-student/demo123 + 预置错题本） | ✅ |
 | 部署上线 | Vercel(前端) + Render(后端 Docker) + Supabase：`render.yaml`、`frontend/vercel.json`、`.dockerignore`×2、前端 standalone 构建、CORS 经 `FRONTEND_ORIGIN`/`*.vercel.app` 放行、部署文档 [`202606291600-autotutor-deploy-dev.md`](202606291600-autotutor-deploy-dev.md) | ✅ 配置就绪，待按文档执行平台部署 |
 
-**验收红线对照：** ① 计划生成且换学生不同 ✅ ② 答错→反思→计划真实改变→后续 step 体现 ✅ ③ 全程 trace 可见 ✅ ④ 课后落 memory + 排复习 ✅ ⑤ trajectory eval 跑通并进 CI ✅。
+**验收红线对照：** ① 计划生成且换学生不同 ✅ ② 答错→反思→计划真实改变→后续 step 体现 ✅ ③ 全程 trace 可见 ✅ ④ 课后落 memory + 排复习 ✅ ⑤ trajectory eval 跑通并进 CI ✅ ⑥ v1.26 退出票 evidence closure 接入，辅导结束前必须有出口检验 ✅。
+
+## 十、v1.26 退出票与学习证据闭环（2026-07-13）
+
+本轮把 AutoTutor 从“教学步骤完成即 finalize”升级为“退出票检验后 finalize”：
+
+```text
+plan → act → observe → judge → reflect/re_plan → exit_ticket → evidence → finalize
+```
+
+关键变化：
+
+- `AutoTutorState` 新增 `phase`、`exit_ticket`、`exit_ticket_result`、`evidence`。
+- 保持 `status=awaiting_answer/completed` 不变，前端通过 `phase=exit_ticket` 区分退出票阶段。
+- `POST /api/autotutor/answer` 继续作为唯一作答入口：教学题作答推进 lesson，退出票作答触发 finalize。
+- `learning_events` 新增 `auto_tutor_exit_ticket` 语义，辅导效果服务统计退出票数和通过率。
+- 学生端 AutoTutor 完成态展示学习证据卡；教师班级学情页展示退出票证据聚合。
+- 详情记录见 [`202607131430-autotutor-exit-ticket-evidence-dev.md`](202607131430-autotutor-exit-ticket-evidence-dev.md)。
 

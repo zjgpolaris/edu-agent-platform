@@ -13,7 +13,7 @@
 > 给定一个学生，Agent 自己决定教什么、怎么教、答错了怎么补——全程可观测、可评测、可干预。
 
 ```
-plan ──> act ──> observe ──> judge ──┬── pass ──> next_step ──> finalize
+plan ──> act ──> observe ──> judge ──┬── pass ──> next_step ──> exit_ticket ──> evidence ──> finalize
                                      └── fail ──> reflect ──> re_plan ──> act
 ```
 
@@ -22,6 +22,7 @@ plan ──> act ──> observe ──> judge ──┬── pass ──> next
 - **Plan**：读学生画像 + 错题本，自主生成本节课知识点顺序与教学策略
 - **Reflect / Re-plan**：答错时诊断原因（讲得不对 / 题超纲），动态改变后续计划
 - **全程 Trace**：每个 node 写入 trace_store，右侧 TraceTimeline 实时可见
+- **退出票证据**：教学结束前必须完成 exit ticket，结果写入 learning_events、错题/掌握度、复习与教师端辅导效果看板
 - **课后自适应**：掌握的知识点移出错题本，薄弱点进入 SM-2 复习排期
 
 ---
@@ -40,7 +41,8 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 2. 打开 `/student/learning-path` 或 `/student/review?tab=weakpoints`，确认错题本已预置「鸦片战争」等知识点。
 3. 打开 `/student/auto-tutor?focus=鸦片战争`，让 AutoTutor 围绕指定薄弱点启动教学。
 4. 故意答错一次，观察 Agent 进入 `reflect` / `re_plan`，并在右侧 TraceTimeline 看到节点轨迹。
-5. 打开 `/eval`，展示 Eval / AgentOps 的 readiness、成功率、trace 与工具调用统计。
+5. 答完教学步骤后完成「退出票检验」，确认学习证据写入错题/复习与教师端分析。
+6. 打开 `/eval`，展示 Eval / AgentOps 的 readiness、成功率、trace 与工具调用统计。
 
 教师补充：
 
@@ -146,7 +148,8 @@ npm run test:autotutor-recovery       # AutoTutor 会话恢复 smoke
 npm run test:release-gate             # release gate / readiness summary smoke
 npm run release:gate                  # 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build
 npm run release:gate:fast             # 快速关键路径发布闸门
-python3 eval/auto_tutor_trajectory_eval.py  # AutoTutor 轨迹评测
+python3 eval/auto_tutor_trajectory_eval.py  # AutoTutor 轨迹评测（含退出票闭环）
+python3 eval/tutor_effectiveness_smoke.py   # AI 辅导效果/退出票证据聚合
 
 # 生产 RAG / readiness 验收：不属于默认 PR CI，需线上 API_BASE 与认证
 API_BASE=https://<后端> SMOKE_USERNAME=<user> SMOKE_PASSWORD=<password> \

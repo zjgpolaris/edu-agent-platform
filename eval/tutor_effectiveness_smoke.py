@@ -72,6 +72,21 @@ def _write_tutor_step(student_id: str, tag: str, success: bool):
              "success": 1 if success else 0, "score": 1.0 if success else 0.0, "ts": ts})
 
 
+def _write_exit_ticket(student_id: str, tag: str, success: bool, session_id: str = "sess-exit"):
+    """模拟 AutoTutor 退出票学习证据。"""
+    import uuid
+    from db.engine import get_connection
+    from sqlalchemy import text
+    _ensure_learning_events_table()
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with get_connection() as conn:
+        conn.execute(text("""INSERT INTO learning_events
+            (id, student_id, feature, event_type, topic, success, score, session_id, created_at, metadata_json)
+            VALUES (:id, :sid, 'auto_tutor', 'auto_tutor_exit_ticket', :tag, :success, :score, :session_id, :ts, '{}')"""),
+            {"id": str(uuid.uuid4()), "sid": student_id, "tag": tag,
+             "success": 1 if success else 0, "score": 1.0 if success else 0.0, "session_id": session_id, "ts": ts})
+
+
 # ── Case 1: 无辅导记录返回空摘要 ─────────────────────────────────────────────
 def c1_no_records():
     from services.tutor_effectiveness_service import get_student_tutor_effectiveness
@@ -136,6 +151,44 @@ def c5_class_view():
         assert "student_count" in t and "mastery_rate" in t
 
 
+# ── Case 6: 退出票学习证据被学生视角统计 ─────────────────────────────────────
+def c6_exit_ticket_events_are_counted():
+    from services.tutor_effectiveness_service import get_student_tutor_effectiveness
+    _write_exit_ticket(STUDENT, "鸦片战争", True, "sess-exit-a")
+    _write_exit_ticket(STUDENT, "洋务运动", False, "sess-exit-b")
+    result = get_student_tutor_effectiveness(STUDENT)
+    summary = result["summary"]
+    assert summary["exit_tickets"] == 2, summary
+    assert summary["exit_ticket_mastered"] == 1, summary
+    assert abs(summary["exit_ticket_mastery_rate"] - 50.0) < 0.1, summary
+    tags = {t["tag"]: t for t in result["tags"]}
+    assert tags["鸦片战争"]["exit_tickets"] >= 1, tags["鸦片战争"]
+    assert tags["鸦片战争"]["exit_ticket_mastery_rate"] == 100.0, tags["鸦片战争"]
+
+
+# ── Case 7: 班级视角聚合退出票证据 ──────────────────────────────────────────
+def c7_class_exit_ticket_rollup():
+    from services.tutor_effectiveness_service import get_class_tutor_effectiveness
+    _write_exit_ticket("smoke-teff-s3", "辛亥革命", True, "sess-exit-c")
+    result = get_class_tutor_effectiveness(TEACHER)
+    summary = result["summary"]
+    assert summary["exit_tickets"] >= 3, summary
+    assert summary["students_with_exit_ticket"] >= 2, summary
+    assert 0.0 <= summary["exit_ticket_mastery_rate"] <= 100.0, summary
+    assert any(t.get("exit_tickets", 0) > 0 for t in result["tags"]), result["tags"]
+
+
+# ── Case 8: 无退出票的旧 step 数据仍兼容 ─────────────────────────────────────
+def c8_legacy_step_events_still_work_without_exit_ticket():
+    from services.tutor_effectiveness_service import get_student_tutor_effectiveness
+    legacy_student = "smoke-teff-legacy"
+    _write_tutor_step(legacy_student, "分封制", True)
+    result = get_student_tutor_effectiveness(legacy_student)
+    assert result["summary"]["total_steps"] == 1, result
+    assert result["summary"]["exit_tickets"] == 0, result
+    assert result["summary"]["exit_ticket_mastery_rate"] == 0.0, result
+
+
 if __name__ == "__main__":
     cases = [
         ("C1 无记录返回空摘要", c1_no_records),
@@ -143,6 +196,9 @@ if __name__ == "__main__":
         ("C3 按知识点统计正确", c3_per_tag_stats),
         ("C4 still_weak 与错题本一致", c4_still_weak),
         ("C5 教师班级视角聚合", c5_class_view),
+        ("C6 退出票学习证据被统计", c6_exit_ticket_events_are_counted),
+        ("C7 班级退出票证据聚合", c7_class_exit_ticket_rollup),
+        ("C8 旧 step 数据兼容", c8_legacy_step_events_still_work_without_exit_ticket),
     ]
     passed = sum(run_case(name, fn) for name, fn in cases)
     total = len(cases)
