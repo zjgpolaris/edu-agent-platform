@@ -26,8 +26,11 @@ CORE_SUITES = [
     "rag_retrieval_eval",
     "textbook_qa_eval",
     "game_generation_eval",
+    "agent_ops_smoke",
+    "autotutor_session_recovery_smoke",
     "learning_assistant_smoke",
     "material_rag_smoke",
+    "release_gate_smoke",
     "student_profile_smoke",
     "homework_grading_smoke",
     "weakpoints_smoke",
@@ -43,6 +46,9 @@ CORE_SUITES = [
 ]
 QUICK_SUITES = [
     # Offline-first: these run without LLM/embed and always produce metrics
+    "agent_ops_smoke",
+    "autotutor_session_recovery_smoke",
+    "release_gate_smoke",
     "tool_registry_smoke",
     "guardrails_smoke",
     "weakpoints_smoke",
@@ -51,15 +57,22 @@ QUICK_SUITES = [
     "auto_tutor_trajectory_eval",
     # LLM/embed-dependent (skipped gracefully when credentials absent)
     "history_character_smoke",
+    "rag_inspector_smoke",
     "rag_retrieval_eval",
+    "textbook_trace_smoke",
     "material_rag_smoke",
     "learning_assistant_smoke",
 ]
 SMOKE_SUITES = [
+    "agent_ops_smoke",
+    "autotutor_session_recovery_smoke",
     "history_character_smoke",
     "learning_assistant_smoke",
     "material_rag_smoke",
+    "rag_inspector_smoke",
+    "release_gate_smoke",
     "student_profile_smoke",
+    "textbook_trace_smoke",
     "homework_grading_smoke",
     "weakpoints_smoke",
     "knowledge_graph_smoke",
@@ -93,10 +106,15 @@ SMOKE_SUITES = [
     "class_matrix_smoke",
 ]
 SUITE_FILES = {
+    "agent_ops_smoke": EVAL_DIR / "agent_ops_smoke.py",
+    "autotutor_session_recovery_smoke": EVAL_DIR / "autotutor_session_recovery_smoke.py",
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
     "history_character_eval": EVAL_DIR / "history_character_eval.py",
     "rag_retrieval_eval": EVAL_DIR / "rag_retrieval_eval.py",
+    "rag_inspector_smoke": EVAL_DIR / "rag_inspector_smoke.py",
+    "release_gate_smoke": EVAL_DIR / "release_gate_smoke.py",
     "textbook_qa_eval": EVAL_DIR / "textbook_qa_eval.py",
+    "textbook_trace_smoke": EVAL_DIR / "textbook_trace_smoke.py",
     "game_generation_eval": EVAL_DIR / "game_generation_eval.py",
     "learning_assistant_smoke": EVAL_DIR / "learning_assistant_smoke.py",
     "material_rag_smoke": EVAL_DIR / "material_rag_smoke.py",
@@ -138,6 +156,18 @@ SUITE_FILES = {
     "knowledge_graph_smoke": EVAL_DIR / "knowledge_graph_smoke.py",
 }
 SUITE_METADATA: dict[str, dict[str, str]] = {
+    "agent_ops_smoke": {
+        "label": "AgentOps 聚合 Smoke",
+        "category": "ops",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "autotutor_session_recovery_smoke": {
+        "label": "AutoTutor 会话恢复 Smoke",
+        "category": "agent",
+        "kind": "smoke",
+        "priority": "p1",
+    },
     "history_character_smoke": {
         "label": "历史人物 Smoke",
         "category": "agent",
@@ -156,11 +186,29 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "kind": "quality",
         "priority": "p0",
     },
+    "rag_inspector_smoke": {
+        "label": "RAG Inspector Smoke",
+        "category": "rag",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "release_gate_smoke": {
+        "label": "Release Gate Smoke",
+        "category": "ops",
+        "kind": "smoke",
+        "priority": "p1",
+    },
     "textbook_qa_eval": {
         "label": "教材问答质量",
         "category": "rag",
         "kind": "quality",
         "priority": "p0",
+    },
+    "textbook_trace_smoke": {
+        "label": "教材问答 Trace Smoke",
+        "category": "rag",
+        "kind": "smoke",
+        "priority": "p1",
     },
     "game_generation_eval": {
         "label": "历史游戏生成",
@@ -819,6 +867,11 @@ def build_markdown_report(summary: dict[str, Any]) -> str:
     audit = agent_ops.get("audit") or {}
     learning = agent_ops.get("learning") or {}
     tools = agent_ops.get("tools") or {}
+    production = agent_ops.get("production") or {}
+    latency = production.get("latency") or {}
+    llm = production.get("llm") or {}
+    rag = production.get("rag") or {}
+    cost = production.get("cost") or {}
     readiness = agent_ops.get("readiness") or {}
     lines.extend([
         "",
@@ -830,9 +883,15 @@ def build_markdown_report(summary: dict[str, Any]) -> str:
         f"Audit events: {audit.get('total', 0)} total, {audit.get('failure', 0)} failed, success_rate={audit.get('success_rate', 0)}",
         f"Learning events: {learning.get('total', 0)} total, {learning.get('failure', 0)} failed, success_rate={learning.get('success_rate', 0)}",
         f"Tool calls: {tools.get('total', 0)} total, {tools.get('failure', 0)} failed, success_rate={tools.get('success_rate', 0)}",
+        f"Latency: p50={latency.get('p50_ms', 'n/a')}ms, p95={latency.get('p95_ms', 'n/a')}ms, llm_p95={latency.get('llm_p95_ms', 'n/a')}ms",
+        f"LLM: calls={llm.get('calls', 0)}, fallback_count={llm.get('fallback_count', 0)}, error_count={llm.get('error_count', 0)}",
+        f"RAG diagnosis: {', '.join(f'{k}={v}' for k, v in (rag.get('diagnosis') or {}).items()) or 'None'}",
+        f"RAG failure stage: {', '.join(f'{k}={v}' for k, v in (rag.get('failure_stage') or {}).items()) or 'None'}",
+        f"Cost estimate: total_usd={cost.get('total_usd_estimated', 0)}, avg_usd_per_llm_call={cost.get('avg_usd_per_llm_call_estimated', 0)}",
         f"Top actions: {', '.join((audit.get('by_action') or {}).keys()) or 'None'}",
         f"Top features: {', '.join((learning.get('by_feature') or {}).keys()) or 'None'}",
         f"Top tools: {', '.join((tools.get('by_tool_name') or {}).keys()) or 'None'}",
+        f"LLM models: {', '.join((llm.get('models') or {}).keys()) or 'None'}",
         f"Failing tools: {', '.join((tools.get('by_failure') or {}).keys()) or 'None'}",
         "",
     ])

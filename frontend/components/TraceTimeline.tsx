@@ -20,6 +20,29 @@ interface TraceTimelineProps {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
 
+function formatMetadataValue(value: any) {
+  if (value == null) return "—"
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value)
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function RagInspectorSummary({ inspector }: { inspector: Record<string, any> }) {
+  const chunks = Array.isArray(inspector.chunks) ? inspector.chunks : []
+  return (
+    <div className="trace-rag-inspector">
+      <strong>RAG Inspector</strong>
+      <span>query: {inspector.original_query || inspector.rewritten_query || "—"}</span>
+      <span>strategy: {inspector.retrieval_strategy || inspector.mode || "—"}</span>
+      <span>chunks: {inspector.source_count ?? inspector.total_chunks_retrieved ?? chunks.length}</span>
+      <span>top: {typeof inspector.top_score === "number" ? inspector.top_score.toFixed(2) : "—"}</span>
+    </div>
+  )
+}
+
 export function TraceTimeline({ traceId, token }: TraceTimelineProps) {
   const [events, setEvents] = useState<TraceEvent[]>([])
   const [loading, setLoading] = useState(false)
@@ -70,10 +93,13 @@ export function TraceTimeline({ traceId, token }: TraceTimelineProps) {
                 <details className="metadata">
                   <summary>详情</summary>
                   <div className="metadata-content">
+                    {event.metadata.rag_inspector && typeof event.metadata.rag_inspector === "object" && (
+                      <RagInspectorSummary inspector={event.metadata.rag_inspector} />
+                    )}
                     {Object.entries(event.metadata).map(([k, v]) => (
                       <div key={k} className="metadata-item">
                         <span className="key">{k}:</span>
-                        <span className="value">{String(v)}</span>
+                        <span className="value">{formatMetadataValue(v)}</span>
                       </div>
                     ))}
                   </div>

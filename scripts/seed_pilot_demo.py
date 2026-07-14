@@ -57,6 +57,7 @@ MAIN_STUDENT = "pilot-student"
 ASSIGNMENT_TITLE = "【Pilot Demo】辛亥革命随堂诊断"
 NOTIFICATION_MESSAGE = "Pilot 演示：请先完成辛亥革命随堂诊断，错题会自动进入今日复习。"
 REVIEW_DATE_DEFAULT = date.today().isoformat()
+PILOT_AUTOTUTOR_SESSION_PREFIX = "pilot-autotutor-evidence"
 
 QUESTIONS: list[dict[str, Any]] = [
     {
@@ -306,6 +307,50 @@ def ensure_profile_events(today: str, *, verbose: bool = True) -> None:
     _log(verbose, "[profile] pilot learning events reset")
 
 
+def ensure_autotutor_evidence(today: str, *, verbose: bool = True) -> None:
+    rows = [
+        ("pilot-student", "辛亥革命历史意义", True),
+        ("pilot-student-b", "辛亥革命历史意义", False),
+        ("pilot-student-c", "洋务运动目的", True),
+    ]
+    with get_connection() as conn:
+        for student_id in STUDENTS:
+            conn.execute(
+                text("""DELETE FROM learning_events
+                     WHERE student_id=:sid AND feature='auto_tutor' AND session_id LIKE :prefix"""),
+                {"sid": student_id, "prefix": f"{PILOT_AUTOTUTOR_SESSION_PREFIX}%"},
+            )
+    for index, (student_id, topic, success) in enumerate(rows, start=1):
+        session_id = f"{PILOT_AUTOTUTOR_SESSION_PREFIX}-{index}"
+        try_record_learning_event(
+            LearningEvent(
+                student_id=student_id,
+                session_id=session_id,
+                feature="auto_tutor",
+                event_type="auto_tutor_step",
+                grade="八年级上册",
+                topic=topic,
+                success=success,
+                score=1.0 if success else 0.0,
+                metadata={"source": "pilot_seed", "date": today},
+            )
+        )
+        try_record_learning_event(
+            LearningEvent(
+                student_id=student_id,
+                session_id=session_id,
+                feature="auto_tutor",
+                event_type="auto_tutor_exit_ticket",
+                grade="八年级上册",
+                topic=topic,
+                success=success,
+                score=1.0 if success else 0.0,
+                metadata={"source": "pilot_seed", "date": today, "session_phase": "exit_ticket"},
+            )
+        )
+    _log(verbose, "[autotutor] pilot exit ticket evidence reset")
+
+
 def seed(today: str | None = None, *, verbose: bool = True) -> dict[str, Any]:
     today = today or REVIEW_DATE_DEFAULT
     ensure_account(TEACHER_ID, "teacher", verbose=verbose)
@@ -320,6 +365,7 @@ def seed(today: str | None = None, *, verbose: bool = True) -> dict[str, Any]:
     ensure_weakpoints(MAIN_STUDENT, verbose=verbose)
     ensure_notification_once(assignment_id, verbose=verbose)
     ensure_profile_events(today, verbose=verbose)
+    ensure_autotutor_evidence(today, verbose=verbose)
 
     summary = {
         "teacher": TEACHER_ID,

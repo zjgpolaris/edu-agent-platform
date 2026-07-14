@@ -25,6 +25,7 @@ if str(BACKEND) not in sys.path:
 from security.accounts import create_account  # noqa: E402
 from services.weakpoint_service import clear_weakpoints, get_weakpoints, record_weakpoint  # noqa: E402
 from student_profile import LearningEvent, try_record_learning_event  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
 from db.engine import get_connection  # noqa: E402
 from security.auth import hash_password  # noqa: E402
 from sqlalchemy import text  # noqa: E402
@@ -38,6 +39,7 @@ DEMO_WEAKPOINTS = [
 ]
 DEMO_RECENT_TOPICS = ["第二次鸦片战争", "甲午中日战争"]
 DEMO_FOCUS_TAG = DEMO_WEAKPOINTS[0][0]
+DEMO_AUTOTUTOR_SESSION_ID = "demo-autotutor-exit-ticket"
 
 
 def ensure_account(actor_id: str, password: str, role: str, display_name: str) -> None:
@@ -58,6 +60,34 @@ def ensure_account(actor_id: str, password: str, role: str, display_name: str) -
                 },
             )
         print(f"[account] reset {actor_id} / {password}")
+
+
+def seed_autotutor_evidence(student_id: str, grade: str = "八年级上册") -> None:
+    with get_connection() as conn:
+        conn.execute(
+            text("""DELETE FROM learning_events
+                 WHERE student_id=:sid AND feature='auto_tutor' AND session_id=:session_id"""),
+            {"sid": student_id, "session_id": DEMO_AUTOTUTOR_SESSION_ID},
+        )
+    for event_type, topic, success in [
+        ("auto_tutor_step", "鸦片战争", True),
+        ("auto_tutor_step", "洋务运动", False),
+        ("auto_tutor_exit_ticket", "鸦片战争", True),
+    ]:
+        try_record_learning_event(
+            LearningEvent(
+                student_id=student_id,
+                session_id=DEMO_AUTOTUTOR_SESSION_ID,
+                feature="auto_tutor",
+                event_type=event_type,
+                grade=grade,
+                topic=topic,
+                success=success,
+                score=1.0 if success else 0.0,
+                metadata={"source": "demo_seed", "seeded_at": datetime.now(timezone.utc).isoformat()},
+            )
+        )
+    print("[autotutor] seeded exit ticket evidence")
 
 
 def seed(student_id: str, password: str, grade: str = "八年级上册") -> None:
@@ -82,6 +112,7 @@ def seed(student_id: str, password: str, grade: str = "八年级上册") -> None
             )
         )
     print(f"[profile] recent topics + grade={grade} seeded")
+    seed_autotutor_evidence(student_id, grade)
 
     print("\nDemo 学生就绪：")
     print(f"  登录：{student_id} / {password}")
@@ -89,6 +120,7 @@ def seed(student_id: str, password: str, grade: str = "八年级上册") -> None
     print("  首页：/student")
     print("  复习路径：/student/learning-path")
     print(f"  针对性 AutoTutor：/student/auto-tutor?focus={DEMO_FOCUS_TAG}")
+    print("  辅导证据：/student/report 或教师 /teacher/class-analytics")
     print("  评测与 AgentOps：/eval")
 
 

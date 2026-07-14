@@ -113,7 +113,7 @@ backend/
 │   ├── essay_grader.py            # 作文批改
 │   ├── debate_supervisor.py       # 辩论主持
 │   ├── learning_assistant.py      # 学习助手
-│   ├── auto_tutor.py              # AutoTutor 自主辅导闭环（plan→act→observe→judge→reflect→re_plan→finalize）
+│   ├── auto_tutor.py              # AutoTutor 自主辅导闭环（plan→act→observe→judge→reflect→re_plan→exit_ticket→evidence→finalize）
 │   └── history_map_agent.py       # 历史地图代理
 │
 ├── api/                       # FastAPI 路由
@@ -334,7 +334,7 @@ frontend/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/autotutor/start` | 启动一节自主辅导课：读画像/错题本→自主规划→出首题，返回 session_id + 计划 + trace_id。可选 `focus_tags`（如来自作业错题）会被提到教学计划最前 |
-| POST | `/api/autotutor/answer` | 提交当前题作答，驱动 judge→（答错则 reflect→re_plan）/ next_step / finalize |
+| POST | `/api/autotutor/answer` | 提交当前题作答，驱动 judge→（答错则 reflect→re_plan）/ next_step；最后教学步骤后进入 `phase=exit_ticket` 退出票检验，退出票作答后才 finalize 并写入学习证据 |
 | GET | `/api/autotutor/session/{session_id}` | 拉取会话当前状态（计划、当前题、反思记录、runtime steps、trace_id） |
 
 ### 教材学习
@@ -414,9 +414,9 @@ frontend/
 | GET | `/api/teacher/students/{student_id}/events` | 学生学习事件 |
 | GET | `/api/teacher/class-analytics` | 班级学情分析 |
 | GET | `/api/teacher/class-wrong-analysis` | 跨作业题目级错误聚合：按答错学生数降序展示最难的题（prompt/accuracy/student_count_wrong/wrong_options/来源作业），`?limit_assignments=10&top_n=15` |
-| GET | `/api/teacher/tutor-effectiveness` | 班级 AI 辅导效果：从 learning_events 聚合 auto_tutor 步骤，按知识点统计辅导次数/掌握率/active_students，`?days=30` |
+| GET | `/api/teacher/tutor-effectiveness` | 班级 AI 辅导效果：从 learning_events 聚合 `auto_tutor_step` 与 `auto_tutor_exit_ticket`，按知识点统计辅导次数、过程掌握率、退出票数/通过率、active_students 与 students_with_exit_ticket，`?days=30` |
 | GET | `/api/teacher/class-risk-analysis` | 班级「地基薄弱点」：逐生 build_graph+predict_risks，按卡点前置聚合，返回 foundations（tag/weak_students/at_risk_students/downstream_risk_count/impact，按 impact 降序）定位需系统讲解的根节点 |
-| GET | `/api/students/{student_id}/tutor-effectiveness` | 学生自己的辅导效果：按知识点统计掌握率+是否仍在错题本，`?days=30` |
+| GET | `/api/students/{student_id}/tutor-effectiveness` | 学生自己的辅导效果：按知识点统计过程掌握率、退出票数/通过率、最近退出票时间 + 是否仍在错题本，`?days=30` |
 | POST | `/api/teacher/assignments/generate-questions` | AI 出题：按知识点批量 RAG 取材并生成单选题 / 判断题 / 简答题草稿，供教师修改确认；每题附带确定性结构质检结果 `quality`（level: ok/warn/error + issues），教师端以徽标标注需修正/可优化的题；可选 `semantic_check=true` 追加 LLM 语义质检（答案是否自洽、题干歧义、干扰项合理性），问题以「语义：」前缀并入 issues，失败/无凭证时优雅降级；语义质检会注入该教师历史上人工判定为 `bad_question` 的题作为 few-shot 反例，使质检随复核越用越准（自改进闭环） |
 | POST | `/api/teacher/assignments` | 创建作业（客观题+主观题），指定学生 |
 | GET | `/api/teacher/assignments` | 教师作业列表，含完成率、平均分与讲评洞察摘要（待评阅数、薄弱知识点、低正确率题） |
@@ -535,6 +535,8 @@ frontend/
 | success | INTEGER | 是否成功 |
 | metadata_json | TEXT | 元数据（JSON） |
 | created_at | TEXT | 创建时间 |
+
+AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`auto_tutor_exit_ticket` 表示课后退出票检验结果，用于学生/教师辅导效果聚合、错题/掌握度证据与复习闭环。
 
 #### memory_entries 表
 
@@ -839,13 +841,13 @@ frontend/
 | `question_quality_smoke.py` | AI 出题质检测试：结构质检（选项数/答案合法性/题干为空/判断题答案/简答参考答案）+ LLM 语义质检合并（stub LLM：检出/降级/merge 取最高 level）+ few-shot 反例注入 prompt 断言，17 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `notification_badges_smoke.py` | 通知徽标聚合测试（教师待评阅/低分学生/未复核质检盲区统计与复核清零、学生未提交/到期统计），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `quality_dashboard_smoke.py` | 命题质量看板跨作业聚合测试（质检分布/有效性漏检误报/复核结论/高频问题/最难题排序/few-shot 反例/teacher 隔离），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
-| `pilot_path_smoke.py` | v1.25 试点主路径测试：验证 `seed_pilot_demo.py` 幂等、pilot 账号登录、学生今日计划/AutoTutor focus 链接、教师待复核/欠交/质检盲区信号、`/api/teacher/today-queue` 后端聚合队列、通知去重与 review 占位任务不触发 LLM，7 例离线，已接入 `run_core_evals.py`（SMOKE） |
+| `pilot_path_smoke.py` | v1.25/v1.26 试点主路径测试：验证 `seed_pilot_demo.py` 幂等、pilot 账号登录、学生今日计划/AutoTutor focus 链接、教师待复核/欠交/质检盲区信号、`/api/teacher/today-queue` 后端聚合队列、通知去重、review 占位任务不触发 LLM，以及 pilot seed 预置的 AutoTutor 退出票学习证据，8 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `today_plan_smoke.py` | 学生今日计划聚合测试（优先级排序/已交排除/逾期置顶/复习余量/薄弱点 focus 编码/DB 集成隔离），8 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `completion_overview_smoke.py` | 教师班级完成情况聚合测试（逐生计数/逾期判定/掉队排序/班级摘要/DB 集成隔离），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
 | `readiness_smoke.py` | Readiness / Eval 路由测试：验证 `/api/ready` 浅检查结构，以及 `/api/eval/latest`、`/api/eval/run` 只注册新版 `run_core_evals.py` 路由，避免旧 mock report_generator 遮蔽 |
 | `trajectory_eval.py` | 学习助手工具调用轨迹准确率，已接入 `run_core_evals.py`（CORE/QUICK） |
-| `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中、focus_tags 优先规划、连错降难度、空错题本兜底），7 例，已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
+| `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中、focus_tags 优先规划、连错降难度、空错题本兜底、退出票 finalize 前检验、退出票 learning event 与错题回流），11 例，已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
 | `production_rag_health_smoke.py` | 生产 RAG HTTP smoke，显式通过 `API_BASE` 指向线上后端，不进入默认本地 smoke/core 套件 |
 | `tool_permission_smoke.py` | 工具权限确认测试 |
 | `mcp_server_smoke.py` | MCP stdio 协议 smoke：验证 initialize、tools/list、教材读取、历史检索与未暴露工具拒绝；可通过 `npm run test:mcp` 单独运行 |
@@ -998,7 +1000,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-03 | 1.17.5 | 催办通知实际发送：新增 `services/notification_service.py`（send_urge_notification/get_student_notifications/mark_notification_read/mark_all_read/get_unread_count，`student_notifications` 表）；新增 `POST /api/teacher/urge-students`、`GET /api/students/{id}/notifications`、`POST /api/students/{id}/notifications/read-all`；`ClassCompletionCard` 加「一键催办」按钮+自定义消息输入框；`TodayPlanCard` 展示老师催办通知横幅（可关闭，后台静默已读）；新增 `urge_notification_smoke.py`（6 例）。补上「有数据但无行动」的催办断点 |
 | 2026-07-03 | 1.17.6 | 学生分层作业：`assignments` 表新增 `difficulty_groups_json` 字段（{student_id: "easy"\|"medium"\|"hard"}）；新增 `set_difficulty_groups`/`get_questions_for_student`/`_parse_difficulty_groups`；`list_student_assignments` 返回 `my_difficulty`；新增 `PUT /api/teacher/assignments/{id}/difficulty-groups` + `GET /api/student/{sid}/assignments/{aid}/my-questions`；教师作业详情加「学生难度分层」紫色面板（含学生下拉选择器+保存）；学生作业列表加难度组标签，开题时自动拉过滤后的题目（无匹配则降级全量）；新增 `tiered_assignment_smoke.py`（6 例）|
 | 2026-07-03 | 1.17.7 | 错题班级聚合视图：`aggregate_class_wrong_questions` 跨最近N份作业聚合题目粒度答错率（主观题过滤，wrong_options 高频错选）；新增 `GET /api/teacher/class-wrong-analysis`；教师班级学情页新增「全班难题榜」表格（按答错学生数降序，正确率色标，高频错选，来源作业）；新增 `class_wrong_analysis_smoke.py`（5 例）。补上「知道知识点弱，但不知道哪道题最难」的盲区 |
-| 2026-07-03 | 1.17.8 | AI 辅导效果追踪：新增 `services/tutor_effectiveness_service.py`（从 learning_events 的 auto_tutor_step 记录聚合，无需改 AutoTutor 逻辑）；学生视角 get_student_tutor_effectiveness（按知识点统计辅导次数/掌握率/still_weak）；班级视角 get_class_tutor_effectiveness（active_students/整体掌握率/按知识点）；新增 `GET /api/teacher/tutor-effectiveness` + `GET /api/students/{id}/tutor-effectiveness`；教师班级学情页新增「AI 辅导效果」彩色磁贴面板（4指标 + 知识点掌握率色块）；新增 `tutor_effectiveness_smoke.py`（5 例）|
+| 2026-07-03 | 1.17.8 | AI 辅导效果追踪：新增 `services/tutor_effectiveness_service.py`（从 learning_events 的 auto_tutor_step 记录聚合，无需改 AutoTutor 逻辑）；学生视角 get_student_tutor_effectiveness（按知识点统计辅导次数/掌握率/still_weak）；班级视角 get_class_tutor_effectiveness（active_students/整体掌握率/按知识点）；新增 `GET /api/teacher/tutor-effectiveness` + `GET /api/students/{id}/tutor-effectiveness`；教师班级学情页新增「AI 辅导效果」彩色磁贴面板（4指标 + 知识点掌握率色块）；新增 `tutor_effectiveness_smoke.py`（5 例，v1.26 扩展到退出票证据聚合）|
 
 ---
 
@@ -1041,4 +1043,5 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-07 | 1.24.0 | UX 一致性与工作台聚合：新增学生首页 `useStudentWorkbenchData`，让继续学习卡和今日计划共享同一份 `/today` 数据；新增学生端 `TabShell` 统一复习中心/学习资源/学情总览 tab；通知横幅单条关闭新增 `POST /api/students/{id}/notifications/{notification_id}/read`，不再误标全部已读；偏好设置改为读取后端 `/api/preferences/schema` 动态渲染；教师首页新增 `TeacherTodayQueue`，聚合待复核、欠交/逾期、薄弱点和共性错题 |
 | 2026-07-07 | 1.25.0 | 试点主路径 v1：新增 `scripts/seed_pilot_demo.py` 灌 pilot 教师/学生、作业提交、错题、review 占位任务与通知；学生 `ContinueLearningCard` 增加推荐理由和今日计划 summary chips；教师 `TeacherTodayQueue` 接入命题质量看板的未复核质检盲区；新增 `pilot_path_smoke.py`（6 例）验证 seed 幂等、学生今日计划、教师待办信号与不触发 LLM 的 review 占位链路 |
 | 2026-07-08 | 1.25.1 | CI Release Gate 收口：GitHub Actions 默认 PR/push 主门禁改为 `release-gate` 统一执行 `npm run release:gate`，前端 lint 独立快速反馈，quick-eval 保留为报告信号，Docker build 移至 main/manual；新增手动 `production-readiness` job 通过 `ready_url` 串联 `release:gate:prod --skip-frontend --ready-url`；修正 `Makefile verify-core-full` 转发到 `scripts/release_gate.py`；README/CI 文档/部署文档同步 release gate 与 shallow readiness / production RAG strict gate 边界 |
+| 2026-07-13 | 1.26.0 | AutoTutor 退出票与学习证据闭环：`auto_tutor.py` 新增 `phase=lesson/exit_ticket/completed`、`exit_ticket_result` 与 `evidence`，最后教学步骤后先进入退出票检验，退出票作答后才 finalize；`learning_events` 新增 `auto_tutor_exit_ticket` 语义并回写 `record_correct_evidence` / `record_weakpoint(source=auto_tutor_exit_ticket)`；`tutor_effectiveness_service.py` 统计退出票数/通过率与 `students_with_exit_ticket`；学生 AutoTutor 完成态展示学习证据卡，教师班级学情页展示退出票证据聚合；demo/pilot seed 预置退出票证据；扩展 `auto_tutor_trajectory_eval.py`、`tutor_effectiveness_smoke.py`、`pilot_path_smoke.py` |
 

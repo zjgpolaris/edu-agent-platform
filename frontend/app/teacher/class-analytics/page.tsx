@@ -57,9 +57,9 @@ type ClassWrongAnalysis = {
   generated_at: string;
 };
 
-type TutorEffTag = { tag: string; student_count: number; total: number; mastered: number; mastery_rate: number };
+type TutorEffTag = { tag: string; student_count: number; total: number; mastered: number; mastery_rate: number; exit_tickets?: number; exit_ticket_mastered?: number; exit_ticket_mastery_rate?: number; exit_ticket_student_count?: number };
 type ClassTutorEff = {
-  summary: { total_steps: number; mastered_steps: number; mastery_rate: number; active_students: number; days_analyzed: number };
+  summary: { total_steps: number; mastered_steps: number; mastery_rate: number; exit_tickets?: number; exit_ticket_mastered?: number; exit_ticket_mastery_rate?: number; active_students: number; students_with_exit_ticket?: number; days_analyzed: number };
   tags: TutorEffTag[];
   generated_at: string;
 };
@@ -415,7 +415,7 @@ export default function TeacherClassAnalyticsPage() {
         </div>
 
         {/* AI 辅导效果 */}
-        {tutorEff && tutorEff.summary.total_steps > 0 && (
+        {tutorEff && (tutorEff.summary.total_steps > 0 || (tutorEff.summary.exit_tickets ?? 0) > 0) && (
           <div className="analytics-section">
             <div className="panel-heading-row">
               <div>
@@ -423,14 +423,14 @@ export default function TeacherClassAnalyticsPage() {
                 <h3>AI 辅导效果（近 {tutorEff.summary.days_analyzed} 天）</h3>
               </div>
               <span style={{ fontSize: "0.78rem", color: "var(--text-muted,#6b7280)" }}>
-                {tutorEff.summary.active_students} 名学生有辅导记录
+                {tutorEff.summary.active_students} 名学生有辅导记录{(tutorEff.summary.students_with_exit_ticket ?? 0) > 0 ? ` · ${tutorEff.summary.students_with_exit_ticket} 名有退出票证据` : ""}
               </span>
             </div>
             <div className="teff-metrics">
               <div className="teff-metric"><b>{tutorEff.summary.total_steps}</b><span>总辅导步骤</span></div>
-              <div className="teff-metric"><b style={{ color: tutorEff.summary.mastery_rate >= 60 ? "#2d6a4f" : "#b0862b" }}>{tutorEff.summary.mastery_rate}%</b><span>整体掌握率</span></div>
-              <div className="teff-metric"><b>{tutorEff.summary.mastered_steps}</b><span>已掌握步骤</span></div>
-              <div className="teff-metric"><b>{tutorEff.tags.length}</b><span>涉及知识点</span></div>
+              <div className="teff-metric"><b style={{ color: tutorEff.summary.mastery_rate >= 60 ? "#2d6a4f" : "#b0862b" }}>{tutorEff.summary.mastery_rate}%</b><span>过程掌握率</span></div>
+              <div className="teff-metric"><b>{tutorEff.summary.exit_tickets ?? 0}</b><span>退出票数</span></div>
+              <div className="teff-metric"><b style={{ color: (tutorEff.summary.exit_ticket_mastery_rate ?? 0) >= 60 ? "#2d6a4f" : "#b0862b" }}>{tutorEff.summary.exit_ticket_mastery_rate ?? 0}%</b><span>退出票通过率</span></div>
             </div>
             {tutorEff.tags.length > 0 && (
               <div className="teff-tags">
@@ -440,9 +440,9 @@ export default function TeacherClassAnalyticsPage() {
                   const fg = rate >= 70 ? "#065f46" : rate >= 40 ? "#854d0e" : "#991b1b";
                   return (
                     <div key={t.tag} className="teff-tag-chip" style={{ background: bg, color: fg }}
-                      title={`${t.tag}｜${t.student_count}人辅导 ${t.total}次，掌握率 ${t.mastery_rate}%`}>
+                      title={`${t.tag}｜${t.student_count}人辅导 ${t.total}次，过程掌握率 ${t.mastery_rate}%｜退出票 ${t.exit_tickets ?? 0} 次，通过率 ${t.exit_ticket_mastery_rate ?? 0}%`}>
                       <span className="teff-tag-name">{t.tag}</span>
-                      <span className="teff-tag-rate">{t.mastery_rate}%</span>
+                      <span className="teff-tag-rate">{(t.exit_tickets ?? 0) > 0 ? `${t.exit_ticket_mastery_rate ?? 0}% 退出票` : `${t.mastery_rate}%`}</span>
                     </div>
                   );
                 })}

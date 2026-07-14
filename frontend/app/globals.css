@@ -10880,6 +10880,32 @@ button:active:not(:disabled),
 
 .timeline-item .metadata-item .value {
   color: #333;
+  white-space: pre-wrap;
+}
+
+.trace-rag-inspector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid rgba(15, 107, 95, 0.16);
+  border-radius: 8px;
+  background: rgba(223, 238, 232, 0.45);
+}
+
+.trace-rag-inspector strong {
+  color: var(--jade-dark);
+  width: 100%;
+}
+
+.trace-rag-inspector span {
+  border: 1px solid rgba(96, 72, 44, 0.12);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(255, 252, 244, 0.75);
+  color: var(--ink-soft);
+  font-size: 12px;
 }
 
 /* Tool Confirmation Dialog */

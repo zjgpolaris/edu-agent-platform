@@ -19,3 +19,23 @@ def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> floa
     # strip version suffixes like -20251001 when looking up
     p = _PRICE_TABLE.get(model) or _PRICE_TABLE.get(model.rsplit("-", 1)[0]) or _DEFAULT_PRICE
     return (input_tokens * p["input"] + output_tokens * p["output"]) / 1_000_000
+
+
+def estimate_tokens_from_text(text: str) -> int:
+    """Cheap mixed Chinese/English token estimate for ops dashboards."""
+    if not text:
+        return 0
+    # Chinese text is often close to 1 char/token; English is closer to 4 chars/token.
+    cjk = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
+    other = max(len(text) - cjk, 0)
+    return max(1, int(cjk + other / 4))
+
+
+def estimate_cost_from_chars(model: str, *, input_chars: int = 0, output_chars: int = 0) -> dict[str, float | int]:
+    input_tokens = max(0, int(max(input_chars, 0) * 0.75))
+    output_tokens = max(0, int(max(output_chars, 0) * 0.75))
+    return {
+        "input_tokens_estimated": input_tokens,
+        "output_tokens_estimated": output_tokens,
+        "cost_usd_estimated": round(estimate_cost_usd(model, input_tokens, output_tokens), 6),
+    }

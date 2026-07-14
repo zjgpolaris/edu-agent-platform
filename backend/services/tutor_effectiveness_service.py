@@ -55,13 +55,13 @@ def get_student_tutor_effectiveness(
     """
     days = max(1, min(int(days), 365))
     with get_connection() as conn:
-        # 步骤记录
+        # 步骤记录 + 退出票学习证据
         rows = conn.execute(
-            text("""SELECT topic, success, score, created_at, session_id
+            text("""SELECT topic, success, score, created_at, session_id, event_type
                  FROM learning_events
                  WHERE student_id = :sid
                    AND feature = 'auto_tutor'
-                   AND event_type = 'auto_tutor_step'
+                   AND event_type IN ('auto_tutor_step', 'auto_tutor_exit_ticket')
                    AND created_at >= datetime('now', :since)
                  ORDER BY created_at DESC"""),
             {"sid": student_id, "since": f"-{days} days"},
@@ -78,22 +78,33 @@ def get_student_tutor_effectiveness(
             weakpoint_tags = set()
 
     tag_stats: dict[str, dict[str, Any]] = defaultdict(lambda: {
-        "total": 0, "mastered": 0, "last_session_at": ""
+        "total": 0, "mastered": 0, "exit_tickets": 0, "exit_ticket_mastered": 0,
+        "last_session_at": "", "last_exit_ticket_at": ""
     })
     for r in rows:
         tag = str(r["topic"] or "").strip()
         if not tag:
             continue
         stat = tag_stats[tag]
-        stat["total"] += 1
-        if r["success"]:
-            stat["mastered"] += 1
+        if r["event_type"] == "auto_tutor_exit_ticket":
+            stat["exit_tickets"] += 1
+            if r["success"]:
+                stat["exit_ticket_mastered"] += 1
+            if r["created_at"] > stat["last_exit_ticket_at"]:
+                stat["last_exit_ticket_at"] = r["created_at"]
+        else:
+            stat["total"] += 1
+            if r["success"]:
+                stat["mastered"] += 1
         if r["created_at"] > stat["last_session_at"]:
             stat["last_session_at"] = r["created_at"]
 
     total_steps = sum(s["total"] for s in tag_stats.values())
     mastered_steps = sum(s["mastered"] for s in tag_stats.values())
     mastery_rate = round(mastered_steps / total_steps * 100, 1) if total_steps else 0.0
+    exit_tickets = sum(s["exit_tickets"] for s in tag_stats.values())
+    exit_ticket_mastered = sum(s["exit_ticket_mastered"] for s in tag_stats.values())
+    exit_ticket_mastery_rate = round(exit_ticket_mastered / exit_tickets * 100, 1) if exit_tickets else 0.0
 
     tag_list = sorted([
         {
@@ -101,8 +112,12 @@ def get_student_tutor_effectiveness(
             "total": stat["total"],
             "mastered": stat["mastered"],
             "mastery_rate": round(stat["mastered"] / stat["total"] * 100, 1) if stat["total"] else 0.0,
+            "exit_tickets": stat["exit_tickets"],
+            "exit_ticket_mastered": stat["exit_ticket_mastered"],
+            "exit_ticket_mastery_rate": round(stat["exit_ticket_mastered"] / stat["exit_tickets"] * 100, 1) if stat["exit_tickets"] else 0.0,
             "still_weak": tag in weakpoint_tags,
             "last_session_at": stat["last_session_at"],
+            "last_exit_ticket_at": stat["last_exit_ticket_at"],
         }
         for tag, stat in tag_stats.items()
     ], key=lambda x: -x["total"])
@@ -112,6 +127,9 @@ def get_student_tutor_effectiveness(
             "total_steps": total_steps,
             "mastered_steps": mastered_steps,
             "mastery_rate": mastery_rate,
+            "exit_tickets": exit_tickets,
+            "exit_ticket_mastered": exit_ticket_mastered,
+            "exit_ticket_mastery_rate": exit_ticket_mastery_rate,
             "tags_worked": len(tag_stats),
             "days_analyzed": days,
         },
@@ -153,32 +171,44 @@ def get_class_tutor_effectiveness(
     days = max(1, min(int(days), 365))
     with get_connection() as conn:
         rows = conn.execute(
-            text("""SELECT student_id, topic, success
+            text("""SELECT student_id, topic, success, event_type
                  FROM learning_events
                  WHERE feature = 'auto_tutor'
-                   AND event_type = 'auto_tutor_step'
+                   AND event_type IN ('auto_tutor_step', 'auto_tutor_exit_ticket')
                    AND created_at >= datetime('now', :since)"""),
             {"since": f"-{days} days"},
         ).mappings().fetchall()
 
     tag_stats: dict[str, dict[str, Any]] = defaultdict(lambda: {
-        "total": 0, "mastered": 0, "students": set()
+        "total": 0, "mastered": 0, "exit_tickets": 0, "exit_ticket_mastered": 0,
+        "students": set(), "exit_ticket_students": set()
     })
     active_students: set[str] = set()
+    students_with_exit_ticket: set[str] = set()
     for r in rows:
         tag = str(r["topic"] or "").strip()
         if not tag:
             continue
         active_students.add(r["student_id"])
         stat = tag_stats[tag]
-        stat["total"] += 1
-        if r["success"]:
-            stat["mastered"] += 1
+        if r["event_type"] == "auto_tutor_exit_ticket":
+            stat["exit_tickets"] += 1
+            if r["success"]:
+                stat["exit_ticket_mastered"] += 1
+            stat["exit_ticket_students"].add(r["student_id"])
+            students_with_exit_ticket.add(r["student_id"])
+        else:
+            stat["total"] += 1
+            if r["success"]:
+                stat["mastered"] += 1
         stat["students"].add(r["student_id"])
 
     total_steps = sum(s["total"] for s in tag_stats.values())
     mastered_steps = sum(s["mastered"] for s in tag_stats.values())
     mastery_rate = round(mastered_steps / total_steps * 100, 1) if total_steps else 0.0
+    exit_tickets = sum(s["exit_tickets"] for s in tag_stats.values())
+    exit_ticket_mastered = sum(s["exit_ticket_mastered"] for s in tag_stats.values())
+    exit_ticket_mastery_rate = round(exit_ticket_mastered / exit_tickets * 100, 1) if exit_tickets else 0.0
 
     tag_list = sorted([
         {
@@ -187,6 +217,10 @@ def get_class_tutor_effectiveness(
             "total": stat["total"],
             "mastered": stat["mastered"],
             "mastery_rate": round(stat["mastered"] / stat["total"] * 100, 1) if stat["total"] else 0.0,
+            "exit_tickets": stat["exit_tickets"],
+            "exit_ticket_mastered": stat["exit_ticket_mastered"],
+            "exit_ticket_mastery_rate": round(stat["exit_ticket_mastered"] / stat["exit_tickets"] * 100, 1) if stat["exit_tickets"] else 0.0,
+            "exit_ticket_student_count": len(stat["exit_ticket_students"]),
         }
         for tag, stat in tag_stats.items()
     ], key=lambda x: (-x["student_count"], -x["mastery_rate"]))
@@ -196,7 +230,11 @@ def get_class_tutor_effectiveness(
             "total_steps": total_steps,
             "mastered_steps": mastered_steps,
             "mastery_rate": mastery_rate,
+            "exit_tickets": exit_tickets,
+            "exit_ticket_mastered": exit_ticket_mastered,
+            "exit_ticket_mastery_rate": exit_ticket_mastery_rate,
             "active_students": len(active_students),
+            "students_with_exit_ticket": len(students_with_exit_ticket),
             "days_analyzed": days,
         },
         "tags": tag_list[:20],

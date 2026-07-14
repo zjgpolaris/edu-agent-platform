@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Iterator
 
 from llm_config import llm_fast, llm_quality
-from rag.knowledge_base import MetadataFilter, MetadataHints, search
+from rag.knowledge_base import MetadataFilter, MetadataHints, build_rag_inspector, search_with_scores
 from session_store import load_messages, save_messages
 from structured_output import StructuredOutputError, parse_json_object, repair_json_with_llm
 from textbook_learning.loader import get_lesson, get_toc, list_textbooks
@@ -16,6 +17,8 @@ from textbook_learning.schema import (
     TextbookSummaryRequest,
     TextbookQuizSubmitRequest,
 )
+from trace_store import emit_trace_event
+from utils.cost_estimator import estimate_cost_from_chars
 
 
 def resolve_question(req: TextbookAskRequest) -> str:
@@ -34,9 +37,11 @@ def find_item_text(lesson, item_id: str | None) -> str | None:
     return None
 
 
-def source_to_dict(doc) -> dict:
+def source_to_dict(doc, scored: dict | None = None) -> dict:
     metadata = getattr(doc, "metadata", {}) or {}
+    final_score = float((scored or {}).get("final_score", (scored or {}).get("score", 0)) or 0)
     return {
+        "rank": (scored or {}).get("rank"),
         "topic": metadata.get("topic"),
         "source": metadata.get("source"),
         "grade": metadata.get("grade"),
@@ -44,6 +49,14 @@ def source_to_dict(doc) -> dict:
         "lesson": metadata.get("lesson"),
         "type": metadata.get("type"),
         "page": metadata.get("page"),
+        "score": round(final_score, 3),
+        "final_score": round(final_score, 3),
+        "retrieval_score": _rounded((scored or {}).get("retrieval_score")),
+        "keyword_score": _rounded((scored or {}).get("keyword_score")),
+        "vector_rank": (scored or {}).get("vector_rank"),
+        "vector_rank_score": _rounded((scored or {}).get("vector_rank_score")),
+        "rerank_score": _rounded((scored or {}).get("rerank_score")),
+        "source_mode": (scored or {}).get("source_mode"),
         "content": getattr(doc, "page_content", ""),
     }
 
@@ -59,6 +72,12 @@ def item_to_source(lesson, item) -> dict:
         "page": item.page,
         "content": item.text,
     }
+
+
+def _rounded(value) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 3)
 
 
 def lesson_fallback_sources(lesson, item_id: str | None = None) -> list[dict]:
@@ -100,12 +119,100 @@ def retrieve_sources(
     query: str,
     metadata_filter: MetadataFilter | None = None,
     metadata_hints: MetadataHints | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], dict]:
     try:
-        docs = search("history", query, k=4, metadata_filter=metadata_filter, mode="hybrid", metadata_hints=metadata_hints)
-        return [source_to_dict(doc) for doc in docs]
-    except Exception:
-        return []
+        scored_docs = search_with_scores("history", query, k=4, metadata_filter=metadata_filter, mode="hybrid", metadata_hints=metadata_hints, fetch_k=30)
+        sources = [source_to_dict(item["document"], item) for item in scored_docs]
+        inspector = build_rag_inspector(
+            collection="history",
+            original_query=query,
+            scored_docs=scored_docs,
+            mode="hybrid",
+            metadata_filter=metadata_filter,
+            metadata_hints=metadata_hints,
+            retrieval_strategy="textbook_hybrid",
+            used_source_ranks={int(source.get("rank") or index + 1) for index, source in enumerate(sources[:4])},
+        )
+        return sources, annotate_textbook_rag_inspector(inspector)
+    except Exception as exc:
+        return [], annotate_textbook_rag_inspector({
+            "collection": "history",
+            "original_query": query,
+            "retrieval_strategy": "textbook_hybrid_failed",
+            "source_count": 0,
+            "total_chunks_retrieved": 0,
+            "top_score": 0,
+            "top_mode": "",
+            "chunks": [],
+            "error": str(exc)[:240],
+        })
+
+
+def fallback_rag_inspector(query: str, sources: list[dict]) -> dict:
+    return {
+        "collection": "history",
+        "original_query": query,
+        "retrieval_strategy": "lesson_fallback",
+        "source_count": len(sources),
+        "total_chunks_retrieved": len(sources),
+        "top_score": 0,
+        "top_mode": "lesson",
+        "chunks": [
+            {
+                "rank": index + 1,
+                "topic": source.get("topic"),
+                "source": source.get("source"),
+                "grade": source.get("grade"),
+                "unit": source.get("unit"),
+                "lesson": source.get("lesson"),
+                "page": source.get("page"),
+                "type": source.get("type"),
+                "source_mode": "lesson",
+                "final_score": 0,
+                "retrieval_score": 0,
+                "keyword_score": 0,
+                "vector_rank": None,
+                "vector_rank_score": 0,
+                "rerank_score": None,
+                "used_in_context": True,
+                "content_preview": str(source.get("content") or "")[:240],
+            }
+            for index, source in enumerate(sources)
+        ],
+    }
+
+
+def annotate_textbook_rag_inspector(inspector: dict, *, generation_degraded: bool = False) -> dict:
+    strategy = str(inspector.get("retrieval_strategy") or "")
+    source_count = int(inspector.get("source_count") or 0)
+    diagnosis_code = "retrieval_ok"
+    diagnosis_summary = "已命中教材知识片段，可直接核对来源。"
+    failure_stage = "none"
+
+    if strategy == "lesson_fallback":
+        diagnosis_code = "lesson_fallback_used"
+        diagnosis_summary = "知识库检索未命中，已回退到当前课文内容兜底。"
+        failure_stage = "retrieval"
+    elif strategy == "textbook_hybrid_failed":
+        diagnosis_code = "retrieval_failed"
+        diagnosis_summary = "知识库检索失败，已切换到课文兜底内容。"
+        failure_stage = "retrieval"
+    elif source_count == 0:
+        diagnosis_code = "retrieval_empty"
+        diagnosis_summary = "当前没有检索到教材片段，建议缩小问题范围后重试。"
+        failure_stage = "retrieval"
+    elif generation_degraded:
+        diagnosis_code = "generation_fallback_used"
+        diagnosis_summary = "生成阶段已降级为模板化讲解，建议检查模型服务状态。"
+        failure_stage = "generation"
+
+    return {
+        **inspector,
+        "generation_degraded": generation_degraded,
+        "failure_stage": failure_stage,
+        "diagnosis_code": diagnosis_code,
+        "diagnosis_summary": diagnosis_summary,
+    }
 
 
 def build_sources_context(sources: list[dict]) -> str:
@@ -161,28 +268,73 @@ def stream_ask_events(req: TextbookAskRequest) -> Iterator[tuple[str, dict]]:
     item_text = find_item_text(lesson, req.item_id)
     query = " ".join(part for part in [question, req.selected_text, item_text, lesson.lesson_title] if part)
 
+    retrieval_started = perf_counter()
     yield "status", {"phase": "retrieving", "message": "正在检索相关教材知识"}
-    sources = retrieve_sources(query, build_lesson_metadata_filter(lesson), build_lesson_metadata_hints(lesson, item_text))
+    sources, rag_inspector = retrieve_sources(query, build_lesson_metadata_filter(lesson), build_lesson_metadata_hints(lesson, item_text))
     if not sources:
         sources = lesson_fallback_sources(lesson, req.item_id)
-    yield "sources", {"sources": sources}
+        rag_inspector = annotate_textbook_rag_inspector(fallback_rag_inspector(query, sources))
+    emit_trace_event(
+        agent_name="textbook_learning",
+        step_name="rag_retrieval",
+        event_type="retrieval",
+        status="success",
+        latency_ms=int((perf_counter() - retrieval_started) * 1000),
+        metadata={
+            "book_id": req.book_id,
+            "lesson_id": req.lesson_id,
+            "item_id": req.item_id,
+            "query": query[:240],
+            "source_count": len(sources),
+            "retrieval_strategy": rag_inspector.get("retrieval_strategy"),
+            "rag_inspector": rag_inspector,
+        },
+    )
+    yield "sources", {"sources": sources, "rag_inspector": rag_inspector}
     yield "status", {"phase": "generating", "message": "正在生成学习辅助回答"}
 
     history = load_messages(req.session_id) if req.session_id else []
     messages = ask_messages(lesson, question, req.selected_text, item_text, build_sources_context(sources), history)
     chunks: list[str] = []
+    generation_started = perf_counter()
+    generation_error = None
     try:
         for chunk in llm_quality.stream(messages):
             chunks.append(chunk)
             yield "delta", {"text": chunk}
-    except Exception:
+    except Exception as exc:
+        generation_error = str(exc)
         chunks = []
 
     response = "".join(chunks).strip()
     if not response:
         response = fallback_ask_response(lesson, question, item_text, sources)
+        rag_inspector = annotate_textbook_rag_inspector(rag_inspector, generation_degraded=True)
         yield "delta", {"text": response}
-    final = {"response": response, "sources": sources, "lesson_id": req.lesson_id, "book_id": req.book_id}
+    emit_trace_event(
+        agent_name="textbook_learning",
+        step_name="response_generation",
+        event_type="llm",
+        status="success",
+        latency_ms=int((perf_counter() - generation_started) * 1000),
+        metadata={
+            "book_id": req.book_id,
+            "lesson_id": req.lesson_id,
+            "item_id": req.item_id,
+            "llm_name": getattr(llm_quality, "name", "llm_quality"),
+            "configured_model": getattr(llm_quality, "model", None),
+            "response_chars": len(response),
+            "degraded": generation_error is not None or bool(rag_inspector.get("generation_degraded")),
+            "error": generation_error,
+            "rag_inspector": rag_inspector,
+            **estimate_cost_from_chars(
+                str(getattr(llm_quality, "model", "") or ""),
+                input_chars=len(build_sources_context(sources)) + len(question),
+                output_chars=len(response),
+            ),
+        },
+    )
+    final = {"response": response, "sources": sources, "rag_inspector": rag_inspector, "lesson_id": req.lesson_id, "book_id": req.book_id}
     yield "final", final
     yield "status", {"phase": "done", "message": "已完成"}
 

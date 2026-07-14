@@ -11,6 +11,7 @@ from structured_output import StructuredOutputError, invoke_structured
 from tracing import truncate_text
 from trace_store import emit_trace_event
 from tools.history_search import SearchHistoryKnowledgeInput, search_history_knowledge
+from utils.cost_estimator import estimate_cost_from_chars
 from user_memory import enrich_hints_with_memory, record_character_interaction, update_memory_after_chat
 from security.audit_log import record_audit_event
 
@@ -147,6 +148,50 @@ def _mark_used_sources(response: str, sources: list[dict[str, Any]]) -> list[dic
     return marked
 
 
+def _history_inspector_diagnosis(
+    inspector: dict[str, Any],
+    sources: list[dict[str, Any]],
+    *,
+    generation_degraded: bool = False,
+) -> dict[str, Any]:
+    strategy = str(inspector.get("retrieval_strategy") or "")
+    used_count = sum(1 for source in sources if source.get("used_in_answer") is True)
+    unused_count = max(len(sources) - used_count, 0)
+    diagnosis_code = "retrieval_ok"
+    diagnosis_summary = "已命中史料，可继续核对引用是否充分。"
+    failure_stage = "none"
+
+    if strategy == "degraded_no_rag":
+        diagnosis_code = "retrieval_unavailable"
+        diagnosis_summary = "当前未取到可用史料，回答已降级为无 RAG 模式。"
+        failure_stage = "retrieval"
+    elif not sources:
+        diagnosis_code = "retrieval_empty"
+        diagnosis_summary = "当前没有检索到史料片段，建议缩小问题范围后重试。"
+        failure_stage = "retrieval"
+    elif generation_degraded:
+        diagnosis_code = "generation_fallback_used"
+        diagnosis_summary = "生成阶段已降级为模板化回答，建议检查模型服务状态。"
+        failure_stage = "generation"
+    elif used_count == 0:
+        diagnosis_code = "generation_uncited_sources"
+        diagnosis_summary = "检索到了史料，但最终回答没有显式引用任何史料标签。"
+        failure_stage = "generation"
+    elif unused_count > 0:
+        diagnosis_code = "partial_citation_coverage"
+        diagnosis_summary = "回答只引用了部分史料，可继续检查遗漏的证据片段。"
+
+    return {
+        **inspector,
+        "used_source_count": used_count,
+        "unused_source_count": unused_count,
+        "generation_degraded": generation_degraded,
+        "failure_stage": failure_stage,
+        "diagnosis_code": diagnosis_code,
+        "diagnosis_summary": diagnosis_summary,
+    }
+
+
 def retrieve_facts(state: CharacterState, rag_retriever=None) -> CharacterState:
     question = str(state["messages"][-1].get("content", "")) if state.get("messages") else ""
     from security.prompt_injection import check_user_input
@@ -238,7 +283,33 @@ def retrieve_facts(state: CharacterState, rag_retriever=None) -> CharacterState:
         "expanded_queries": expanded_queries,
         "retrieval_strategy": retrieval_strategy,
         "source_count": len(sources),
+        "total_chunks_retrieved": len(sources),
+        "top_score": sources[0].get("final_score", sources[0].get("score", 0)) if sources else 0,
+        "top_mode": sources[0].get("source_mode", "") if sources else "",
+        "chunks": [
+            {
+                "rank": source.get("rank"),
+                "topic": source.get("topic"),
+                "source": source.get("source"),
+                "grade": source.get("grade"),
+                "unit": source.get("unit"),
+                "lesson": source.get("lesson"),
+                "page": source.get("page"),
+                "type": source.get("type"),
+                "final_score": source.get("final_score", source.get("score")),
+                "retrieval_score": source.get("retrieval_score"),
+                "keyword_score": source.get("keyword_score"),
+                "vector_rank": source.get("vector_rank"),
+                "vector_rank_score": source.get("vector_rank_score"),
+                "rerank_score": source.get("rerank_score"),
+                "source_mode": source.get("source_mode"),
+                "used_in_context": True,
+                "content_preview": source.get("snippet") or source.get("content"),
+            }
+            for source in sources
+        ],
     }
+    inspector = _history_inspector_diagnosis(inspector, sources)
     return {"retrieved_facts": facts, "retrieved_sources": sources, "rag_inspector": inspector}
 
 
@@ -420,6 +491,7 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         metadata={
             "source_count": len(state.get("retrieved_sources", [])),
             "retrieval_strategy": state.get("rag_inspector", {}).get("retrieval_strategy"),
+            "rag_inspector": state.get("rag_inspector", {}),
         }
     )
     yield {"event": "sources", "data": {"sources": state.get("retrieved_sources", []), "inspector": state.get("rag_inspector", {})}}
@@ -445,7 +517,14 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         event_type="llm",
         status="success",
         latency_ms=int((time.time() - generation_start) * 1000),
-        metadata={"response_chars": len(state["response_draft"]), "degraded": generation_error is not None, "error": generation_error}
+        metadata={
+            "llm_name": getattr(llm, "name", "llm_fast"),
+            "configured_model": getattr(llm, "model", None),
+            "response_chars": len(state["response_draft"]),
+            "degraded": generation_error is not None,
+            "error": generation_error,
+            **estimate_cost_from_chars(str(getattr(llm, "model", "") or ""), input_chars=len(str(state.get("retrieved_facts", ""))) + len(question), output_chars=len(state["response_draft"])),
+        }
     )
     yield {"event": "status", "data": {"phase": "verifying", "message": "正在进行史实一致性检查"}}
 
@@ -465,11 +544,22 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         event_type="llm",
         status="success",
         latency_ms=int((time.time() - verification_start) * 1000),
-        metadata={"verified": verified_ok}
+        metadata={
+            "llm_name": getattr(llm_opus, "name", "llm_quality"),
+            "configured_model": getattr(llm_opus, "model", None),
+            "verified": verified_ok,
+            "degraded": not verified_ok,
+            **estimate_cost_from_chars(str(getattr(llm_opus, "model", "") or ""), input_chars=len(state["response_draft"]) + len(question), output_chars=20),
+        }
     )
 
     state["response_draft"] = final_response
     state["retrieved_sources"] = _mark_used_sources(final_response, state.get("retrieved_sources", []))
+    state["rag_inspector"] = _history_inspector_diagnosis(
+        state.get("rag_inspector", {}),
+        state.get("retrieved_sources", []),
+        generation_degraded=generation_error is not None,
+    )
 
     yield {
         "event": "final",

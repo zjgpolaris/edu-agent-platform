@@ -830,6 +830,63 @@ def _rag_preview(scored_docs: list[ScoredDocument]) -> list[dict[str, object]]:
     return previews
 
 
+def build_rag_inspector(
+    *,
+    collection: str,
+    original_query: str,
+    scored_docs: list[ScoredDocument],
+    mode: SearchMode = "hybrid",
+    metadata_filter: MetadataFilter | None = None,
+    metadata_hints: MetadataHints | None = None,
+    rewritten_query: str | None = None,
+    expanded_queries: list[str] | None = None,
+    retrieval_strategy: str | None = None,
+    used_source_ranks: set[int] | None = None,
+) -> dict[str, object]:
+    """Build a compact, UI-safe retrieval inspector payload."""
+    chunks: list[dict[str, object]] = []
+    for item in scored_docs:
+        doc = item["document"]
+        metadata = doc.metadata or {}
+        rank = int(item.get("rank") or len(chunks) + 1)
+        chunks.append(
+            {
+                "rank": rank,
+                "topic": metadata.get("topic", ""),
+                "source": metadata.get("source", ""),
+                "grade": metadata.get("grade", ""),
+                "unit": metadata.get("unit", ""),
+                "lesson": metadata.get("lesson", ""),
+                "page": metadata.get("page", ""),
+                "type": metadata.get("type", ""),
+                "final_score": round(float(item.get("final_score", item.get("score", 0))), 3),
+                "retrieval_score": round(float(item.get("retrieval_score", 0)), 3),
+                "keyword_score": round(float(item.get("keyword_score", 0)), 3),
+                "vector_rank": item.get("vector_rank"),
+                "vector_rank_score": round(float(item.get("vector_rank_score", 0)), 3),
+                "rerank_score": round(float(item["rerank_score"]), 3) if item.get("rerank_score") is not None else None,
+                "source_mode": item.get("source_mode", ""),
+                "used_in_context": used_source_ranks is None or rank in used_source_ranks,
+                "content_preview": truncate_text(doc.page_content, max_chars=240),
+            }
+        )
+    return {
+        "collection": collection,
+        "original_query": truncate_text(original_query, max_chars=500),
+        "rewritten_query": truncate_text(rewritten_query, max_chars=500) if rewritten_query else None,
+        "expanded_queries": expanded_queries or [],
+        "mode": mode,
+        "retrieval_strategy": retrieval_strategy or mode,
+        "metadata_filter": metadata_filter or {},
+        "metadata_hints": metadata_hints or {},
+        "total_chunks_retrieved": len(scored_docs),
+        "source_count": len(scored_docs),
+        "top_mode": scored_docs[0].get("source_mode", "") if scored_docs else "",
+        "top_score": round(float(scored_docs[0].get("final_score", scored_docs[0].get("score", 0))), 3) if scored_docs else 0,
+        "chunks": chunks,
+    }
+
+
 def _search_with_scores_impl(
     collection: str,
     query: str,

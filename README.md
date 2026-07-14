@@ -13,7 +13,7 @@
 > 给定一个学生，Agent 自己决定教什么、怎么教、答错了怎么补——全程可观测、可评测、可干预。
 
 ```
-plan ──> act ──> observe ──> judge ──┬── pass ──> next_step ──> finalize
+plan ──> act ──> observe ──> judge ──┬── pass ──> next_step ──> exit_ticket ──> evidence ──> finalize
                                      └── fail ──> reflect ──> re_plan ──> act
 ```
 
@@ -22,6 +22,7 @@ plan ──> act ──> observe ──> judge ──┬── pass ──> next
 - **Plan**：读学生画像 + 错题本，自主生成本节课知识点顺序与教学策略
 - **Reflect / Re-plan**：答错时诊断原因（讲得不对 / 题超纲），动态改变后续计划
 - **全程 Trace**：每个 node 写入 trace_store，右侧 TraceTimeline 实时可见
+- **退出票证据**：教学结束前必须完成 exit ticket，结果写入 learning_events、错题/掌握度、复习与教师端辅导效果看板
 - **课后自适应**：掌握的知识点移出错题本，薄弱点进入 SM-2 复习排期
 
 ---
@@ -40,7 +41,8 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 2. 打开 `/student/learning-path` 或 `/student/review?tab=weakpoints`，确认错题本已预置「鸦片战争」等知识点。
 3. 打开 `/student/auto-tutor?focus=鸦片战争`，让 AutoTutor 围绕指定薄弱点启动教学。
 4. 故意答错一次，观察 Agent 进入 `reflect` / `re_plan`，并在右侧 TraceTimeline 看到节点轨迹。
-5. 打开 `/eval`，展示 Eval / AgentOps 的 readiness、成功率、trace 与工具调用统计。
+5. 答完教学步骤后完成「退出票检验」，确认学习证据写入错题/复习与教师端分析。
+6. 打开 `/eval`，展示 Eval / AgentOps 的 readiness、成功率、trace 与工具调用统计。
 
 教师补充：
 
@@ -80,8 +82,8 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 | 功能 | 说明 |
 |------|------|
 | Agent Trace | TraceTimeline 可视化每个 node 执行状态与耗时 |
-| Eval Dashboard | `/eval` 页面，快速查看各 agent 指标 |
-| RAG Inspector | 检索来源面板，每条引用可溯源 |
+| Eval Dashboard | `/eval` 页面，快速查看各 agent 指标、readiness 与 AgentOps 聚合 |
+| RAG Inspector | 检索来源面板，每条引用可溯源，并区分 retrieval / generation 失败归因 |
 | Tool 确认治理 | 高危工具调用弹出确认对话框 |
 
 ---
@@ -139,9 +141,15 @@ python3 build_index.py
 ```bash
 npm run test                          # 全套 smoke
 npm run test:mcp                      # MCP server 协议 smoke
+npm run test:rag-inspector            # RAG Inspector 检索调试 smoke
+npm run test:agent-ops                # AgentOps 成本/延迟/fallback 聚合 smoke
+npm run test:textbook-trace           # 教材问答 trace / rag_inspector 埋点 smoke
+npm run test:autotutor-recovery       # AutoTutor 会话恢复 smoke
+npm run test:release-gate             # release gate / readiness summary smoke
 npm run release:gate                  # 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build
 npm run release:gate:fast             # 快速关键路径发布闸门
-python3 eval/auto_tutor_trajectory_eval.py  # AutoTutor 轨迹评测
+python3 eval/auto_tutor_trajectory_eval.py  # AutoTutor 轨迹评测（含退出票闭环）
+python3 eval/tutor_effectiveness_smoke.py   # AI 辅导效果/退出票证据聚合
 
 # 生产 RAG / readiness 验收：不属于默认 PR CI，需线上 API_BASE 与认证
 API_BASE=https://<后端> SMOKE_USERNAME=<user> SMOKE_PASSWORD=<password> \
@@ -150,6 +158,9 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 ```
 
 健康检查分层：`/api/health` 是 liveness；`/api/ready` 是 shallow readiness，默认不触发外部 LLM/Embedding；`/api/debug/rag/health?deep=true` 与 `production_rag_health_smoke.py` 用于生产 RAG 深度检查。
+传入 `--ready-url` 时，release gate 现在会输出 required / failed / warnings 摘要；若带 `--production`、`--ready-require-rag` 或 `--ready-require-external`，会把 RAG / 外部依赖配置作为 blocking readiness check。
+
+AgentOps 的 production summary 现在会额外聚合最近 trace 中的 RAG 诊断口径，包括 `diagnosis_code` 分布和 `failure_stage` 分布，便于区分问题主要发生在检索阶段还是生成阶段；教材问答与历史人物两条链路都已接入该统计。
 
 ### MCP Server
 

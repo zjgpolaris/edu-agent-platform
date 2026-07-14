@@ -42,6 +42,7 @@ from services.quality_dashboard import get_teacher_quality_dashboard  # noqa: E4
 from services.review_service import get_today_session  # noqa: E402
 from services.teacher_today_queue import get_teacher_today_queue  # noqa: E402
 from services.today_plan import get_student_today_plan  # noqa: E402
+from services.tutor_effectiveness_service import get_class_tutor_effectiveness  # noqa: E402
 from services.weakpoint_service import get_weakpoints  # noqa: E402
 
 TODAY = date.today().isoformat()
@@ -136,6 +137,15 @@ def weakpoints_and_review_are_connected() -> None:
     assert {t.get("tag") for t in pending} & tags, (pending, tags)
 
 
+def pilot_seed_has_tutor_effectiveness_evidence() -> None:
+    result = get_class_tutor_effectiveness(TEACHER_ID)
+    summary = result["summary"]
+    assert summary["exit_tickets"] >= 3, summary
+    assert summary["students_with_exit_ticket"] >= 3, summary
+    assert 0.0 <= summary["exit_ticket_mastery_rate"] <= 100.0, summary
+    assert any(t.get("exit_tickets", 0) > 0 for t in result["tags"]), result
+
+
 if __name__ == "__main__":
     cases = [
         ("seed_is_idempotent", seed_is_idempotent),
@@ -145,6 +155,7 @@ if __name__ == "__main__":
         ("teacher_today_queue_api_matches_pilot_signals", teacher_today_queue_api_matches_pilot_signals),
         ("notification_banner_seeded_once", notification_banner_seeded_once),
         ("weakpoints_and_review_are_connected", weakpoints_and_review_are_connected),
+        ("pilot_seed_has_tutor_effectiveness_evidence", pilot_seed_has_tutor_effectiveness_evidence),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)
     print(f"pilot_path_smoke={passed}/{len(cases)}")

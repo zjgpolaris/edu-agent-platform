@@ -51,6 +51,23 @@ def _wrong_letter(correct: str) -> str:
     return "B"
 
 
+def _current_correct_letter(session_id: str) -> str:
+    state = at._store.get(session_id)
+    if state.phase == "exit_ticket" and state.exit_ticket:
+        return str((state.exit_ticket.question or {}).get("answer", "A")).strip()[:1].upper()
+    return _correct_letter(session_id)
+
+
+def _answer_until_exit_ticket(session_id: str, state: dict, *, max_turns: int = 30) -> dict:
+    guard = 0
+    current = state
+    while current.get("status") != "completed" and current.get("phase") != "exit_ticket" and guard < max_turns:
+        guard += 1
+        current = at.submit_answer(session_id, _current_correct_letter(session_id), actor_role="student")
+    current["guard"] = guard
+    return current
+
+
 def _tag_covered(tag: str, plan: list[dict]) -> bool:
     return any(tag in (p.get("knowledge_point") or "") or (p.get("knowledge_point") or "") in tag or p.get("source_tag") == tag for p in plan)
 
@@ -89,7 +106,7 @@ def case_wrong_answer_triggers_replan() -> tuple[bool, str, dict]:
     st = at.start_session(sid, grade="八年级上册", actor_role="student")
     sess = st["session_id"]
     before = [(p["knowledge_point"], p["difficulty"]) for p in st["lesson_plan"]]
-    wrong = _wrong_letter(_correct_letter(sess))
+    wrong = _wrong_letter(_current_correct_letter(sess))
     res = at.submit_answer(sess, wrong, actor_role="student")
     after = [(p["knowledge_point"], p["difficulty"], p["replanned"]) for p in res["lesson_plan"]]
     has_reflect_step = any(s["event_type"] == "reflect" for s in res["runtime_steps"])
@@ -114,7 +131,7 @@ def case_correct_answer_no_spurious_replan() -> tuple[bool, str, dict]:
     _seed(sid, ["唐朝", "宋朝"])
     st = at.start_session(sid, grade="七年级下册", actor_role="student")
     sess = st["session_id"]
-    res = at.submit_answer(sess, _correct_letter(sess), actor_role="student")
+    res = at.submit_answer(sess, _current_correct_letter(sess), actor_role="student")
     detail = {"replans": res["replans"], "correct": res.get("last_answer_correct"), "reflect_log": res["reflect_log"]}
     if not res.get("last_answer_correct"):
         return False, "answer unexpectedly judged wrong", detail
@@ -134,7 +151,7 @@ def case_closure_writes_memory_and_review() -> tuple[bool, str, dict]:
     guard = 0
     while st["status"] != "completed" and guard < 30:
         guard += 1
-        st = at.submit_answer(sess, _correct_letter(sess), actor_role="student")
+        st = at.submit_answer(sess, _current_correct_letter(sess), actor_role="student")
     detail = {"status": st["status"], "summary": st.get("summary"), "guard": guard}
     if st["status"] != "completed":
         return False, "session did not finalize", detail
@@ -193,7 +210,7 @@ def case_repeated_wrong_downgrades_difficulty() -> tuple[bool, str, dict]:
     while guard < 3 and st_cur["status"] == "awaiting_answer":
         guard += 1
         idx = st_cur["current_step_index"]
-        wrong = _wrong_letter(_correct_letter(sess))
+        wrong = _wrong_letter(_current_correct_letter(sess))
         st_cur = at.submit_answer(sess, wrong, actor_role="student")
         cur_idx = min(idx, len(st_cur["lesson_plan"]) - 1)
         diffs.append(st_cur["lesson_plan"][cur_idx]["difficulty"])
@@ -225,6 +242,84 @@ def case_empty_weakpoints_still_plans() -> tuple[bool, str, dict]:
     return True, "ok", detail
 
 
+def case_exit_ticket_runs_before_finalize() -> tuple[bool, str, dict]:
+    """教学步骤结束后应先进入退出票，而不是直接 completed。"""
+    sid = "traj-exit-before-finalize"
+    _seed(sid, ["辛亥革命历史意义"])
+    st = at.start_session(sid, grade="八年级上册", actor_role="student", focus_tags=["辛亥革命历史意义"])
+    sess = st["session_id"]
+    st = _answer_until_exit_ticket(sess, st)
+    detail = {"status": st.get("status"), "phase": st.get("phase"), "current_question": st.get("current_question"), "guard": st.get("guard")}
+    if st.get("status") != "awaiting_answer" or st.get("phase") != "exit_ticket":
+        return False, "lesson ended without awaiting exit_ticket", detail
+    if (st.get("current_question") or {}).get("kind") != "exit_ticket":
+        return False, "current question is not marked as exit_ticket", detail
+    return True, "ok", detail
+
+
+def case_exit_ticket_answer_finalizes_session() -> tuple[bool, str, dict]:
+    """退出票答完后才进入 completed，并返回退出票结果与证据摘要。"""
+    sid = "traj-exit-finalize"
+    _seed(sid, ["洋务运动目的"])
+    st = at.start_session(sid, grade="八年级上册", actor_role="student", focus_tags=["洋务运动目的"])
+    sess = st["session_id"]
+    st = _answer_until_exit_ticket(sess, st)
+    st = at.submit_answer(sess, _current_correct_letter(sess), actor_role="student")
+    detail = {"status": st.get("status"), "phase": st.get("phase"), "exit_ticket_result": st.get("exit_ticket_result"), "evidence": st.get("evidence")}
+    if st.get("status") != "completed" or st.get("phase") != "completed":
+        return False, "exit ticket answer did not finalize session", detail
+    if not st.get("exit_ticket_result"):
+        return False, "missing exit_ticket_result", detail
+    if not (st.get("evidence") or {}).get("exit_ticket_recorded"):
+        return False, "missing evidence summary", detail
+    return True, "ok", detail
+
+
+def case_exit_ticket_result_written_to_learning_events() -> tuple[bool, str, dict]:
+    """退出票结果应写入 learning_events，供 tutor effectiveness 聚合。"""
+    from db.engine import get_connection
+    from sqlalchemy import text
+
+    sid = "traj-exit-event"
+    _seed(sid, ["戊戌变法失败原因"])
+    st = at.start_session(sid, grade="八年级上册", actor_role="student", focus_tags=["戊戌变法失败原因"])
+    sess = st["session_id"]
+    st = _answer_until_exit_ticket(sess, st)
+    st = at.submit_answer(sess, _current_correct_letter(sess), actor_role="student")
+    with get_connection() as conn:
+        count = conn.execute(
+            text("""SELECT COUNT(*) FROM learning_events
+                 WHERE student_id=:sid AND session_id=:session_id
+                   AND feature='auto_tutor' AND event_type='auto_tutor_exit_ticket'"""),
+            {"sid": sid, "session_id": sess},
+        ).scalar_one()
+    detail = {"event_count": count, "status": st.get("status"), "result": st.get("exit_ticket_result")}
+    if count < 1:
+        return False, "auto_tutor_exit_ticket learning event missing", detail
+    return True, "ok", detail
+
+
+def case_exit_ticket_wrong_records_weakpoint() -> tuple[bool, str, dict]:
+    """退出票答错后应回流/强化错题本。"""
+    sid = "traj-exit-wrong"
+    tag = "甲午中日战争"
+    _seed(sid, [tag])
+    before = {w["knowledge_tag"]: int(w.get("wrong_count") or 0) for w in get_weakpoints(sid)}
+    st = at.start_session(sid, grade="八年级上册", actor_role="student", focus_tags=[tag])
+    sess = st["session_id"]
+    st = _answer_until_exit_ticket(sess, st)
+    wrong = _wrong_letter(_current_correct_letter(sess))
+    st = at.submit_answer(sess, wrong, actor_role="student")
+    after = {w["knowledge_tag"]: int(w.get("wrong_count") or 0) for w in get_weakpoints(sid)}
+    result = st.get("exit_ticket_result") or {}
+    detail = {"before": before, "after": after, "result": result}
+    if result.get("is_correct") is not False:
+        return False, "exit ticket was not judged wrong", detail
+    if after.get(tag, 0) <= before.get(tag, 0):
+        return False, "wrong exit ticket did not strengthen weakpoint", detail
+    return True, "ok", detail
+
+
 CASES = [
     ("plan_targets_weakpoints", case_plan_targets_weakpoints),
     ("wrong_answer_triggers_replan", case_wrong_answer_triggers_replan),
@@ -233,6 +328,10 @@ CASES = [
     ("focus_tags_prioritized_in_plan", case_focus_tags_prioritized_in_plan),
     ("repeated_wrong_downgrades_difficulty", case_repeated_wrong_downgrades_difficulty),
     ("empty_weakpoints_still_plans", case_empty_weakpoints_still_plans),
+    ("exit_ticket_runs_before_finalize", case_exit_ticket_runs_before_finalize),
+    ("exit_ticket_answer_finalizes_session", case_exit_ticket_answer_finalizes_session),
+    ("exit_ticket_result_written_to_learning_events", case_exit_ticket_result_written_to_learning_events),
+    ("exit_ticket_wrong_records_weakpoint", case_exit_ticket_wrong_records_weakpoint),
 ]
 
 
