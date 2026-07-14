@@ -70,6 +70,25 @@ def emit_trace_event_recorded() -> None:
     assert events[0]["step_name"] == "test_step"
 
 
+def langfuse_context_binds_runtime_store() -> None:
+    from tracing import current_trace_id as langfuse_trace_id
+    from tracing import trace_context as langfuse_trace_context
+    from trace_store import current_trace_id as runtime_trace_id
+
+    with langfuse_trace_context(name="trace-context-bridge-smoke"):
+        assert langfuse_trace_id()
+        assert runtime_trace_id() == langfuse_trace_id()
+        emit_trace_event(
+            agent_name="trace_bridge",
+            step_name="context_bound",
+            event_type="test",
+            status="success",
+        )
+        trace_id = runtime_trace_id()
+    assert trace_id
+    assert get_trace_store().get_trace(trace_id)[0]["agent_name"] == "trace_bridge"
+
+
 def trace_cleanup_removes_expired() -> None:
     store = TraceStore(ttl_seconds=1)
     tid = create_trace_id()
@@ -90,6 +109,7 @@ def main() -> None:
         ("trace_store_add_and_get", trace_store_add_and_get),
         ("trace_context_sets_and_clears", trace_context_sets_and_clears),
         ("emit_trace_event_recorded", emit_trace_event_recorded),
+        ("langfuse_context_binds_runtime_store", langfuse_context_binds_runtime_store),
         ("trace_cleanup_removes_expired", trace_cleanup_removes_expired),
     ]
     passed = sum(1 for name, fn in cases if run_case(name, fn))

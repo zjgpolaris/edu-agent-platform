@@ -30,7 +30,8 @@ async function getToc(bookId: string): Promise<TocResponse | null> {
   }
 }
 
-export default async function TextbookTocPage({ params }: { params: { bookId: string } }) {
+export default async function TextbookTocPage(props: { params: Promise<{ bookId: string }> }) {
+  const params = await props.params;
   const toc = await getToc(params.bookId);
 
   if (!toc) {

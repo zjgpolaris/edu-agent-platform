@@ -13,4 +13,6 @@ textbooks/raw/
 .chroma
 # 前端 standalone 构建产物
 frontend/.next/standalone
+frontend/test-results/
+frontend/playwright-report/
 .DS_Store

@@ -71,6 +71,8 @@ from services.root_cause_service import analyze_root_cause, get_latest_root_caus
 from services.weekly_summary_service import build_weekly_summary
 from services.knowledge_graph_service import build_graph as build_knowledge_graph, predict_risks as predict_knowledge_risks, aggregate_class_risks
 from tools.registry import list_tools
+from agent_job_worker import worker_loop as agent_job_worker_loop
+from services.agent_job_service import create_job as create_agent_job, get_job as get_agent_job, request_cancel as cancel_agent_job
 
 from contextlib import asynccontextmanager
 from game_store import init_db
@@ -79,8 +81,14 @@ from game_store import init_db
 async def lifespan(app: FastAPI):
     init_db()
     init_material_store()
-    yield
-    safe_shutdown()
+    job_worker_stop = asyncio.Event()
+    job_worker_task = asyncio.create_task(agent_job_worker_loop(job_worker_stop))
+    try:
+        yield
+    finally:
+        job_worker_stop.set()
+        await job_worker_task
+        safe_shutdown()
 
 app = FastAPI(title="EduAgent API", lifespan=lifespan)
 _default_origins = [
@@ -136,6 +144,11 @@ class EssayRequest(BaseModel):
 
 class DebateRequest(BaseModel):
     topic: str
+
+
+class WeeklySummaryJobRequest(BaseModel):
+    student_id: str = Field(min_length=1, max_length=128)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=160)
 
 
 class TimelineStartRequest(BaseModel):
@@ -2218,8 +2231,14 @@ async def stream_debate_endpoint(req: DebateRequest, actor: Actor = Depends(requ
     check_user_input(req.topic)
 
     async def event_stream():
-        async for item in stream_debate(req.topic):
-            yield sse_frame(item["event"], item["data"])
+        with trace_context(
+            name="POST /api/history/debate/stream",
+            metadata=trace_meta("debate", "/api/history/debate/stream", topic=req.topic[:80]),
+            user_id=actor.actor_id,
+        ):
+            trace_id = current_trace_id()
+            async for item in stream_debate(req.topic, trace_id=trace_id):
+                yield sse_frame(item["event"], item["data"])
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -3196,6 +3215,43 @@ async def student_weekly_summary(student_id: str, actor: Actor = Depends(require
     """学生周报：聚合本周学习数据，生成自然语言小结与下周建议（LLM，降级规则模板）。"""
     assert_student_access(actor, student_id)
     return await run_in_threadpool(build_weekly_summary, student_id)
+
+
+@app.post("/api/agent-jobs/weekly-summary", status_code=202)
+async def enqueue_weekly_summary_job(req: WeeklySummaryJobRequest, actor: Actor = Depends(require_auth)):
+    """Queue a durable weekly-summary job; clients poll the job endpoint for completion."""
+    assert_student_access(actor, req.student_id)
+    trace_id = f"agent-job-{os.urandom(8).hex()}"
+    return await run_in_threadpool(
+        create_agent_job,
+        "weekly_summary",
+        {"student_id": req.student_id},
+        actor_id=actor.actor_id,
+        idempotency_key=req.idempotency_key,
+        trace_id=trace_id,
+        max_attempts=3,
+        timeout_seconds=120,
+    )
+
+
+@app.get("/api/agent-jobs/{job_id}")
+async def agent_job_status(job_id: str, actor: Actor = Depends(require_auth)):
+    job = await run_in_threadpool(get_agent_job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Agent job not found")
+    if auth_required() and actor.role != "admin" and job.get("actor_id") != actor.actor_id:
+        raise HTTPException(status_code=404, detail="Agent job not found")
+    return job
+
+
+@app.delete("/api/agent-jobs/{job_id}")
+async def cancel_agent_job_endpoint(job_id: str, actor: Actor = Depends(require_auth)):
+    existing = await run_in_threadpool(get_agent_job, job_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Agent job not found")
+    if auth_required() and actor.role != "admin" and existing.get("actor_id") != actor.actor_id:
+        raise HTTPException(status_code=404, detail="Agent job not found")
+    return await run_in_threadpool(cancel_agent_job, job_id)
 
 
 # ── 教师布置作业工作流 ──────────────────────────────────────────────────────────

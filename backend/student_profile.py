@@ -344,7 +344,10 @@ def _upsert_memory_entry(conn: Any, entry: MemoryEntryUpsert, *, now: str, statu
         ) ON CONFLICT(id) DO UPDATE SET
             source_feature = COALESCE(excluded.source_feature, memory_entries.source_feature),
             source_event_id = COALESCE(excluded.source_event_id, memory_entries.source_event_id),
-            confidence = MAX(memory_entries.confidence, excluded.confidence),
+            confidence = CASE
+                WHEN memory_entries.confidence >= excluded.confidence THEN memory_entries.confidence
+                ELSE excluded.confidence
+            END,
             status = CASE WHEN memory_entries.status IN ('deleted', 'disabled') THEN memory_entries.status ELSE excluded.status END,
             reason = COALESCE(excluded.reason, memory_entries.reason),
             metadata_json = excluded.metadata_json,

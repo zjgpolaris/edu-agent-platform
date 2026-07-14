@@ -20,10 +20,30 @@ HISTORY_DIR = REPORTS_DIR / "history"
 LATEST_JSON = REPORTS_DIR / "latest.json"
 LATEST_MD = REPORTS_DIR / "latest.md"
 DEFAULT_LOCAL_EMBED_MODEL_PATH = Path("/Users/cengjiguang/.cache/modelscope/BAAI/bge-large-zh-v1___5")
+DEFAULT_SUITE_TIMEOUT_SECONDS = 300
+SUITE_TIMEOUT_SECONDS = {
+    # This suite intentionally exercises a long multi-step tutoring session.
+    "auto_tutor_trajectory_eval": 900,
+}
+OFFLINE_DETERMINISTIC_SUITES = {
+    # These suites validate routing/trajectory and explicitly provide rule-based
+    # fallbacks. Credentials in a developer shell must not turn them into slow,
+    # quota-dependent integration tests.
+    "learning_assistant_smoke",
+    "trajectory_eval",
+    "auto_tutor_trajectory_eval",
+}
+EXTERNAL_QUOTA_ERROR_MARKERS = (
+    "allocationquota.freetieronly",
+    "free quota has been exhausted",
+    "insufficient_quota",
+    "quota exceeded",
+)
 
 CORE_SUITES = [
     "history_character_eval",
     "rag_retrieval_eval",
+    "rag_groundedness_eval",
     "textbook_qa_eval",
     "game_generation_eval",
     "agent_ops_smoke",
@@ -40,9 +60,13 @@ CORE_SUITES = [
     "review_system_smoke",
     "tool_registry_smoke",
     "guardrails_smoke",
+    "agent_safety_eval",
     "trace_smoke",
     "trajectory_eval",
     "auto_tutor_trajectory_eval",
+    "debate_multi_agent_smoke",
+    "mcp_client_smoke",
+    "agent_job_smoke",
 ]
 QUICK_SUITES = [
     # Offline-first: these run without LLM/embed and always produce metrics
@@ -51,10 +75,15 @@ QUICK_SUITES = [
     "release_gate_smoke",
     "tool_registry_smoke",
     "guardrails_smoke",
+    "agent_safety_eval",
     "weakpoints_smoke",
     "learning_closure_smoke",
     "trajectory_eval",
     "auto_tutor_trajectory_eval",
+    "debate_multi_agent_smoke",
+    "rag_groundedness_eval",
+    "mcp_client_smoke",
+    "agent_job_smoke",
     # LLM/embed-dependent (skipped gracefully when credentials absent)
     "history_character_smoke",
     "rag_inspector_smoke",
@@ -89,6 +118,7 @@ SMOKE_SUITES = [
     "completion_overview_smoke",
     "tool_registry_smoke",
     "guardrails_smoke",
+    "agent_safety_eval",
     "trace_smoke",
     "readiness_smoke",
     "variant_question_smoke",
@@ -104,6 +134,10 @@ SMOKE_SUITES = [
     "preference_smoke",
     "root_cause_smoke",
     "class_matrix_smoke",
+    "debate_multi_agent_smoke",
+    "rag_groundedness_eval",
+    "mcp_client_smoke",
+    "agent_job_smoke",
 ]
 SUITE_FILES = {
     "agent_ops_smoke": EVAL_DIR / "agent_ops_smoke.py",
@@ -111,6 +145,7 @@ SUITE_FILES = {
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
     "history_character_eval": EVAL_DIR / "history_character_eval.py",
     "rag_retrieval_eval": EVAL_DIR / "rag_retrieval_eval.py",
+    "rag_groundedness_eval": EVAL_DIR / "rag_groundedness_eval.py",
     "rag_inspector_smoke": EVAL_DIR / "rag_inspector_smoke.py",
     "release_gate_smoke": EVAL_DIR / "release_gate_smoke.py",
     "textbook_qa_eval": EVAL_DIR / "textbook_qa_eval.py",
@@ -134,11 +169,15 @@ SUITE_FILES = {
     "completion_overview_smoke": EVAL_DIR / "completion_overview_smoke.py",
     "tool_registry_smoke": EVAL_DIR / "tool_registry_smoke.py",
     "guardrails_smoke": EVAL_DIR / "guardrails_smoke.py",
+    "agent_safety_eval": EVAL_DIR / "agent_safety_eval.py",
     "ragas_eval": EVAL_DIR / "ragas_eval.py",
     "trace_smoke": EVAL_DIR / "trace_smoke.py",
     "readiness_smoke": EVAL_DIR / "readiness_smoke.py",
     "trajectory_eval": EVAL_DIR / "trajectory_eval.py",
     "auto_tutor_trajectory_eval": EVAL_DIR / "auto_tutor_trajectory_eval.py",
+    "debate_multi_agent_smoke": EVAL_DIR / "debate_multi_agent_smoke.py",
+    "mcp_client_smoke": EVAL_DIR / "mcp_client_smoke.py",
+    "agent_job_smoke": EVAL_DIR / "agent_job_smoke.py",
     "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
     "variant_question_smoke": EVAL_DIR / "variant_question_smoke.py",
     "lecture_review_smoke": EVAL_DIR / "lecture_review_smoke.py",
@@ -396,6 +435,18 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "kind": "smoke",
         "priority": "p1",
     },
+    "mcp_client_smoke": {
+        "label": "MCP Client 发现与调用 Smoke",
+        "category": "tools",
+        "kind": "smoke",
+        "priority": "p1",
+    },
+    "agent_job_smoke": {
+        "label": "Durable Agent Job Smoke",
+        "category": "ops",
+        "kind": "smoke",
+        "priority": "p1",
+    },
     "guardrails_smoke": {
         "label": "Guardrails Smoke",
         "category": "safety",
@@ -432,6 +483,18 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "kind": "quality",
         "priority": "p0",
     },
+    "debate_multi_agent_smoke": {
+        "label": "历史辩论多 Agent 轨迹 Smoke",
+        "category": "agent",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "agent_safety_eval": {
+        "label": "Agent RAG / Tool Safety Eval",
+        "category": "safety",
+        "kind": "quality",
+        "priority": "p0",
+    },
     "ragas_eval": {
         "label": "Ragas 语义质量",
         "category": "rag",
@@ -442,6 +505,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "label": "生产 RAG 健康检查 Smoke",
         "category": "rag",
         "kind": "production_smoke",
+        "priority": "p0",
+    },
+    "rag_groundedness_eval": {
+        "label": "RAG 引用 Groundedness",
+        "category": "rag",
+        "kind": "quality",
         "priority": "p0",
     },
 }
@@ -639,10 +708,56 @@ def run_suite(name: str, *, verbose: bool = False) -> SuiteResult:
     if env.get("PYTHONPATH"):
         pythonpath_parts.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+    if name in OFFLINE_DETERMINISTIC_SUITES:
+        env["EDU_AGENT_LLM_DISABLED"] = "1"
+        # Keep routing/trajectory checks isolated from a developer's remote
+        # Postgres connection; each suite already provisions its own SQLite DB.
+        env.pop("DATABASE_URL", None)
 
     command = [sys.executable, str(script)]
     started = time.monotonic()
-    result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True)
+    configured_timeout = os.getenv("EVAL_SUITE_TIMEOUT_SECONDS")
+    timeout_seconds = max(
+        1,
+        int(configured_timeout) if configured_timeout else SUITE_TIMEOUT_SECONDS.get(name, DEFAULT_SUITE_TIMEOUT_SECONDS),
+    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        duration = time.monotonic() - started
+        stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        combined_output = f"{stdout}\n{stderr}".lower()
+        if any(marker in combined_output for marker in EXTERNAL_QUOTA_ERROR_MARKERS):
+            reason = (
+                "external model quota exhausted; "
+                f"suite timed out after {timeout_seconds}s while waiting for a usable model"
+            )
+            failure_name = "external_model_quota_exhausted"
+        else:
+            reason = f"suite timed out after {timeout_seconds}s"
+            failure_name = "suite_timeout"
+        return SuiteResult(
+            name=name,
+            command=command,
+            returncode=124,
+            duration_sec=duration,
+            stdout=stdout,
+            stderr=stderr,
+            passed_cases=0,
+            failed_cases_count=1,
+            total_cases=1,
+            metrics={},
+            failed_cases=[{"name": failure_name, "reason": reason}],
+            error=reason,
+        )
     duration = time.monotonic() - started
     passed, failed, total, metrics, failed_cases, skipped, skipped_cases = parse_output(result.stdout, result.stderr)
     if result.returncode != 0 and total == 0:

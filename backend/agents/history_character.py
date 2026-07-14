@@ -4,6 +4,7 @@ from typing import TypedDict, Annotated, Any, Iterator
 from llm_config import llm_fast as llm, llm_quality as llm_opus
 import operator
 from datetime import datetime, timezone
+import re
 import time
 
 from rag.knowledge_base import MetadataHints, search_with_scores
@@ -16,6 +17,7 @@ from user_memory import enrich_hints_with_memory, record_character_interaction, 
 from security.audit_log import record_audit_event
 
 COUNTERFACTUAL_TRIGGERS = ["如果", "假如", "要是", "若是", "倘若", "知道结局"]
+_CITATION_LABEL_RE = re.compile(r"\[史料\d+\]")
 
 
 def detect_mode(message: str) -> str:
@@ -148,13 +150,37 @@ def _mark_used_sources(response: str, sources: list[dict[str, Any]]) -> list[dic
     return marked
 
 
+def _citation_groundedness(response: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    known_labels = [str(source.get("citation_label")) for source in sources if source.get("citation_label")]
+    cited_labels = list(dict.fromkeys(_CITATION_LABEL_RE.findall(response or "")))
+    known_set = set(known_labels)
+    used_labels = [label for label in cited_labels if label in known_set]
+    unknown_labels = [label for label in cited_labels if label not in known_set]
+    coverage_rate = round(len(used_labels) / len(known_labels), 3) if known_labels else 0.0
+    return {
+        "known_labels": known_labels,
+        "cited_labels": cited_labels,
+        "used_labels": used_labels,
+        "unknown_labels": unknown_labels,
+        "citation_coverage_rate": coverage_rate,
+        "grounded": not unknown_labels and (not known_labels or bool(used_labels)),
+    }
+
+
 def _history_inspector_diagnosis(
     inspector: dict[str, Any],
     sources: list[dict[str, Any]],
     *,
     generation_degraded: bool = False,
+    response: str | None = None,
 ) -> dict[str, Any]:
     strategy = str(inspector.get("retrieval_strategy") or "")
+    groundedness = _citation_groundedness(
+        response if response is not None else " ".join(
+            str(source.get("citation_label")) for source in sources if source.get("used_in_answer")
+        ),
+        sources,
+    )
     used_count = sum(1 for source in sources if source.get("used_in_answer") is True)
     unused_count = max(len(sources) - used_count, 0)
     diagnosis_code = "retrieval_ok"
@@ -169,6 +195,10 @@ def _history_inspector_diagnosis(
         diagnosis_code = "retrieval_empty"
         diagnosis_summary = "当前没有检索到史料片段，建议缩小问题范围后重试。"
         failure_stage = "retrieval"
+    elif groundedness["unknown_labels"]:
+        diagnosis_code = "generation_invalid_citation"
+        diagnosis_summary = "回答引用了检索结果中不存在的史料标签。"
+        failure_stage = "generation"
     elif generation_degraded:
         diagnosis_code = "generation_fallback_used"
         diagnosis_summary = "生成阶段已降级为模板化回答，建议检查模型服务状态。"
@@ -186,6 +216,7 @@ def _history_inspector_diagnosis(
         "used_source_count": used_count,
         "unused_source_count": unused_count,
         "generation_degraded": generation_degraded,
+        "citation_groundedness": groundedness,
         "failure_stage": failure_stage,
         "diagnosis_code": diagnosis_code,
         "diagnosis_summary": diagnosis_summary,
@@ -559,6 +590,7 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         state.get("rag_inspector", {}),
         state.get("retrieved_sources", []),
         generation_degraded=generation_error is not None,
+        response=final_response,
     )
 
     yield {

@@ -7,6 +7,8 @@
     "dev:backend": "set -a; [ -f .env.local ] && . ./.env.local; set +a; PYTHONPATH=backend python3 -m uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload",
     "dev:frontend": "npm run dev --prefix frontend",
     "test": "PYTHONPATH=backend python3 eval/run_core_evals.py --smoke",
+    "test:unit": "npm run test:unit --prefix frontend",
+    "test:e2e": "npm run test:e2e --prefix frontend",
     "test:mcp": "PYTHONPATH=backend python3 eval/mcp_server_smoke.py",
     "test:rag-inspector": "PYTHONPATH=backend python3 eval/rag_inspector_smoke.py",
     "test:agent-ops": "PYTHONPATH=backend python3 eval/agent_ops_smoke.py",

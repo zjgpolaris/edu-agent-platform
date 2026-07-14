@@ -225,6 +225,29 @@ assignment_submissions = Table(
     Index("idx_assignment_submissions_student", "student_id", "assignment_id", unique=True),
 )
 
+agent_jobs = Table(
+    "agent_jobs", metadata,
+    Column("id", Text, primary_key=True),
+    Column("job_type", Text, nullable=False),
+    Column("actor_id", Text),
+    Column("status", Text, nullable=False),
+    Column("payload_json", Text, nullable=False),
+    Column("result_json", Text),
+    Column("idempotency_key", Text),
+    Column("trace_id", Text),
+    Column("attempts", Integer, nullable=False, server_default="0"),
+    Column("max_attempts", Integer, nullable=False, server_default="3"),
+    Column("timeout_seconds", Integer, nullable=False, server_default="300"),
+    Column("cancel_requested", Integer, nullable=False, server_default="0"),
+    Column("error", Text),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+    Column("started_at", Text),
+    Column("finished_at", Text),
+    Index("idx_agent_jobs_actor_idempotency", "actor_id", "idempotency_key", unique=True),
+    Index("idx_agent_jobs_status_created", "status", "created_at"),
+)
+
 student_notifications = Table(
     "student_notifications", metadata,
     Column("id", Text, primary_key=True),
@@ -258,4 +281,3 @@ root_cause_records = Table(
     Column("analyzed_at", Text, nullable=False),
     Index("idx_root_cause_student_tag", "student_id", "knowledge_tag", "analyzed_at"),
 )
-

@@ -42,6 +42,10 @@ class ZodeChatModel:
         self.allow_cross_provider_fallback = allow_cross_provider_fallback
         self.helper_path = Path(__file__).parent / "zode_client.js"
 
+    @staticmethod
+    def _execution_disabled() -> bool:
+        return os.getenv("EDU_AGENT_LLM_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+
     def _provider_model_chain(self) -> list[tuple[str, str]]:
         chain = [(LLM_PROVIDER, model) for model in [self.model, *self.fallback_models]]
         if self.allow_cross_provider_fallback and LLM_PROVIDER in {"bailian", "dashscope"} and ANTHROPIC_AUTH_TOKEN:
@@ -49,6 +53,8 @@ class ZodeChatModel:
         return list(dict.fromkeys(chain))
 
     def _provider_available(self, provider: str) -> bool:
+        if self._execution_disabled():
+            return False
         if provider == "anthropic":
             return bool(os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY"))
         if provider in {"bailian", "dashscope"}:
@@ -71,6 +77,8 @@ class ZodeChatModel:
 
     def invoke(self, messages: Any, max_retries: int = 2) -> LLMResponse:
         import time
+        if self._execution_disabled():
+            raise RuntimeError("LLM execution is disabled for this deterministic run")
         last_error = None
         for attempt_index, (provider, model) in enumerate(self._provider_model_chain(), start=1):
             if not self._provider_available(provider):
@@ -110,6 +118,8 @@ class ZodeChatModel:
         raise RuntimeError(str(last_error) if last_error else "LLM request failed")
 
     def stream(self, messages: Any) -> Iterator[str]:
+        if self._execution_disabled():
+            raise RuntimeError("LLM execution is disabled for this deterministic run")
         last_error = None
         for attempt_index, (provider, model) in enumerate(self._provider_model_chain(), start=1):
             if not self._provider_available(provider):

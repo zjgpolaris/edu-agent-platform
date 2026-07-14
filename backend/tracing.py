@@ -173,12 +173,16 @@ def bind_trace_id(trace_id: str) -> None:
     """Bind an explicit trace_id into the current thread/task context (no-op if already set)."""
     if trace_id and not _current_trace_id.get():
         _current_trace_id.set(trace_id)
+        from trace_store import set_trace_id as set_runtime_trace_id
+        set_runtime_trace_id(trace_id)
 
 
 def set_trace_id(trace_id: str) -> None:
     """Force-set a trace_id in the current context, overriding any existing value."""
     if trace_id:
         _current_trace_id.set(trace_id)
+        from trace_store import set_trace_id as set_runtime_trace_id
+        set_runtime_trace_id(trace_id)
 
 
 def trace_metadata(extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -248,19 +252,22 @@ def trace_context(
     session_id: str | None = None,
     input_data: Any = None,
 ) -> Iterator[Any]:
+    from trace_store import trace_context as runtime_trace_context
+
     trace_id = uuid4().hex
     trace_token = _current_trace_id.set(trace_id)
     trace = start_trace(name=name, metadata={**(metadata or {}), "trace_id": trace_id}, user_id=user_id, session_id=session_id, input_data=input_data)
     token = _current_trace.set(trace)
-    try:
-        yield trace
-        end_trace(trace, metadata={"success": True, "trace_id": trace_id})
-    except Exception as exc:
-        end_trace(trace, metadata={"success": False, "trace_id": trace_id}, level="ERROR", status_message=safe_error_message(exc))
-        raise
-    finally:
-        _current_trace.reset(token)
-        _current_trace_id.reset(trace_token)
+    with runtime_trace_context(trace_id):
+        try:
+            yield trace
+            end_trace(trace, metadata={"success": True, "trace_id": trace_id})
+        except Exception as exc:
+            end_trace(trace, metadata={"success": False, "trace_id": trace_id}, level="ERROR", status_message=safe_error_message(exc))
+            raise
+        finally:
+            _current_trace.reset(token)
+            _current_trace_id.reset(trace_token)
 
 
 def start_span(

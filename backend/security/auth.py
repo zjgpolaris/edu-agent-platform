@@ -89,7 +89,7 @@ def require_auth(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> Act
     if not auth_required():
         return Actor(actor_id="dev-teacher", role="teacher")
 
-    token = creds.token if creds else None
+    token = creds.credentials if creds else None
     if not token:
         raise HTTPException(status_code=401, detail="Missing authorization token")
 

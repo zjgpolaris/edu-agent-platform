@@ -1,7 +1,12 @@
-"""历史辩论 Agent — Supervisor-Worker 多 Agent 模式"""
-from langgraph.graph import StateGraph, END
-from typing import TypedDict, Literal, AsyncIterator
+"""历史辩论 Agent — Supervisor-Worker 多 Agent 模式。"""
+from time import perf_counter
+from typing import AsyncIterator, Literal, TypedDict
+
+from fastapi.concurrency import run_in_threadpool
+from langgraph.graph import END, StateGraph
+
 from llm_config import llm_fast as llm, llm_quality as llm_judge
+from trace_store import create_trace_id, emit_trace_event, trace_context as runtime_trace_context
 
 
 class DebateState(TypedDict):
@@ -60,99 +65,138 @@ def build_debate_graph() -> StateGraph:
     return g.compile()
 
 
-async def stream_debate(topic: str) -> AsyncIterator[dict]:
-    """逐轮生成辩论，完成后依次运行 fact_checker、judge、learning_coach。"""
-    from fastapi.concurrency import run_in_threadpool
-    rounds: list[dict] = []
-    round_count = 0
-
-    while round_count < MAX_ROUNDS:
-        history = "\n".join(f"{r['side']}: {r['argument']}" for r in rounds)
-        pro_resp = await run_in_threadpool(
-            llm.invoke,
-            f"辩题：{topic}\n你持正方立场，用2-3个历史史实论证。\n辩论记录：{history}\n请发言（200字以内）："
+async def _invoke_role(agent_name: str, step_name: str, model, prompt: str, **metadata) -> str:
+    started = perf_counter()
+    try:
+        response = await run_in_threadpool(model.invoke, prompt)
+        content = str(response.content).strip()
+        if not content:
+            raise RuntimeError(f"{agent_name} returned empty content")
+        emit_trace_event(
+            agent_name=agent_name,
+            step_name=step_name,
+            event_type="llm",
+            status="success",
+            latency_ms=round((perf_counter() - started) * 1000),
+            metadata={
+                **metadata,
+                "configured_model": getattr(model, "model", None),
+                "response_chars": len(content),
+            },
         )
-        rounds.append({"side": "pro", "argument": pro_resp.content})
-        yield {"event": "round", "data": {"side": "pro", "argument": pro_resp.content, "round": round_count + 1}}
-
-        history = "\n".join(f"{r['side']}: {r['argument']}" for r in rounds)
-        con_resp = await run_in_threadpool(
-            llm.invoke,
-            f"辩题：{topic}\n你持反方立场，用2-3个历史史实反驳正方。\n辩论记录：{history}\n请发言（200字以内）："
+        return content
+    except Exception as exc:
+        emit_trace_event(
+            agent_name=agent_name,
+            step_name=step_name,
+            event_type="llm",
+            status="error",
+            latency_ms=round((perf_counter() - started) * 1000),
+            metadata={**metadata, "error_type": exc.__class__.__name__},
         )
-        rounds.append({"side": "con", "argument": con_resp.content})
-        yield {"event": "round", "data": {"side": "con", "argument": con_resp.content, "round": round_count + 1}}
+        raise
 
-        round_count += 1
 
-    # Fact Checker — 验证辩论中的历史事实
-    history_text = "\n".join(f"{r['side']}: {r['argument']}" for r in rounds)
-    fact_resp = await run_in_threadpool(
-        llm.invoke,
-        f"辩题：{topic}\n辩论内容：\n{history_text}\n\n"
-        "作为历史事实核查员，指出辩论中哪些史实准确，哪些有误或夸大。"
-        "输出格式：先总结1-2句，再列出2-4条具体核查点（史实名称：是否准确，简要说明）："
-    )
-    yield {"event": "fact_check", "data": {"result": fact_resp.content, "sources": []}}
-
-    # Judge — 结构化评分
-    judge_resp = await run_in_threadpool(
-        llm_judge.invoke,
-        f"辩题：{topic}\n辩论记录：\n{history_text}\n\n"
-        "你是历史辩论裁判。从【论点清晰度】【史实准确性】【逻辑严密性】三个维度评判双方。"
-        "给出双方各自优劣分析，并宣布获胜方，说明理由（300字以内）："
-    )
-    yield {"event": "verdict", "data": {"verdict": judge_resp.content}}
-
-    # Learning Coach — 转化为学习建议
-    coach_resp = await run_in_threadpool(
-        llm.invoke,
-        f"辩题：{topic}\n辩论记录：\n{history_text}\n\n"
-        "作为历史学习教练，把这场辩论转化为3条可操作的学习建议："
-        "1）本次辩论涉及的核心知识点；2）建议重点复习的内容；3）一个值得深入探究的问题："
-    )
-    yield {"event": "coach_summary", "data": {"summary": coach_resp.content}}
-    yield {"event": "done", "data": {}}
-
-    # Fact Checker
-    all_claims = "\n".join(f"第{i+1}轮 {r['side']}: {r['argument'][:200]}" for i, r in enumerate(rounds))
+def _search_history_sources(topic: str) -> tuple[list[dict], str]:
     try:
         from rag.knowledge_base import search_with_scores
-        from tracing import truncate_text
+
         rag_docs = search_with_scores("history", topic, k=4, mode="hybrid")
-        rag_snippets = "\n".join(
-            f"- {d['document'].page_content[:200]}" for d in rag_docs[:3]
-        )
     except Exception:
-        rag_snippets = ""
         rag_docs = []
 
-    fact_prompt = (
-        f"辩题：{topic}\n辩论摘要：\n{all_claims}\n"
-        + (f"\n参考史料：\n{rag_snippets}\n" if rag_snippets else "")
-        + "请以「事实核查员」身份，指出辩论中哪些史实陈述有误或需商榷，哪些论据得到史料支持。简明列举，每条不超过50字。"
-    )
-    fact_resp = await run_in_threadpool(llm_judge.invoke, fact_prompt)
-    sources = [
-        {"topic": d["document"].metadata.get("topic", ""), "score": round(float(d["score"]), 3)}
-        for d in rag_docs[:3]
-    ]
-    yield {"event": "fact_check", "data": {"result": fact_resp.content, "sources": sources}}
+    sources = []
+    snippets = []
+    for index, item in enumerate(rag_docs[:3], start=1):
+        document = item["document"]
+        label = f"[史料{index}]"
+        snippet = document.page_content[:200]
+        sources.append({
+            "citation_label": label,
+            "topic": document.metadata.get("topic", ""),
+            "source": document.metadata.get("source", ""),
+            "snippet": snippet,
+            "score": round(float(item.get("score", 0)), 3),
+        })
+        snippets.append(f"{label} {snippet}")
+    return sources, "\n".join(snippets)
 
-    # verdict
-    history_text = "\n".join(f"{r['side']}: {r['argument']}" for r in rounds)
-    verdict_resp = await run_in_threadpool(
-        llm_judge.invoke,
-        f"辩题：{topic}\n辩论记录：{history_text}\n从论点、论据、逻辑三维度评判双方，给出总结性裁决："
-    )
-    yield {"event": "verdict", "data": {"verdict": verdict_resp.content}}
 
-    # Learning Coach
-    coach_prompt = (
-        f"辩题：{topic}\n裁判结论：{verdict_resp.content[:300]}\n"
-        "请以「学习教练」身份，用初中生能理解的语言，总结这场辩论的3个关键历史知识点，并给出1条学习建议。"
-    )
-    coach_resp = await run_in_threadpool(llm.invoke, coach_prompt)
-    yield {"event": "coach_summary", "data": {"summary": coach_resp.content}}
+async def stream_debate(topic: str, *, trace_id: str | None = None) -> AsyncIterator[dict]:
+    """逐轮生成辩论，并为每个角色记录可聚合的 runtime trace。"""
+    runtime_trace_id = trace_id or create_trace_id()
+    with runtime_trace_context(runtime_trace_id):
+        rounds: list[dict] = []
+        yield {"event": "trace", "data": {"trace_id": runtime_trace_id}}
 
-    yield {"event": "done", "data": {}}
+        for round_number in range(1, MAX_ROUNDS + 1):
+            history = "\n".join(f"{r['side']}: {r['argument']}" for r in rounds)
+            pro_argument = await _invoke_role(
+                "pro_debater",
+                f"round_{round_number}",
+                llm,
+                f"辩题：{topic}\n你持正方立场，用2-3个历史史实论证。\n辩论记录：{history}\n请发言（200字以内）：",
+                role="pro",
+                round=round_number,
+            )
+            rounds.append({"side": "pro", "argument": pro_argument})
+            yield {"event": "round", "data": {"side": "pro", "argument": pro_argument, "round": round_number}}
+
+            history = "\n".join(f"{r['side']}: {r['argument']}" for r in rounds)
+            con_argument = await _invoke_role(
+                "con_debater",
+                f"round_{round_number}",
+                llm,
+                f"辩题：{topic}\n你持反方立场，用2-3个历史史实反驳正方。\n辩论记录：{history}\n请发言（200字以内）：",
+                role="con",
+                round=round_number,
+            )
+            rounds.append({"side": "con", "argument": con_argument})
+            yield {"event": "round", "data": {"side": "con", "argument": con_argument, "round": round_number}}
+
+        history_text = "\n".join(f"{r['side']}: {r['argument']}" for r in rounds)
+        sources, rag_snippets = await run_in_threadpool(_search_history_sources, topic)
+        fact_prompt = (
+            f"辩题：{topic}\n辩论记录：\n{history_text}\n"
+            + (f"\n参考史料：\n{rag_snippets}\n" if rag_snippets else "")
+            + "作为历史事实核查员，指出哪些史实准确、哪些有误或夸大。"
+            "有参考史料时必须使用[史料N]标注依据；先总结1-2句，再列出2-4条核查点。"
+        )
+        fact_result = await _invoke_role(
+            "fact_checker",
+            "fact_check",
+            llm_judge,
+            fact_prompt,
+            source_count=len(sources),
+        )
+        yield {"event": "fact_check", "data": {"result": fact_result, "sources": sources}}
+
+        verdict = await _invoke_role(
+            "judge",
+            "verdict",
+            llm_judge,
+            f"辩题：{topic}\n辩论记录：\n{history_text}\n\n"
+            "从【论点清晰度】【史实准确性】【逻辑严密性】评判双方，给出优劣、获胜方和理由（300字以内）：",
+        )
+        yield {"event": "verdict", "data": {"verdict": verdict}}
+
+        coach_summary = await _invoke_role(
+            "learning_coach",
+            "coach_summary",
+            llm,
+            f"辩题：{topic}\n裁判结论：{verdict[:300]}\n"
+            "用初中生能理解的语言总结3个关键历史知识点，并给出1条学习建议：",
+        )
+        yield {"event": "coach_summary", "data": {"summary": coach_summary}}
+
+        emit_trace_event(
+            agent_name="debate_supervisor",
+            step_name="complete",
+            event_type="end",
+            status="success",
+            metadata={"round_count": MAX_ROUNDS, "source_count": len(sources), "worker_count": 5},
+        )
+        yield {
+            "event": "done",
+            "data": {"trace_id": runtime_trace_id, "round_count": MAX_ROUNDS, "source_count": len(sources)},
+        }

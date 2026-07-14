@@ -14,7 +14,8 @@ async function getToc(bookId: string) {
   return response.json();
 }
 
-export default async function TextbookLessonPage({ params }: { params: { bookId: string; lessonId: string } }) {
+export default async function TextbookLessonPage(props: { params: Promise<{ bookId: string; lessonId: string }> }) {
+  const params = await props.params;
   try {
     const [lesson, toc] = await Promise.all([getLesson(params.bookId, params.lessonId), getToc(params.bookId)]);
     return <LessonLearningClient lesson={lesson} toc={toc} />;

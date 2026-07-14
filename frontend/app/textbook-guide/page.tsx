@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type Textbook = { id: string; grade: string; book: string; status: "ready" | "empty" | "invalid" };
@@ -150,7 +151,7 @@ export default function TextbookGuidePage() {
           <h1>把一课书压成一张考点卷</h1>
           <p>选择教材课次，一键生成核心考点、思考题和可继续对话的历史人物。</p>
           <div className="hero-flow" aria-label="导读流程"><span>选教材</span><span>定课次</span><span>生成考点</span><span>追问人物</span></div>
-          <a className="hero-game-link" href="/">返回学习大厅</a>
+          <Link className="hero-game-link" href="/">返回学习大厅</Link>
         </div>
       </section>
 

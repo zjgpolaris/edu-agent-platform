@@ -16,7 +16,7 @@ const FONTS_CSS =
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" data-scroll-behavior="smooth">
       <head>
         <link rel="preconnect" href="https://fonts.loli.net" />
         <link rel="preconnect" href="https://gstatic.loli.net" crossOrigin="anonymous" />
