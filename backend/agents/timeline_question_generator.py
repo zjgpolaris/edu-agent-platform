@@ -429,6 +429,44 @@ def validate_timeline_llm_plan(
     return validated_events
 
 
+def build_timeline_fallback_events(
+    candidates: list[TimelineCandidate],
+    target_count: int,
+) -> list[dict[str, Any]]:
+    """Build a valid round from trusted candidates when model JSON is unusable."""
+    events: list[dict[str, Any]] = []
+    seen_years: set[int] = set()
+    for candidate in candidates:
+        if candidate["year"] in seen_years:
+            continue
+        clue = clean_string(candidate.get("summary"), 120)
+        if len(clue) < 8 or leaks_year(clue, candidate):
+            clue = f"结合{candidate['period']}的历史背景，判断“{candidate['title']}”在本专题中的先后位置。"
+        explanation = clean_string(candidate.get("explanation"), 160)
+        if len(explanation) < 8:
+            explanation = f"“{candidate['title']}”是{candidate['period']}的重要事件，应结合背景、过程与影响理解其时间位置。"
+        events.append(
+            {
+                "id": candidate["id"],
+                "title": candidate["title"],
+                "year": candidate["year"],
+                "display_year": candidate["display_year"],
+                "period": candidate["period"],
+                "summary": clue,
+                "topic": candidate["topic"],
+                "explanation": explanation,
+                "related_character": candidate["related_character"],
+                "suggested_question": candidate["suggested_question"],
+            }
+        )
+        seen_years.add(candidate["year"])
+        if len(events) >= target_count:
+            break
+    if len(events) != target_count:
+        raise TimelineGenerationError("insufficient unique-year fallback candidates")
+    return events
+
+
 def generate_timeline_round_with_llm(
     levels: list[dict[str, Any]],
     grade: str | None,
@@ -447,14 +485,26 @@ def generate_timeline_round_with_llm(
 
     rag_context = build_game_rag_context(topic, grade, difficulty)
     messages = build_timeline_llm_messages(filtered_candidates, grade, difficulty, topic, recent_event_ids, target_count, rag_context)
-    plan = call_timeline_question_llm(messages)
     candidate_by_id = {candidate["id"]: candidate for candidate in filtered_candidates}
-    events = validate_timeline_llm_plan(plan, candidate_by_id, target_count, difficulty)
+    generation_source = "llm"
+    try:
+        plan = call_timeline_question_llm(messages)
+        events = validate_timeline_llm_plan(plan, candidate_by_id, target_count, difficulty)
+    except (TimelineGenerationError, RuntimeError) as exc:
+        logger.warning("timeline_round_fallback difficulty=%s topic=%s reason=%s", difficulty, topic, exc)
+        events = build_timeline_fallback_events(filtered_candidates, target_count)
+        plan = {
+            "round_title": f"{topic or '历史'}时间线",
+            "learning_goal": "依据可信历史事件梳理时间顺序，并理解事件之间的背景与影响。",
+            "selected_events": [],
+        }
+        generation_source = "trusted_candidates"
     selected_event_ids = [event["id"] for event in events]
     update_recent_event_ids(recent_store, student_id, topic, difficulty, selected_event_ids)
 
     logger.info(
-        "timeline_round_generated source=llm difficulty=%s topic=%s candidate_count=%s selected_ids=%s elapsed_ms=%s",
+        "timeline_round_generated source=%s difficulty=%s topic=%s candidate_count=%s selected_ids=%s elapsed_ms=%s",
+        generation_source,
         difficulty,
         topic,
         len(filtered_candidates),
@@ -471,6 +521,7 @@ def generate_timeline_round_with_llm(
         "topic": topic or first_candidate["topic"],
         "events": events,
         "selected_event_ids": selected_event_ids,
+        "generation_source": generation_source,
     }
 
 

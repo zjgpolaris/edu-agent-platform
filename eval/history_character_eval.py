@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,34 +44,43 @@ def llm_judge(character: str, question: str, response: str, facts: list[str]) ->
         return {"factual_accuracy": 0, "educational_value": 0, "hallucination_risk": 5, "comment": "评审失败"}
 
 
-async def run_case(case: dict[str, Any]) -> dict[str, Any]:
-    retriever = get_retriever("history")
-    graph = build_character_graph(retriever)
-    state = {
-        "character": case["character"],
-        "messages": [{"role": "user", "content": case["message"]}],
-        "retrieved_facts": [],
-        "retrieved_sources": [],
-        "response_draft": "",
-        "verified": False,
-        "mode": case.get("mode") or detect_mode(case["message"]),
-    }
-    result = await graph.ainvoke(state)
-    response = result.get("response_draft", "")
-    sources = result.get("retrieved_sources", [])
-    source_blob = "\n".join(_source_text(source) for source in sources)
+async def run_case(case: dict[str, Any], semaphore: asyncio.Semaphore) -> dict[str, Any]:
+    async with semaphore:
+        print(f"RUN {case['name']}", file=sys.stderr, flush=True)
+        retriever = get_retriever("history")
+        graph = build_character_graph(retriever)
+        state = {
+            "character": case["character"],
+            "messages": [{"role": "user", "content": case["message"]}],
+            "retrieved_facts": [],
+            "retrieved_sources": [],
+            "response_draft": "",
+            "verified": False,
+            "mode": case.get("mode") or detect_mode(case["message"]),
+        }
+        result = await graph.ainvoke(state)
+        response = result.get("response_draft", "")
+        sources = result.get("retrieved_sources", [])
+        source_blob = "\n".join(_source_text(source) for source in sources)
 
-    fact_card_parse_success = False
-    try:
-        card = generate_fact_card({**state, **result})
-        fact_card_parse_success = bool(card.get("question_summary") or card.get("key_facts"))
-    except Exception:
-        fact_card_parse_success = False
+        async def build_fact_card() -> bool:
+            try:
+                card = await asyncio.to_thread(generate_fact_card, {**state, **result})
+                return bool(card.get("question_summary") or card.get("key_facts"))
+            except Exception:
+                return False
 
-    judge = llm_judge(
-        case["character"], case["message"], response,
-        result.get("retrieved_facts", []),
-    )
+        fact_card_parse_success, judge = await asyncio.gather(
+            build_fact_card(),
+            asyncio.to_thread(
+                llm_judge,
+                case["character"],
+                case["message"],
+                response,
+                result.get("retrieved_facts", []),
+            ),
+        )
+        print(f"DONE {case['name']}", file=sys.stderr, flush=True)
 
     min_sources = int(case.get("min_sources", 1))
     return {
@@ -91,7 +101,30 @@ async def run_case(case: dict[str, Any]) -> dict[str, Any]:
 
 async def main() -> None:
     cases = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
-    results = [await run_case(case) for case in cases]
+    configured_limit = int(os.getenv("HISTORY_CHARACTER_EVAL_LIMIT", "0") or "0")
+    if configured_limit > 0 and configured_limit < len(cases):
+        # Round-robin by character so the CORE subset represents every persona
+        # instead of taking the first N rows from a character-grouped dataset.
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for case in cases:
+            grouped.setdefault(case["character"], []).append(case)
+        sampled: list[dict[str, Any]] = []
+        round_index = 0
+        while len(sampled) < configured_limit:
+            added = False
+            for character_cases in grouped.values():
+                if round_index < len(character_cases):
+                    sampled.append(character_cases[round_index])
+                    added = True
+                    if len(sampled) >= configured_limit:
+                        break
+            if not added:
+                break
+            round_index += 1
+        cases = sampled
+    concurrency = max(1, int(os.getenv("HISTORY_CHARACTER_EVAL_CONCURRENCY", "4") or "4"))
+    semaphore = asyncio.Semaphore(concurrency)
+    results = await asyncio.gather(*(run_case(case, semaphore) for case in cases))
 
     for result in results:
         passed = all(
@@ -149,4 +182,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

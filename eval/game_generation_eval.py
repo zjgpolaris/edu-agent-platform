@@ -85,6 +85,7 @@ def _run_timeline_case(case: dict[str, Any]) -> dict[str, Any]:
         "years_unique": _years_unique(events),
         "selected_ids_match": _selected_ids_match(round_data),
         "year_leak": _year_leaks(round_data),
+        "generation_source": round_data.get("generation_source", "unknown"),
         "error": error,
     }
 
@@ -115,6 +116,7 @@ def _run_card_case(case: dict[str, Any]) -> dict[str, Any]:
         "years_unique": _years_unique(events),
         "selected_ids_match": _selected_ids_match(round_data),
         "year_leak": _year_leaks(round_data),
+        "generation_source": round_data.get("generation_source", "unknown"),
         "error": error,
     }
 
@@ -142,6 +144,7 @@ def main() -> None:
             f"{status} {result['name']}: kind={result['kind']} generated={result['generated']} "
             f"shape={result['shape_valid']} ids_unique={result['ids_unique']} years_unique={result['years_unique']} "
             f"selected_ids={result['selected_ids_match']} year_leak={result['year_leak']} error={result['error']}"
+            f" source={result['generation_source']}"
         )
 
     total = len(results)
@@ -152,12 +155,14 @@ def main() -> None:
         "card_round_valid_rate": sum(item["kind"] == "card" and _passed(item) for item in results),
         "json_parse_success_rate": sum(item["generated"] for item in results),
         "year_leak_rate": sum(item["year_leak"] for item in results),
+        "llm_generation_rate": sum(item["generation_source"] == "llm" for item in results),
     }
     print()
     print(f"timeline_round_valid_rate={metrics['timeline_round_valid_rate']}/{timeline_total}")
     print(f"card_round_valid_rate={metrics['card_round_valid_rate']}/{card_total}")
     print(f"json_parse_success_rate={metrics['json_parse_success_rate']}/{total}")
     print(f"year_leak_rate={metrics['year_leak_rate']}/{total}")
+    print(f"llm_generation_rate={metrics['llm_generation_rate']}/{total}")
 
     failures = [item["name"] for item in results if not _passed(item)]
     if failures:

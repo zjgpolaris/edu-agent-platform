@@ -280,10 +280,13 @@ ANTHROPIC_MODEL_FALLBACK = os.getenv("ANTHROPIC_MODEL_FALLBACK", "GLM-5.1")
 ANTHROPIC_MODEL_REASONING = os.getenv("ANTHROPIC_MODEL_REASONING", "gpt-5.4")
 
 if LLM_PROVIDER in {"bailian", "dashscope"}:
-    DEFAULT_MODEL_FAST = "deepseek-v4-flash"
+    # Keep the default chain on models covered by the Bailian free-quota plan.
+    # Explicit snapshots make eval runs reproducible instead of silently
+    # changing behavior when an alias is advanced by the provider.
+    DEFAULT_MODEL_FAST = "qwen3.6-35b-a3b"
     DEFAULT_MODEL_QUALITY = "qwen3.7-plus"
-    DEFAULT_MODEL_FALLBACK = "qwen3.6-35b-a3b"
-    DEFAULT_MODEL_REASONING = "qwen3.7-max-2026-05-17"
+    DEFAULT_MODEL_FALLBACK = "qwen3.7-max-2026-06-08"
+    DEFAULT_MODEL_REASONING = "qwen3.7-max-2026-06-08"
 else:
     DEFAULT_MODEL_FAST = ANTHROPIC_MODEL_FAST
     DEFAULT_MODEL_QUALITY = ANTHROPIC_MODEL_QUALITY

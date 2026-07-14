@@ -43,7 +43,7 @@
 
 | 路线图任务 | 状态 | 新增或修正证据 |
 |---|---|---|
-| 完整 CORE eval | 已完成，未全绿 | 首轮 `18/24 suites`、`102/110 cases`；已修复 PostgreSQL `MAX(a,b)` 兼容问题及离线 suite 被凭证误触发的问题，专项复验均通过；历史人物质量 suite 仍受百炼免费额度耗尽阻塞 |
+| 完整 CORE eval | 实现完成，待下一次完整回归盖章 | 获得数据外发授权后的最新完整报告为 `25/26 suites`、`142/143 cases`；历史人物 `9/9`、游戏生成 `4/4` 及其余 23 个 suite 通过。唯一失败是 Durable Job smoke 连接共享数据库后复用了旧取消任务；现已改为唯一临时 SQLite 并清除外部 `DATABASE_URL`，专项复验 `1/1` 通过 |
 | 多 Agent 辩论修正 | 已完成 | 清理重复阶段；补正反方、事实核查、裁判、学习教练角色 trace，以及固定轨迹与错误分支 smoke |
 | Trajectory / Groundedness / Safety | 已完成 | 补 tool input、tool output utilization、citation groundedness、RAG/tool-output injection、高风险确认和 PII 评测 |
 | 前端自动化测试 / CI | 已完成基线 | Vitest component test `6/6` 覆盖高风险工具确认与 TraceTimeline 加载/失败/RAG 详情契约；本机 Playwright Chromium `5/5` 覆盖学生复习/作业/AutoTutor、教师作业、Eval/Trace；两者均接入 CI，E2E 保留失败 trace/video/report artifact |
@@ -315,7 +315,7 @@ EduAgent 是一个 K-12 中文/历史 AI 教学平台，当前实现为双服务
 
 这使项目具备较强“可评测、可观测、可回归”的工程证明力。
 
-但应区分“评测基础设施覆盖度”和“当前质量状态”：2026-07-14 已刷新完整 CORE，首轮为 `18/24 suites passed`、`102/110 cases passed`。其中 PostgreSQL `MAX(a,b)` 兼容缺陷导致的两个 suite 已修复并专项复验 `9/9`；三个本应离线确定性的 Agent suite 已隔离外部数据库/模型凭证并专项复验 `26/26`；新增 MCP Client 和 Durable Job smoke 也已通过。当前仍不能宣称整体绿色，因为历史人物质量 suite 受百炼免费额度耗尽阻塞；runner 现会将捕获到额度错误的超时明确标记为 `external_model_quota_exhausted`，避免与代码死锁混淆。同期 `npm run release:gate:fast -- --skip-frontend` 为 `46/46 cases`、`10/10 suites`，证明快速试点主路径绿色，但不替代外部模型质量验证。
+但应区分“评测基础设施覆盖度”和“当前质量状态”：2026-07-14 获得数据外发授权后的最新完整 CORE 为 `25/26 suites passed`、`142/143 cases passed`。历史人物分层质量评测 `9/9`、游戏生成 `4/4`，模型相关 suite 已全部通过。唯一失败来自 Durable Job smoke 的测试隔离：外层 `DATABASE_URL` 覆盖了测试设置的固定临时 SQLite，因而复用了上一轮已取消任务。测试现使用每进程唯一临时目录，并在加载数据库引擎前移除外部 `DATABASE_URL`，专项复验 `1/1` 通过。为保持 CORE 门禁可重复，历史人物 CORE 采用按角色 round-robin 的 9 例分层样本，完整 45 例仍可通过 `HISTORY_CHARACTER_EVAL_LIMIT=0` 显式运行；时间线与卡牌生成器在模型调用或结构校验失败时改用经过校验的静态候选，评测同时报告 `generation_source`，避免把降级伪装成模型成功。快速发布门禁同期为 `46/46 cases`、`10/10 suites`。代码和专项证据均已绿色，但最新完整报告仍记录修正前的 Durable Job 单例失败，下一次完整回归用于把报告 `Overall` 正式刷新为 PASS。
 
 ### 5.6 全栈产品闭环较完整
 
@@ -792,6 +792,6 @@ AI 全栈岗位通常会重视：
 
 > AI Agent 全栈工程作品集：以教育场景为载体，展示 Agent 工作流、RAG、工具治理、MCP、Eval、Trace、全栈产品化和安全闭环。
 
-项目已经具备 CI、容器化、trajectory eval 和场景级多 Agent，不应继续把这些能力描述为“完全缺失”。本轮已修正多 Agent 流程，补齐 Playwright 与 Vitest 基线、MCP Client 和最小 Durable Job，完成 Next.js 16 / React 19 安全升级，并刷新了完整质量报告。后续重点是解除外部模型额度阻塞并收绿质量基线，扩充 component test，再推进真实第三方 MCP、分布式 worker、生产监控与部署证据、在线质量指标和未成年人数据治理。
+项目已经具备 CI、容器化、trajectory eval 和场景级多 Agent，不应继续把这些能力描述为“完全缺失”。本轮已修正多 Agent 流程，补齐 Playwright 与 Vitest 基线、MCP Client 和最小 Durable Job，完成 Next.js 16 / React 19 安全升级，并刷新完整质量报告至 `25/26 suites`、`142/143 cases`；其中唯一失败的 Durable Job 测试隔离问题已经修正并专项复验通过。下一步先运行一次完整 CORE，将正式报告盖章为 PASS；之后再扩充 component test，并推进真实第三方 MCP、分布式 worker、生产监控与部署证据、在线质量指标和未成年人数据治理。
 
 Claude 原生 provider 和通用 multi-agent runtime 应按目标岗位和 eval 结果选择：面向 Anthropic 专项岗位时补 Claude 原生能力；只有当上下文污染、并行探索或专业化带来可测收益时，再投入通用 multi-agent runtime。

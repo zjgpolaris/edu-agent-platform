@@ -217,6 +217,44 @@ def validate_card_game_plan(
     return validated_events
 
 
+def build_card_game_fallback_events(
+    candidates: list[TimelineCandidate],
+    target_count: int,
+) -> list[dict[str, Any]]:
+    """Build playable cards from trusted candidates after model retries fail."""
+    events: list[dict[str, Any]] = []
+    seen_years: set[int] = set()
+    for candidate in candidates:
+        if candidate["year"] in seen_years:
+            continue
+        clue = clean_string(candidate.get("summary"), 120)
+        if len(clue) < 8 or leaks_year(clue, candidate):
+            clue = f"结合{candidate['period']}的背景与影响，判断“{candidate['title']}”发生的先后位置。"
+        explanation = clean_string(candidate.get("explanation"), 180)
+        if len(explanation) < 20:
+            explanation = f"“{candidate['title']}”是{candidate['period']}的重要事件，需要联系其背景、过程和历史影响判断顺序。"
+        events.append(
+            {
+                "id": candidate["id"],
+                "title": candidate["title"],
+                "year": candidate["year"],
+                "display_year": candidate["display_year"],
+                "period": candidate["period"],
+                "summary": clue,
+                "topic": candidate["topic"],
+                "explanation": explanation,
+                "related_character": candidate["related_character"],
+                "suggested_question": candidate["suggested_question"],
+            }
+        )
+        seen_years.add(candidate["year"])
+        if len(events) >= target_count:
+            break
+    if len(events) != target_count:
+        raise TimelineGenerationError("insufficient unique-year fallback candidates")
+    return events
+
+
 def generate_card_game_round(
     levels: list[dict[str, Any]],
     grade: str | None,
@@ -255,25 +293,34 @@ def generate_card_game_round(
     )
     candidate_by_id = {candidate["id"]: candidate for candidate in filtered_candidates}
     last_error: Exception = TimelineGenerationError("not started")
-    for attempt in range(2):
+    generation_source = "llm"
+    for attempt in range(3):
         try:
             plan = call_card_game_llm(messages)
             events = validate_card_game_plan(plan, candidate_by_id, target_count)
             break
-        except TimelineGenerationError as exc:
+        except (TimelineGenerationError, RuntimeError) as exc:
             last_error = exc
-            if attempt == 0:
+            if attempt < 2:
                 messages = [
                     *messages,
                     {"role": "user", "content": f"上次回答有问题（{exc}），请重新生成。注意：clue 绝对不能出现精确年份、display_year 或公元/世纪等时间词，必须返回严格 JSON。"},
                 ]
     else:
-        raise last_error
+        logger.warning("card_game_round_fallback difficulty=%s topic=%s reason=%s", difficulty, topic, last_error)
+        events = build_card_game_fallback_events(filtered_candidates, target_count)
+        plan = {
+            "round_title": f"{topic or '历史'}卡牌排序",
+            "learning_goal": "依据可信历史事件梳理时间顺序，并理解事件之间的背景与影响。",
+            "selected_events": [],
+        }
+        generation_source = "trusted_candidates"
     selected_event_ids = [event["id"] for event in events]
     update_recent_event_ids(recent_store, student_id, topic, difficulty, selected_event_ids)
 
     logger.info(
-        "card_game_round_generated source=llm difficulty=%s topic=%s candidate_count=%s selected_ids=%s elapsed_ms=%s",
+        "card_game_round_generated source=%s difficulty=%s topic=%s candidate_count=%s selected_ids=%s elapsed_ms=%s",
+        generation_source,
         difficulty,
         topic,
         len(filtered_candidates),
@@ -290,6 +337,7 @@ def generate_card_game_round(
         "topic": topic or first_candidate["topic"],
         "events": events,
         "selected_event_ids": selected_event_ids,
+        "generation_source": generation_source,
     }
 
 

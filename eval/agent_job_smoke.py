@@ -10,9 +10,9 @@ BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-db_path = Path(tempfile.gettempdir()) / "edu-agent-job-smoke.sqlite3"
-for candidate in (db_path, Path(f"{db_path}-wal"), Path(f"{db_path}-shm")):
-    candidate.unlink(missing_ok=True)
+_temp_dir = tempfile.TemporaryDirectory(prefix="edu-agent-job-smoke-")
+db_path = Path(_temp_dir.name) / "agent-jobs.sqlite3"
+os.environ.pop("DATABASE_URL", None)
 os.environ["EDU_AGENT_DB_PATH"] = str(db_path)
 
 from db.engine import get_connection  # noqa: E402

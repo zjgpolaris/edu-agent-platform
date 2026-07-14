@@ -22,6 +22,9 @@ LATEST_MD = REPORTS_DIR / "latest.md"
 DEFAULT_LOCAL_EMBED_MODEL_PATH = Path("/Users/cengjiguang/.cache/modelscope/BAAI/bge-large-zh-v1___5")
 DEFAULT_SUITE_TIMEOUT_SECONDS = 300
 SUITE_TIMEOUT_SECONDS = {
+    # 45 quality cases exercise retrieval, generation, verification, fact-card
+    # extraction and LLM judging. They run with bounded concurrency.
+    "history_character_eval": 1200,
     # This suite intentionally exercises a long multi-step tutoring session.
     "auto_tutor_trajectory_eval": 900,
 }
@@ -713,6 +716,10 @@ def run_suite(name: str, *, verbose: bool = False) -> SuiteResult:
         # Keep routing/trajectory checks isolated from a developer's remote
         # Postgres connection; each suite already provisions its own SQLite DB.
         env.pop("DATABASE_URL", None)
+    if name == "history_character_eval":
+        # CORE runs one deterministic case per character (9 total). Set this
+        # variable explicitly to 0 for the extended 45-case quality sweep.
+        env.setdefault("HISTORY_CHARACTER_EVAL_LIMIT", "9")
 
     command = [sys.executable, str(script)]
     started = time.monotonic()
