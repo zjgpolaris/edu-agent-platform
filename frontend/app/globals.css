@@ -5915,6 +5915,22 @@ textarea {
   border: 1px solid rgba(183,66,43,0.28); border-radius: 10px; padding: 10px 12px;
   background: rgba(183,66,43,0.06); color: var(--cinnabar-dark); font-size: 13px; font-weight: 900;
 }
+.quiz-field-note, .quiz-cta-hint {
+  margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; letter-spacing: 0.03em;
+}
+.quiz-cta-hint { margin-top: -12px; }
+.quiz-inline-state {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  border-radius: 10px; padding: 10px 12px; font-size: 12px; line-height: 1.7;
+}
+.quiz-inline-state.error { border: 1px solid rgba(183,66,43,0.22); background: rgba(183,66,43,0.06); color: var(--cinnabar-dark); }
+.quiz-inline-state.empty { border: 1px solid rgba(15,107,95,0.14); background: rgba(15,107,95,0.05); color: var(--ink-soft); }
+.quiz-inline-state button, .quiz-inline-state a {
+  border: 1px solid rgba(183,66,43,0.24); border-radius: 999px; padding: 5px 10px;
+  background: rgba(255,252,244,0.82); color: var(--cinnabar); font-size: 12px; font-weight: 900;
+  text-decoration: none; cursor: pointer; font-family: inherit;
+}
+.quiz-inline-state button:hover, .quiz-inline-state a:hover { border-color: var(--cinnabar); background: rgba(183,66,43,0.06); }
 .quiz-cta {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   border: none; border-radius: var(--radius-sm); padding: 14px 36px;

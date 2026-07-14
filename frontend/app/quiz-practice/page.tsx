@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import { normalizeError } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -24,23 +26,65 @@ export default function QuizPracticePage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [results, setResults] = useState<GradeResult[]>([]);
+  const [booksLoading, setBooksLoading] = useState(true);
+  const [booksError, setBooksError] = useState("");
+  const [unitsLoading, setUnitsLoading] = useState(false);
+  const [unitsError, setUnitsError] = useState("");
   const [loading, setLoading] = useState(false);
   const [grading, setGrading] = useState(false);
   const [error, setError] = useState("");
   const [phase, setPhase] = useState<"setup" | "quiz" | "result">("setup");
   const [currentQ, setCurrentQ] = useState(0);
 
+  async function loadBooks(signal?: AbortSignal) {
+    setBooksLoading(true);
+    setBooksError("");
+    try {
+      const res = await fetch(`${API}/api/textbooks`, { signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setBooks((data.textbooks || []).filter((b: Textbook) => b.status === "ready"));
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setBooks([]);
+      setBooksError(normalizeError(e, "教材列表加载失败，请稍后重试"));
+    } finally {
+      if (!signal?.aborted) setBooksLoading(false);
+    }
+  }
+
+  async function loadUnits(nextBookId = bookId, signal?: AbortSignal) {
+    if (!nextBookId) { setUnits([]); setLessonId(""); return; }
+    setUnitsLoading(true);
+    setUnitsError("");
+    try {
+      const res = await fetch(`${API}/api/textbooks/${nextBookId}/toc`, { signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setUnits(data.units || []);
+      setLessonId("");
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setUnits([]);
+      setLessonId("");
+      setUnitsError(normalizeError(e, "课次目录加载失败，请稍后重试"));
+    } finally {
+      if (!signal?.aborted) setUnitsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    fetch(`${API}/api/textbooks`).then((r) => r.json())
-      .then((d) => setBooks((d.textbooks || []).filter((b: Textbook) => b.status === "ready")))
-      .catch(() => {});
+    const controller = new AbortController();
+    void loadBooks(controller.signal);
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
-    if (!bookId) { setUnits([]); setLessonId(""); return; }
-    fetch(`${API}/api/textbooks/${bookId}/toc`).then((r) => r.json())
-      .then((d) => { setUnits(d.units || []); setLessonId(""); })
-      .catch(() => {});
+    if (!bookId) { setUnits([]); setLessonId(""); setUnitsError(""); return; }
+    const controller = new AbortController();
+    void loadUnits(bookId, controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
 
   async function startQuiz() {
@@ -58,7 +102,7 @@ export default function QuizPracticePage() {
       setAnswers(qs.map((q) => ({ questionId: q.id, value: "" })));
       setResults([]); setCurrentQ(0); setPhase("quiz");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "出题失败");
+      setError(normalizeError(e, "出题失败，请稍后重试"));
     } finally { setLoading(false); }
   }
 
@@ -97,6 +141,14 @@ export default function QuizPracticePage() {
   const currentAns = answers.find((a) => a.questionId === questions[currentQ]?.id);
   const allAnswered = answers.every((a) => a.value.trim().length > 0);
   const progress = questions.length ? answers.filter((a) => a.value.trim()).length / questions.length : 0;
+  const setupDisabledReason = booksLoading ? "正在加载教材…"
+    : booksError ? "教材列表加载失败，请先重试"
+      : books.length === 0 ? "暂无可练习教材"
+        : !bookId ? "请先选择教材"
+          : unitsLoading ? "正在加载课次目录…"
+            : unitsError ? "课次目录加载失败，请先重试"
+              : !lessonId ? "请选择课次后开始"
+                : "";
 
   const pct = questions.length ? Math.round(correctCount / questions.length * 100) : 0;
 
@@ -121,19 +173,32 @@ export default function QuizPracticePage() {
                 <div className="quiz-field">
                   <label className="quiz-label">选择教材</label>
                   <div className="quiz-select-wrap">
-                    <select className="quiz-select" value={bookId} onChange={(e) => setBookId(e.target.value)}>
-                      <option value="">— 请选择 —</option>
+                    <select className="quiz-select" value={bookId} onChange={(e) => setBookId(e.target.value)} disabled={booksLoading || !!booksError || books.length === 0}>
+                      <option value="">{booksLoading ? "教材加载中…" : "— 请选择 —"}</option>
                       {books.map((b) => <option key={b.id} value={b.id}>{b.grade} · {b.book}</option>)}
                     </select>
                   </div>
+                  {booksLoading && <p className="quiz-field-note">正在加载可练习教材…</p>}
+                  {booksError && (
+                    <div className="quiz-inline-state error" role="alert">
+                      <span>{booksError}</span>
+                      <button type="button" onClick={() => void loadBooks()}>重试</button>
+                    </div>
+                  )}
+                  {!booksLoading && !booksError && books.length === 0 && (
+                    <div className="quiz-inline-state empty">
+                      <span>暂无可练习教材，教材解析完成后会出现在这里。</span>
+                      <Link href="/student/materials?tab=textbook">去教材目录</Link>
+                    </div>
+                  )}
                 </div>
 
-                {units.length > 0 && (
+                {bookId && (
                   <div className="quiz-field">
                     <label className="quiz-label">选择课次</label>
                     <div className="quiz-select-wrap">
-                      <select className="quiz-select" value={lessonId} onChange={(e) => setLessonId(e.target.value)}>
-                        <option value="">— 请选择 —</option>
+                      <select className="quiz-select" value={lessonId} onChange={(e) => setLessonId(e.target.value)} disabled={unitsLoading || !!unitsError || units.length === 0}>
+                        <option value="">{unitsLoading ? "课次加载中…" : "— 请选择 —"}</option>
                         {units.map((u) => (
                           <optgroup key={u.title} label={u.title}>
                             {u.lessons.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
@@ -141,6 +206,16 @@ export default function QuizPracticePage() {
                         ))}
                       </select>
                     </div>
+                    {unitsLoading && <p className="quiz-field-note">正在读取课次目录…</p>}
+                    {unitsError && (
+                      <div className="quiz-inline-state error" role="alert">
+                        <span>{unitsError}</span>
+                        <button type="button" onClick={() => void loadUnits(bookId)}>重试课次目录</button>
+                      </div>
+                    )}
+                    {!unitsLoading && !unitsError && units.length === 0 && (
+                      <p className="quiz-field-note">当前教材暂无可练习课次。</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -158,9 +233,10 @@ export default function QuizPracticePage() {
 
               {error && <p className="quiz-error">{error}</p>}
 
-              <button className="quiz-cta" onClick={startQuiz} disabled={loading || !bookId || !lessonId}>
+              <button className="quiz-cta" onClick={startQuiz} disabled={loading || !!setupDisabledReason}>
                 {loading ? <><span className="quiz-cta-spinner" />生成题目中…</> : "开始练习 →"}
               </button>
+              {setupDisabledReason && !loading && <p className="quiz-cta-hint">{setupDisabledReason}</p>}
             </div>
             <div className="quiz-setup-deco" aria-hidden>历</div>
           </div>

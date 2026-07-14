@@ -2,7 +2,7 @@
 
 **创建时间：** 2026-06-23
 **项目名称：** EduAgent - K-12 中文/历史 AI 教学平台
-**最后更新：** 2026-07-09
+**最后更新：** 2026-07-14
 
 ---
 
@@ -25,7 +25,7 @@
 EduAgent 是一个 K-12 中文/历史 AI 教学平台，采用前后端分离架构：
 
 - **后端：** FastAPI + LangGraph + Postgres/pgvector RAG
-- **前端：** Next.js 14 App Router + TypeScript
+- **前端：** Next.js 16 App Router + React 19 + TypeScript
 - **数据存储：** Supabase PostgreSQL（未配置时本地 SQLite 降级）+ pgvector 向量库
 - **LLM/Embedding：** 支持 Anthropic、Bailian、DashScope；生产 RAG embedding 走 OpenAI-compatible 托管 API（默认 Jina `jina-embeddings-v3`）
 
@@ -269,14 +269,14 @@ frontend/
 | `/learning-assistant` | 学习助手 |
 | `/student` | 学生学习工作台，含继续学习主卡（基于今日计划最高优先级任务）、今日计划、本周小结和 Agent 能力入口 |
 | `/student/auto-tutor` | AutoTutor 自主辅导 |
-| `/student/review` | 复习中心：`tab=review` 今日任务（SM-2 自适应练习），`tab=weakpoints` 错因档案馆/错题库（掌握度热力图、重点攻克、AutoTutor 精讲跳转）；旧 `/student/weakpoints` 仅作重定向安全网 |
+| `/student/review` | 复习中心：`tab=review` 今日任务（SM-2 自适应练习，区分加载失败/真空态，提交失败可重试），`tab=weakpoints` 错因档案馆/错题库（掌握度热力图、重点攻克、AutoTutor 精讲跳转）；旧 `/student/weakpoints` 仅作重定向安全网 |
 | `/student/materials` | 学习资料中心：`tab=materials` 我的资料上传/管理，`tab=textbook` 教材目录；资料/教材 tab 在移动端吸顶横向滚动；旧 `/student/textbook` 仅作重定向安全网 |
 | `/student/dashboard` | 学情总览：`tab=dashboard` 学情速览，`tab=report` 成长报告；`/student/report` 保留直达但不作为导航主入口 |
 | 学生/教师移动端导航 | 4 个高频底栏入口 + “更多”抽屉，支持当前更多项高亮、通知红点和关闭按钮 |
 | `/materials` | 资料库 |
 | `/materials/[materialId]` | 资料详情 |
 | `/student-dashboard` | 学生仪表板 |
-| `/textbook-learning` | 教材学习 |
+| `/textbook-learning` | 教材学习；学生智能练习 `/student/quiz` 复用教材测验生成能力，前端区分教材/课次加载中、加载失败、暂无可练习教材，并解释开始按钮禁用原因 |
 | `/essay-grade` | 作文批改 |
 | `/homework-grading` | 作业批改 |
 | `/history-map` | 历史地图 |
@@ -797,6 +797,7 @@ AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`aut
 - 学习偏好设置由后端 schema 驱动：`/student/settings` 读取 `GET /api/preferences/schema` 渲染维度和选项，再合并学生已保存偏好，避免前后端双写漂移
 - 学生作业提交前未答校验：在 `/student/assignments` 提交前列出未作答题号，学生可继续检查或确认仍然提交，避免无感提交空答案
 - 学习资源教材目录请求携带认证凭证，区分教材为空与加载失败；复习页移除 Google Fonts 外链，统一使用全局字体变量；周报接口失败时展示可理解失败态而非静默消失
+- 学生复习/智能练习状态反馈：今日复习页区分接口加载失败与真实无任务，复习提交失败显示可重试错误；智能练习页区分教材/课次加载中、加载失败、暂无可练习教材，并在开始按钮下方解释禁用原因（纯前端 UX，无后端 API 变化）
 
 ### 8. 教师端
 
@@ -815,6 +816,7 @@ AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`aut
 - 基于错题本和学生画像聚合班级高频薄弱点
 - 教师首页前置本轮讲评重点，班级学情页展示薄弱点人数占比
 - 教师首页今日教学队列：`GET /api/teacher/today-queue` 后端聚合待复核批改、未复核质检盲区、作业欠交/逾期、班级高频薄弱点与共性错题，返回已排序行动项、summary 与 source_errors；`TeacherTodayQueue` 前端单接口消费，给出教师当天优先处理动作；质检盲区来自 `GET /api/teacher/quality-dashboard` 的 `effectiveness.blind_spots_open`，讲评材料生成仅保留入口，不在首页自动触发 LLM
+- 教师作业管理体验：作业列表区分初始加载、加载失败、真实空列表和刷新失败保留旧数据，提供重试/新建作业 CTA；移动端作业列表、讲评洞察、学生答案、人工评阅和创建表单在 640px 以下改为更易触屏阅读与操作的纵向布局（纯前端 UX，无后端 API 变化）
 - 教学建议生成基于高频薄弱点人数和占比，输出讲评步骤、课堂活动、重点知识点和分层作业建议
 
 ---
@@ -1044,4 +1046,5 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-07 | 1.25.0 | 试点主路径 v1：新增 `scripts/seed_pilot_demo.py` 灌 pilot 教师/学生、作业提交、错题、review 占位任务与通知；学生 `ContinueLearningCard` 增加推荐理由和今日计划 summary chips；教师 `TeacherTodayQueue` 接入命题质量看板的未复核质检盲区；新增 `pilot_path_smoke.py`（6 例）验证 seed 幂等、学生今日计划、教师待办信号与不触发 LLM 的 review 占位链路 |
 | 2026-07-08 | 1.25.1 | CI Release Gate 收口：GitHub Actions 默认 PR/push 主门禁改为 `release-gate` 统一执行 `npm run release:gate`，前端 lint 独立快速反馈，quick-eval 保留为报告信号，Docker build 移至 main/manual；新增手动 `production-readiness` job 通过 `ready_url` 串联 `release:gate:prod --skip-frontend --ready-url`；修正 `Makefile verify-core-full` 转发到 `scripts/release_gate.py`；README/CI 文档/部署文档同步 release gate 与 shallow readiness / production RAG strict gate 边界 |
 | 2026-07-13 | 1.26.0 | AutoTutor 退出票与学习证据闭环：`auto_tutor.py` 新增 `phase=lesson/exit_ticket/completed`、`exit_ticket_result` 与 `evidence`，最后教学步骤后先进入退出票检验，退出票作答后才 finalize；`learning_events` 新增 `auto_tutor_exit_ticket` 语义并回写 `record_correct_evidence` / `record_weakpoint(source=auto_tutor_exit_ticket)`；`tutor_effectiveness_service.py` 统计退出票数/通过率与 `students_with_exit_ticket`；学生 AutoTutor 完成态展示学习证据卡，教师班级学情页展示退出票证据聚合；demo/pilot seed 预置退出票证据；扩展 `auto_tutor_trajectory_eval.py`、`tutor_effectiveness_smoke.py`、`pilot_path_smoke.py` |
+| 2026-07-14 | 1.26.1 | UX 状态反馈优化：学生复习页补加载失败/提交失败可重试反馈，智能练习页补教材/课次加载失败、空态与按钮禁用原因；教师作业列表补初始加载、错误重试、行动型空态与刷新失败保留旧数据提示，教师作业管理页 640px 以下优化列表、讲评洞察、答案与评阅/创建表单布局；同步前端技术栈为 Next.js 16 + React 19。纯前端 UX，后端 API 无变化 |
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import { normalizeError } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -91,6 +92,8 @@ const CSS = `
 .rv-empty-actions { display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:20px; }
 .rv-empty-link { border:1px solid rgba(183,66,43,.2);border-radius:999px;padding:8px 14px;color:var(--cinnabar);background:rgba(255,252,244,.72);font-size:12px;font-weight:700;text-decoration:none;letter-spacing:.08em; }
 .rv-empty-link:hover { border-color:var(--cinnabar);background:rgba(183,66,43,.06); }
+.rv-empty-link.btn { cursor:pointer;font-family:var(--font-body-family); }
+.rv-error-text { margin:18px 0 -4px;padding:9px 12px;border-radius:3px;background:rgba(183,66,43,.06);border:1px solid rgba(183,66,43,.18);color:var(--cinnabar-dark);font-size:12px;line-height:1.7;letter-spacing:.04em; }
 `;
 
 const WM = ["史", "文", "思", "知", "学", "悟", "道", "义"];
@@ -119,15 +122,33 @@ export default function ReviewTab() {
   const [revealed,   setRevealed]   = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cardKey,    setCardKey]    = useState(0);
+  const [error,      setError]      = useState("");
+  const [submitError,setSubmitError]= useState("");
+
+  async function loadSession(signal?: AbortSignal) {
+    if (!studentId || !token) return;
+    setLoading(true);
+    setError("");
+    setSubmitError("");
+    try {
+      const res = await fetch(`${API}/api/students/${studentId}/review/today`, { headers: authHeaders(token), signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setSession(await res.json());
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setError(normalizeError(e, "今日复习加载失败，请稍后重试"));
+      setSession(null);
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!studentId || !token) return;
-    let dead = false;
-    fetch(`${API}/api/students/${studentId}/review/today`, { headers: authHeaders(token) })
-      .then(r => r.json())
-      .then(d => { if (!dead) { setSession(d); setLoading(false); } })
-      .catch(() => { if (!dead) setLoading(false); });
-    return () => { dead = true; };
+    const controller = new AbortController();
+    void loadSession(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId, token]);
 
   useEffect(() => {
@@ -140,19 +161,27 @@ export default function ReviewTab() {
   async function handleSubmit() {
     if (!selected || !session || !studentId || !token || submitting) return;
     setSubmitting(true);
+    setSubmitError("");
     const task = session.tasks[current];
     const is_correct = selected.charAt(0) === task.answer.charAt(0);
-    const res = await fetch(`${API}/api/students/${studentId}/review/submit`, {
-      method: "POST",
-      headers: { ...authHeaders(token), "Content-Type": "application/json" },
-      body: JSON.stringify({ task_index: current, is_correct }),
-    });
-    const data = await res.json();
-    setSession(prev => prev ? {
-      ...prev, completed: data.completed,
-      tasks: prev.tasks.map((t, i) => i === current ? { ...t, done: true, correct: is_correct } : t),
-    } : prev);
-    setRevealed(true); setSubmitting(false);
+    try {
+      const res = await fetch(`${API}/api/students/${studentId}/review/submit`, {
+        method: "POST",
+        headers: { ...authHeaders(token), "Content-Type": "application/json" },
+        body: JSON.stringify({ task_index: current, is_correct }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setSession(prev => prev ? {
+        ...prev, completed: data.completed,
+        tasks: prev.tasks.map((t, i) => i === current ? { ...t, done: true, correct: is_correct } : t),
+      } : prev);
+      setRevealed(true);
+    } catch (e) {
+      setSubmitError(normalizeError(e, "提交失败，请稍后重试"));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleNext() {
@@ -172,6 +201,23 @@ export default function ReviewTab() {
           <div className="rv-load-dot" /><div className="rv-load-dot" /><div className="rv-load-dot" />
         </div>
         <div className="rv-load-txt">正在生成今日复习</div>
+      </div>
+    </div>
+  );
+
+  if (error && !session) return (
+    <div className="rv">
+      <InjectStyles />
+      <div className="rv-inner">
+        <div className="rv-empty">
+          <div className="rv-empty-c">叹</div>
+          <div className="rv-empty-t">今日复习加载失败</div>
+          <div className="rv-empty-s">{error}<br />可能是网络波动或登录状态过期，请稍后重试</div>
+          <div className="rv-empty-actions">
+            <button type="button" className="rv-empty-link btn" onClick={() => void loadSession()}>重新加载</button>
+            <Link href="/student/quiz" className="rv-empty-link">做智能练习</Link>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -282,6 +328,7 @@ export default function ReviewTab() {
                 <span className="rv-expl-lbl">解析</span>{task.explanation}
               </div>
             )}
+            {submitError && <p className="rv-error-text" role="alert">{submitError}</p>}
             <div className="rv-actions">
               {!revealed ? (
                 <button type="button" disabled={!selected || submitting} onClick={handleSubmit} className="rv-btn rv-btn-outline">

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import { normalizeError } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -70,6 +71,8 @@ export default function TeacherAssignmentsPage() {
   const [tab, setTab] = useState<"create" | "list">("list");
   const [students, setStudents] = useState<Student[]>([]);
   const [assignments, setAssignments] = useState<AssignmentSummary[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignmentsError, setAssignmentsError] = useState("");
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -148,8 +151,17 @@ export default function TeacherAssignmentsPage() {
   }
   async function loadAssignments() {
     if (!user?.token) return;
-    const res = await fetch(`${API}/api/teacher/assignments`, { headers: authHeaders(user.token) });
-    if (res.ok) setAssignments((await res.json()).assignments || []);
+    setAssignmentsLoading(true);
+    setAssignmentsError("");
+    try {
+      const res = await fetch(`${API}/api/teacher/assignments`, { headers: authHeaders(user.token) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setAssignments((await res.json()).assignments || []);
+    } catch (e) {
+      setAssignmentsError(normalizeError(e, "作业列表加载失败，请稍后重试"));
+    } finally {
+      setAssignmentsLoading(false);
+    }
   }
   async function loadDetail(id: string) {
     if (!user?.token) return;
@@ -374,9 +386,46 @@ export default function TeacherAssignmentsPage() {
 
         {tab === "list" && (
           <section>
-            {assignments.length === 0 ? (
-              <p className="tasg-empty">还没有布置作业，点「新建作业」开始。</p>
-            ) : assignments.map((a) => (
+            {assignmentsLoading && assignments.length === 0 ? (
+              <div className="tasg-state-card">
+                <span className="tasg-state-icon">业</span>
+                <div>
+                  <p className="tasg-state-title">正在加载作业列表…</p>
+                  <p className="tasg-state-text">稍后将展示完成率、待评阅与讲评洞察。</p>
+                </div>
+              </div>
+            ) : assignmentsError && assignments.length === 0 ? (
+              <div className="tasg-state-card error" role="alert">
+                <span className="tasg-state-icon">叹</span>
+                <div>
+                  <p className="tasg-state-title">作业列表加载失败</p>
+                  <p className="tasg-state-text">{assignmentsError}</p>
+                  <div className="tasg-state-actions">
+                    <button type="button" onClick={loadAssignments}>重新加载</button>
+                    <button type="button" onClick={() => setTab("create")}>新建作业</button>
+                  </div>
+                </div>
+              </div>
+            ) : assignments.length === 0 ? (
+              <div className="tasg-state-card empty">
+                <span className="tasg-state-icon">布</span>
+                <div>
+                  <p className="tasg-state-title">还没有布置作业</p>
+                  <p className="tasg-state-text">可以从知识点 AI 出题，也可以手动录入题目。发布后会自动汇总提交率、薄弱点与讲评洞察。</p>
+                  <div className="tasg-state-actions">
+                    <button type="button" onClick={() => setTab("create")}>新建第一份作业</button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {assignmentsError && (
+                  <div className="tasg-refresh-warning" role="alert">
+                    <span>列表刷新失败，当前显示上次结果。</span>
+                    <button type="button" onClick={loadAssignments}>重试</button>
+                  </div>
+                )}
+                {assignments.map((a) => (
               <div key={a.id} className="tasg-row tasg-row-link" onClick={() => { setDetail(null); loadDetail(a.id); }}>
                 <div className="tasg-row-main">
                   <span className="tasg-row-title">{a.title}</span>
@@ -404,7 +453,9 @@ export default function TeacherAssignmentsPage() {
                   <span className="tasg-row-arrow">详情 →</span>
                 </div>
               </div>
-            ))}
+                ))}
+              </>
+            )}
           </section>
         )}
 
@@ -797,6 +848,16 @@ const CSS = `
 .tasg-error { font-size:13px; color:#c0392b; margin:8px 0; }
 .tasg-msg { font-size:13px; color:var(--jade,#2d6a4f); margin:8px 0; }
 .tasg-empty { font-size:13px; color:var(--muted,#7a7068); padding:20px 0; }
+.tasg-state-card { display:flex; gap:14px; align-items:flex-start; background:#fff; border:1px solid #e5e0d5; border-radius:12px; padding:18px; margin-bottom:12px; box-shadow:0 8px 24px rgba(60,45,30,.05); }
+.tasg-state-card.error { border-color:rgba(183,66,43,.25); background:#fff7f4; }
+.tasg-state-card.empty { background:#fffaf3; }
+.tasg-state-icon { flex:0 0 42px; width:42px; height:42px; display:grid; place-items:center; border-radius:10px; background:rgba(183,66,43,.08); color:var(--cinnabar,#b7422b); font-weight:800; font-size:22px; }
+.tasg-state-title { margin:0 0 5px; font-size:15px; font-weight:800; color:var(--ink,#1a1612); }
+.tasg-state-text { margin:0; font-size:13px; line-height:1.75; color:var(--muted,#7a7068); }
+.tasg-state-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.tasg-state-actions button, .tasg-refresh-warning button { border:1px solid rgba(183,66,43,.25); border-radius:999px; padding:6px 12px; background:#fff; color:var(--cinnabar,#b7422b); font-size:12px; font-weight:700; cursor:pointer; }
+.tasg-state-actions button:hover, .tasg-refresh-warning button:hover { border-color:var(--cinnabar,#b7422b); background:rgba(183,66,43,.06); }
+.tasg-refresh-warning { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; border:1px solid rgba(183,66,43,.18); border-radius:10px; padding:9px 12px; margin-bottom:12px; background:rgba(183,66,43,.05); color:var(--cinnabar,#b7422b); font-size:12px; }
 .tasg-row { display:flex; justify-content:space-between; align-items:center; gap:12px; background:#fff;
   border:1px solid #e5e0d5; border-radius:10px; padding:14px 16px; margin-bottom:10px; }
 .tasg-row-main { display:flex; flex-direction:column; gap:4px; }
@@ -939,4 +1000,40 @@ const CSS = `
 .tasg-diff-groups-name { font-size:13px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .tasg-diff-groups-select { border:1px solid #c4b5fd; border-radius:7px; padding:4px 8px; font-size:12px; background:#fff; color:var(--ink,#1a1612); cursor:pointer; }
 .tasg-diff-groups-select:focus { outline:none; border-color:#7c3aed; }
+@media (max-width:640px) {
+  .tasg-inner { padding:28px 14px 116px; }
+  .tasg-title { font-size:24px; }
+  .tasg-tabs { overflow-x:auto; padding-bottom:1px; }
+  .tasg-tab { flex:0 0 auto; }
+  .tasg-state-card { padding:15px; }
+  .tasg-row { flex-direction:column; align-items:stretch; padding:14px; }
+  .tasg-row-main { min-width:0; }
+  .tasg-row-title { overflow-wrap:anywhere; line-height:1.45; }
+  .tasg-row-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; width:100%; }
+  .tasg-stat { background:#f8f4ef; border-radius:8px; padding:8px 4px; }
+  .tasg-row-arrow { grid-column:1 / -1; justify-self:end; margin-left:0; }
+  .tasg-field-row, .tasg-ai-row { flex-direction:column; align-items:stretch; }
+  .tasg-ai-btn { margin-left:0; width:100%; min-height:42px; }
+  .tasg-answer { align-items:flex-start; flex-direction:column; }
+  .tasg-select { width:100%; }
+  .tasg-qhead { flex-wrap:wrap; }
+  .tasg-qhead .tasg-select { flex:1 1 160px; }
+  .tasg-insight-head, .tasg-lecture-head { align-items:stretch; }
+  .tasg-copy-btn { min-height:36px; }
+  .tasg-insight-metrics { grid-template-columns:repeat(2,1fr); }
+  .tasg-insight-grid { grid-template-columns:1fr; }
+  .tasg-blindspot { margin-left:0; margin-top:4px; }
+  .tasg-blindspot-actions { margin-left:0; flex-wrap:wrap; }
+  .tasg-lecture-topic-head { align-items:flex-start; flex-direction:column; }
+  .tasg-diff-groups-row { align-items:stretch; flex-direction:column; }
+  .tasg-diff-groups-name { white-space:normal; }
+  .tasg-ans-row { flex-wrap:wrap; align-items:flex-start; }
+  .tasg-ans-prompt { flex:1 1 100%; max-width:100%; white-space:normal; overflow:visible; text-overflow:clip; }
+  .tasg-ans-detail { white-space:normal; overflow-wrap:anywhere; }
+  .tasg-ans-tag { margin-left:0; }
+  .tasg-review-row { flex-direction:column; align-items:stretch; }
+  .tasg-review-score { width:100%; }
+  .tasg-review-btn { width:100%; min-height:42px; }
+  .tasg-publish { min-height:46px; }
+}
 `;
