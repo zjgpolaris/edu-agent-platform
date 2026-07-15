@@ -14,11 +14,21 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import create_engine, event as sa_event, text
 
-_DEFAULT_DB = Path(
-    os.getenv("EDU_AGENT_DB_PATH")
-    or (Path(__file__).resolve().parents[2] / ".data" / "edu_agent.sqlite3")
-)
-_DEFAULT_DB.parent.mkdir(parents=True, exist_ok=True)
+
+def _default_sqlite_path() -> Path:
+    """Return the local SQLite path for repo and Docker layouts."""
+    explicit = os.getenv("EDU_AGENT_DB_PATH")
+    if explicit:
+        return Path(explicit)
+
+    module_path = Path(__file__).resolve()
+    # Local source tree: <repo>/backend/db/engine.py -> <repo>/.data
+    # Docker image:       /app/db/engine.py          -> /app/.data
+    app_root = module_path.parents[2] if module_path.parents[1].name == "backend" else module_path.parents[1]
+    return app_root / ".data" / "edu_agent.sqlite3"
+
+
+_DEFAULT_DB = _default_sqlite_path()
 
 
 def _normalize_database_url(url: str) -> str:
@@ -31,6 +41,9 @@ def _normalize_database_url(url: str) -> str:
 
 
 DATABASE_URL = _normalize_database_url(os.getenv("DATABASE_URL", f"sqlite:///{_DEFAULT_DB}"))
+
+if DATABASE_URL.startswith("sqlite"):
+    _DEFAULT_DB.parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 

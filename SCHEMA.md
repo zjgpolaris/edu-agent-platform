@@ -490,7 +490,7 @@ frontend/
 
 ### PostgreSQL / SQLite 数据库
 
-后端数据库通过 SQLAlchemy 统一访问，`DATABASE_URL` 设置后使用 PostgreSQL（当前 Supabase），未设置时回退到本地 SQLite。Alembic 迁移位于 `backend/alembic/`，迁移时优先读取 `DIRECT_URL`，应用运行读取 `DATABASE_URL`。RAG 向量检索依赖 PostgreSQL `vector` 扩展；SQLite 本地库仅支持非向量功能与降级路径。`GET /api/debug/rag/health` 会显式验证 pgvector 扩展、`rag_documents` 表、collection 索引条数、embedding API 与直接向量查询，避免业务层降级掩盖生产 RAG 故障。
+后端数据库通过 SQLAlchemy 统一访问，`DATABASE_URL` 设置后使用 PostgreSQL（当前 Supabase），未设置时回退到本地 SQLite。默认 SQLite 路径按运行布局解析：本地源码树使用仓库根目录 `.data/edu_agent.sqlite3`，Docker/Render 镜像中使用 `/app/.data/edu_agent.sqlite3`，也可用 `EDU_AGENT_DB_PATH` 显式覆盖，避免容器中误写根目录 `/.data`。Alembic 迁移位于 `backend/alembic/`，迁移时优先读取 `DIRECT_URL`，应用运行读取 `DATABASE_URL`。RAG 向量检索依赖 PostgreSQL `vector` 扩展；SQLite 本地库仅支持非向量功能与降级路径。`GET /api/debug/rag/health` 会显式验证 pgvector 扩展、`rag_documents` 表、collection 索引条数、embedding API 与直接向量查询，避免业务层降级掩盖生产 RAG 故障。
 
 #### rag_documents 表
 
@@ -1047,4 +1047,5 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-08 | 1.25.1 | CI Release Gate 收口：GitHub Actions 默认 PR/push 主门禁改为 `release-gate` 统一执行 `npm run release:gate`，前端 lint 独立快速反馈，quick-eval 保留为报告信号，Docker build 移至 main/manual；新增手动 `production-readiness` job 通过 `ready_url` 串联 `release:gate:prod --skip-frontend --ready-url`；修正 `Makefile verify-core-full` 转发到 `scripts/release_gate.py`；README/CI 文档/部署文档同步 release gate 与 shallow readiness / production RAG strict gate 边界 |
 | 2026-07-13 | 1.26.0 | AutoTutor 退出票与学习证据闭环：`auto_tutor.py` 新增 `phase=lesson/exit_ticket/completed`、`exit_ticket_result` 与 `evidence`，最后教学步骤后先进入退出票检验，退出票作答后才 finalize；`learning_events` 新增 `auto_tutor_exit_ticket` 语义并回写 `record_correct_evidence` / `record_weakpoint(source=auto_tutor_exit_ticket)`；`tutor_effectiveness_service.py` 统计退出票数/通过率与 `students_with_exit_ticket`；学生 AutoTutor 完成态展示学习证据卡，教师班级学情页展示退出票证据聚合；demo/pilot seed 预置退出票证据；扩展 `auto_tutor_trajectory_eval.py`、`tutor_effectiveness_smoke.py`、`pilot_path_smoke.py` |
 | 2026-07-14 | 1.26.1 | UX 状态反馈优化：学生复习页补加载失败/提交失败可重试反馈，智能练习页补教材/课次加载失败、空态与按钮禁用原因；教师作业列表补初始加载、错误重试、行动型空态与刷新失败保留旧数据提示，教师作业管理页 640px 以下优化列表、讲评洞察、答案与评阅/创建表单布局；同步前端技术栈为 Next.js 16 + React 19。纯前端 UX，后端 API 无变化 |
+| 2026-07-14 | 1.26.2 | 修复 Render/Docker 默认 SQLite 路径：`backend/db/engine.py` 按运行布局解析默认 `.data`，本地源码树使用仓库根 `.data/edu_agent.sqlite3`，Docker 镜像使用 `/app/.data/edu_agent.sqlite3`，并仅在 SQLite fallback 时创建目录，避免未设置 `DATABASE_URL` 的部署环境尝试创建 `/.data` 导致 PermissionError |
 
