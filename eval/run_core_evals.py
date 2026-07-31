@@ -52,6 +52,7 @@ CORE_SUITES = [
     "agent_ops_smoke",
     "autotutor_session_recovery_smoke",
     "learning_assistant_smoke",
+    "intent_accuracy_eval",
     "material_rag_smoke",
     "release_gate_smoke",
     "student_profile_smoke",
@@ -155,6 +156,7 @@ SUITE_FILES = {
     "textbook_trace_smoke": EVAL_DIR / "textbook_trace_smoke.py",
     "game_generation_eval": EVAL_DIR / "game_generation_eval.py",
     "learning_assistant_smoke": EVAL_DIR / "learning_assistant_smoke.py",
+    "intent_accuracy_eval": EVAL_DIR / "intent_accuracy_eval.py",
     "material_rag_smoke": EVAL_DIR / "material_rag_smoke.py",
     "student_profile_smoke": EVAL_DIR / "student_profile_smoke.py",
     "homework_grading_smoke": EVAL_DIR / "homework_grading_smoke.py",
@@ -227,6 +229,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "category": "rag",
         "kind": "quality",
         "priority": "p0",
+    },
+    "intent_accuracy_eval": {
+        "label": "意图识别准确率",
+        "category": "agent",
+        "kind": "quality",
+        "priority": "p1",
     },
     "rag_inspector_smoke": {
         "label": "RAG Inspector Smoke",

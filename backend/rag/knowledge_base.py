@@ -14,7 +14,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Literal, TypeAlias, TypedDict
+from typing import Any, Literal, TypeAlias, TypedDict
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -758,6 +758,80 @@ def keyword_search(
     return [doc for doc, _ in sorted(ranked.values(), key=lambda item: item[1], reverse=True)[:k]]
 
 
+# ---------------------------------------------------------------------------
+# BM25 retrieval — handles exact proper nouns (人名、年号、战役名) that
+# pure vector search misses and keyword heuristics underweight.
+# ---------------------------------------------------------------------------
+_BM25_INDEX_CACHE: dict[str, tuple[float, Any, list[Document]]] = {}
+_BM25_CACHE_TTL = 600  # seconds
+
+
+def _bm25_tokenize(text: str) -> list[str]:
+    """Character-level tokenizer: CJK unigrams + bigrams + ASCII terms."""
+    compact = _normalize_compact(text)
+    chars = re.findall(r"[一-鿿]|[a-z0-9]+", compact)
+    tokens = [c for c in chars if c not in QUERY_STOPWORDS]
+    # Add CJK bigrams for richer matching
+    for i in range(len(chars) - 1):
+        if len(chars[i]) == 1 and len(chars[i + 1]) == 1:
+            bigram = chars[i] + chars[i + 1]
+            if bigram not in QUERY_STOPWORDS:
+                tokens.append(bigram)
+    return tokens or ["<empty>"]
+
+
+def _build_bm25_index(docs: list[Document]) -> Any:
+    from rank_bm25 import BM25Okapi
+    tokenized = [_bm25_tokenize(doc.page_content) for doc in docs]
+    return BM25Okapi(tokenized)
+
+
+def _get_bm25_index(
+    collection: str, metadata_filter: MetadataFilter | None
+) -> tuple[Any, list[Document]] | None:
+    """Return cached (bm25_index, docs) or build fresh. Returns None if no docs."""
+    cache_key = (
+        collection
+        if metadata_filter is None
+        else f"{collection}:{json.dumps(metadata_filter, sort_keys=True)}"
+    )
+    cached = _BM25_INDEX_CACHE.get(cache_key)
+    if cached and time.time() - cached[0] < _BM25_CACHE_TTL:
+        _, bm25, docs = cached
+        return bm25, docs
+    docs = _keyword_candidates(collection, metadata_filter, limit=800)
+    if not docs:
+        return None
+    try:
+        bm25 = _build_bm25_index(docs)
+    except Exception:
+        return None
+    _BM25_INDEX_CACHE[cache_key] = (time.time(), bm25, docs)
+    return bm25, docs
+
+
+def bm25_search(
+    collection: str,
+    query: str,
+    k: int = 5,
+    metadata_filter: MetadataFilter | None = None,
+) -> list[Document]:
+    """BM25 keyword retrieval — strong on exact proper nouns and rare terms."""
+    try:
+        result = _get_bm25_index(collection, metadata_filter)
+        if result is None:
+            return []
+        bm25, docs = result
+        tokens = _bm25_tokenize(query)
+        scores = bm25.get_scores(tokens)
+        top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
+        return [docs[i] for i in top_indices if scores[i] > 0]
+    except ImportError:
+        return []
+    except Exception:
+        return []
+
+
 def rerank_documents(
     query: str,
     docs: list[Document],
@@ -932,6 +1006,7 @@ def _search_with_scores_impl(
         metadata_hints=metadata_hints,
         fetch_k=max(limit * 8, 80),
     )
+    bm25_docs = bm25_search(collection, query, k=max(limit, k), metadata_filter=metadata_filter)
 
     merged: dict[tuple[str, str, str, str], Document] = {}
     source_modes: dict[tuple[str, str, str, str], str] = {}
@@ -947,6 +1022,14 @@ def _search_with_scores_impl(
             merged[key] = doc
             source_modes[key] = "keyword"
         elif source_modes.get(key) == "vector":
+            source_modes[key] = "hybrid"
+
+    for doc in bm25_docs:
+        key = _doc_key(doc)
+        if key not in merged:
+            merged[key] = doc
+            source_modes[key] = "bm25"
+        elif source_modes.get(key) in {"vector", "keyword"}:
             source_modes[key] = "hybrid"
 
     return rerank_documents(query, list(merged.values()), metadata_hints, vector_ranks, source_modes, limit)[:k]

@@ -180,7 +180,8 @@ def _fallback_history_answer(sources: list[dict[str, Any]]) -> str:
 
 
 def _generate_quiz_from_sources(message: str, sources: list[dict[str, Any]], count: int = 3) -> list[dict[str, Any]]:
-    import json as _json
+    import json as _json  # noqa: F401 kept for other local uses
+    from structured_output import StructuredOutputError, invoke_structured
     context = build_untrusted_context_block(sources[:4], title="史料")
     prompt = [
         {"role": "system", "content": (
@@ -192,14 +193,8 @@ def _generate_quiz_from_sources(message: str, sources: list[dict[str, Any]], cou
         {"role": "user", "content": f"根据以下史料，围绕\"{message}\"出 {count} 道题：\n{context}"},
     ]
     try:
-        raw = llm_fast.invoke(prompt).content.strip()
-        # strip markdown code fences if present
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        return _json.loads(raw.strip())
-    except Exception:
+        return invoke_structured(llm_fast, prompt, expect="list", fallback=[])
+    except StructuredOutputError:
         return []
 
 

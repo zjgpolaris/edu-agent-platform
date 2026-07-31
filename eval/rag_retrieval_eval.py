@@ -57,6 +57,15 @@ def run_case(case: dict[str, Any]) -> dict[str, Any]:
     top = docs[0] if docs else None
     top_scored = scored_docs[0] if scored_docs else None
 
+    # Compute reciprocal rank (MRR component)
+    rr = 0.0
+    first_hit_rank = None
+    for rank, doc in enumerate(docs, start=1):
+        if _contains_keyword(doc, keywords):
+            rr = 1.0 / rank
+            first_hit_rank = rank
+            break
+
     return {
         "name": case["name"],
         "source_returned": bool(docs),
@@ -69,6 +78,8 @@ def run_case(case: dict[str, Any]) -> dict[str, Any]:
         "top_score": round(float(top_scored["score"]), 3) if top_scored else 0.0,
         "top_mode": top_scored["source_mode"] if top_scored else "",
         "sources": len(docs),
+        "rr": rr,
+        "first_hit_rank": first_hit_rank,
     }
 
 
@@ -93,16 +104,18 @@ def main() -> None:
         )
 
     total = len(results)
+    mrr = sum(item["rr"] for item in results) / total if total else 0.0
     metrics = {
         "source_return_rate": sum(item["source_returned"] for item in results),
         "top1_keyword_hit_rate": sum(item["top1_keyword_hit"] for item in results),
-        "any_keyword_hit_rate": sum(item["any_keyword_hit"] for item in results),
+        "any_keyword_hit_rate (Recall@5)": sum(item["any_keyword_hit"] for item in results),
         "top1_metadata_hit_rate": sum(item["top1_metadata_hit"] for item in results),
         "any_metadata_hit_rate": sum(item["any_metadata_hit"] for item in results),
     }
     print()
     for name, count in metrics.items():
         print(f"{name}={count}/{total}")
+    print(f"MRR@5={mrr:.3f}")
 
     failures = [item["name"] for item in results if not item["source_returned"] or not item["any_keyword_hit"]]
     if failures:

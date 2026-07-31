@@ -8,6 +8,7 @@ from typing import Any, Iterator
 
 from llm_config import llm_fast as llm, llm_quality as llm_opus
 from rag.knowledge_base import search_with_scores
+from structured_output import StructuredOutputError, parse_json_object
 from tracing import truncate_text
 
 
@@ -135,11 +136,8 @@ def stream_map_narrate(event_id: str, user_query: str = "") -> Iterator[dict[str
     try:
         resp = llm.invoke([{"role": "user", "content": actions_prompt}])
         content = resp.content if hasattr(resp, "content") else str(resp)
-        # 提取JSON
-        start = content.find("{")
-        end = content.rfind("}") + 1
-        actions_data = json.loads(content[start:end]) if start >= 0 else {}
-    except Exception:
+        actions_data = parse_json_object(content)
+    except (StructuredOutputError, Exception):
         actions_data = {"related_event_ids": [], "actions": [{"action": "fly_to", "lat": event["lat"], "lng": event["lng"], "zoom": 6}]}
 
     yield {"event": "map_actions", "data": actions_data}
@@ -174,10 +172,8 @@ def handle_chat_query(query: str) -> dict[str, Any]:
     try:
         resp = llm.invoke([{"role": "user", "content": intent_prompt}])
         content = resp.content if hasattr(resp, "content") else str(resp)
-        start = content.find("{")
-        end = content.rfind("}") + 1
-        intent_data = json.loads(content[start:end]) if start >= 0 else {}
-    except Exception:
+        intent_data = parse_json_object(content)
+    except (StructuredOutputError, Exception):
         intent_data = {"intent": "ask", "dynasty": None, "event_type": None, "keywords": [], "response": "史官未能理解阁下之意"}
 
     intent = intent_data.get("intent", "ask")
