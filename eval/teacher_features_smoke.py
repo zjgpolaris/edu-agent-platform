@@ -109,7 +109,7 @@ def teacher_materials_returns_list() -> None:
 
 
 def teaching_suggestions_returns_schema() -> None:
-    with patch("api.main.llm_fast.invoke", return_value=_FakeResponse()):
+    with patch("api.routers.teacher.llm_fast.invoke", return_value=_FakeResponse()):
         response = client.post(
             "/api/teacher/teaching-suggestions",
             headers={**TEACHER_HEADERS, "Content-Type": "application/json"},

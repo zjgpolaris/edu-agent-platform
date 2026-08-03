@@ -1,97 +1,67 @@
-"""Legacy/simple smoke runner.
+"""Smoke runner — 自动发现 eval/ 下所有 *_smoke.py 文件，无需手动注册。
 
-Preferred entry point: eval/run_core_evals.py, which records suite metadata and writes
-JSON/Markdown reports. This file is kept for quick direct script compatibility.
+新增 smoke 测试文件后直接运行即可，无需修改本文件。
+优先入口是 eval/run_core_evals.py（会生成 JSON/Markdown 报告）；
+本文件用于快速本地验证。
 """
 import subprocess
 import sys
 from pathlib import Path
 
-# Smoke tests to run (lightweight, no external dependencies)
-SMOKE_TESTS = [
-    "material_rag_smoke.py",
-    "material_rag_isolation_smoke.py",
-    "tool_registry_smoke.py",
-    "learning_assistant_smoke.py",
-    "guardrails_smoke.py",
-    "weakpoints_smoke.py",
-    "student_profile_smoke.py",
-    "homework_grading_smoke.py",
-    "learning_closure_smoke.py",
-    "teacher_features_smoke.py",
-    "variant_question_smoke.py",
-    "lecture_review_smoke.py",
-    "mastery_heatmap_smoke.py",
-    "difficulty_smoke.py",
-    "calendar_smoke.py",
-    "urge_notification_smoke.py",
-    "tiered_assignment_smoke.py",
-    "class_wrong_analysis_smoke.py",
-    "tutor_effectiveness_smoke.py",
-    "check_in_smoke.py",
-    "preference_smoke.py",
-    "root_cause_smoke.py",
-    "class_matrix_smoke.py",
-]
+EVAL_DIR = Path(__file__).parent
+
+# 按文件名排序，确保运行顺序稳定
+SMOKE_TESTS: list[Path] = sorted(EVAL_DIR.glob("*_smoke.py"))
 
 
-def run_test(test_file: str) -> tuple[bool, str]:
+def run_test(test_path: Path) -> tuple[bool, str]:
     """运行单个测试，返回 (成功, 输出)"""
     result = subprocess.run(
-        [sys.executable, str(test_file)],
+        [sys.executable, str(test_path)],
         capture_output=True,
         text=True,
-        cwd=Path(__file__).parent.parent,
+        cwd=EVAL_DIR.parent,
     )
     return result.returncode == 0, result.stdout + result.stderr
 
 
-def main():
-    """Run the legacy simple smoke list without report generation."""
-    eval_dir = Path(__file__).parent
-    print(f"Running smoke tests from {eval_dir}...\n")
+def main() -> int:
+    print(f"Auto-discovered {len(SMOKE_TESTS)} smoke tests in {EVAL_DIR}\n")
 
     passed = 0
     failed = 0
-    results = []
+    results: list[tuple[str, bool, str]] = []
 
-    for test_file in SMOKE_TESTS:
-        test_path = eval_dir / test_file
-        if not test_path.exists():
-            print(f"⚠️  {test_file} not found, skipping")
-            continue
-
-        print(f"Running {test_file}...")
+    for test_path in SMOKE_TESTS:
+        name = test_path.name
+        print(f"Running {name}...")
         success, output = run_test(test_path)
 
         if success:
-            print(f"✅ {test_file} passed")
+            print(f"✅ {name} passed")
             passed += 1
-            results.append((test_file, True, ""))
+            results.append((name, True, ""))
         else:
-            print(f"❌ {test_file} failed")
+            print(f"❌ {name} failed")
             failed += 1
-            results.append((test_file, False, output))
-            # Print error output
+            results.append((name, False, output))
             if output:
                 print(f"   Error: {output[:200]}")
         print()
 
-    # Summary
     total = passed + failed
     print("=" * 50)
     print(f"Smoke tests summary: {passed}/{total} passed")
-    if failed > 0:
-        print(f"\nFailed tests:")
-        for test_file, success, output in results:
+    if failed:
+        print("\nFailed tests:")
+        for name, success, output in results:
             if not success:
-                print(f"  - {test_file}")
+                print(f"  - {name}")
                 if output:
-                    print(f"    {output}")
+                    print(f"    {output[:300]}")
         return 1
-    else:
-        print("✅ All smoke tests passed!")
-        return 0
+    print("✅ All smoke tests passed!")
+    return 0
 
 
 if __name__ == "__main__":

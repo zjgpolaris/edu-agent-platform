@@ -199,6 +199,18 @@ SUITE_FILES = {
     "class_matrix_smoke": EVAL_DIR / "class_matrix_smoke.py",
     "knowledge_graph_smoke": EVAL_DIR / "knowledge_graph_smoke.py",
 }
+
+# ── 自动补全：glob 发现磁盘上存在但未手动注册的 *_smoke.py / *_eval.py ────────
+# 新增 smoke 测试时只需创建文件，无需修改本列表。
+# 手动注册的条目优先（超时/元数据配置仍需手动添加）。
+for _p in sorted(EVAL_DIR.glob("*_smoke.py")) + sorted(EVAL_DIR.glob("*_eval.py")):
+    _key = _p.stem
+    if _key not in SUITE_FILES:
+        SUITE_FILES[_key] = _p
+        # 新发现的 suite 默认追加到 SMOKE_SUITES（不进 CORE_SUITES/QUICK_SUITES，保持稳定）
+        if _key not in SMOKE_SUITES:
+            SMOKE_SUITES.append(_key)
+
 SUITE_METADATA: dict[str, dict[str, str]] = {
     "agent_ops_smoke": {
         "label": "AgentOps 聚合 Smoke",

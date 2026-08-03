@@ -26,7 +26,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register(studentId, password, displayName || undefined);
-      router.push("/student-home");
+      router.push("/student/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "注册失败");
     } finally {

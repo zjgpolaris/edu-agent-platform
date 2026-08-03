@@ -23,7 +23,9 @@ except FileNotFoundError:
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
-from backend.api.main import api_ready, app, eval_latest, eval_run, load_eval_runner  # noqa: E402
+from api.main import app  # noqa: E402
+from api.routers.debug import api_ready  # noqa: E402
+from api.routers.eval_ops import eval_latest, eval_run, load_eval_runner  # noqa: E402
 
 
 def run_case(name: str, fn) -> bool:
