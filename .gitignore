@@ -16,3 +16,4 @@ frontend/.next/standalone
 frontend/test-results/
 frontend/playwright-report/
 .DS_Store
+eval/reports/history/
