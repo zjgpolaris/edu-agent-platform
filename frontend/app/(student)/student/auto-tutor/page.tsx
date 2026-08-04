@@ -295,49 +295,69 @@ function AutoTutorInner() {
             Agent 自己读你的画像和错题本、规划本节课、出题检验；答错时会反思「是讲得不对还是题超纲」并实时调整计划。
             教学结束前还会完成退出票检验，把学习证据写回错题、复习与教师端分析。
           </p>
-          <div className="hero-flow" aria-label="AutoTutor 闭环">
-            <span>读学情</span>
-            <span>规划</span>
-            <span>出题检验</span>
-            <span>反思重规划</span>
-            <span>退出票检验</span>
-            <span>证据入库</span>
-          </div>
-        </div>
-        <div className="teaching-card" aria-label="辅导状态">
+          {session && (
+            <div className="hero-flow" aria-label="AutoTutor 闭环">
+              <span>读学情</span>
+              <span>规划</span>
+              <span>出题检验</span>
+              <span>反思重规划</span>
+              <span>退出票检验</span>
+              <span>证据入库</span>
+            </div>
+          )}
+        </div>        <div className="teaching-card" aria-label="辅导状态">
           <div className="seal-mark" aria-hidden="true">辅</div>
           <span className="card-label">辅导台状态</span>
           <strong>{status}</strong>
           <p>
             {session
               ? `已规划 ${plan.length} 个知识点 · 触发 ${session.replans} 次重规划`
-              : "点击下方按钮，让 agent 现场为你规划一节课。"}
+              : "还没有进行中的课程。"}
           </p>
           {session && session.status === "awaiting_answer" && (
             <p style={{ fontSize: 12, color: "var(--jade-dark,#2f6f4f)", margin: "4px 0 0" }}>
               已自动恢复最近一节未完成课程，可继续作答当前题目。
             </p>
           )}
-          {!session && (
-            <>
-              {focusTag && (
-                <p style={{ fontSize: 12, color: "var(--jade-dark,#2f6f4f)", margin: "4px 0 8px" }}>
-                  将优先讲解你的薄弱知识点「{focusTag}」
-                </p>
-              )}
-              {focusTag && rootCause && (
-                <p style={{ fontSize: 12, color: "#b87a00", margin: "0 0 8px", lineHeight: 1.5 }}>
-                  {rootCause.icon} 错因诊断：{rootCause.label} — {rootCause.description} agent 会据此调整讲法。
-                </p>
-              )}
-              <button type="button" className="learning-tool-action" onClick={() => void start()} disabled={loading || !studentId}>
-                {loading ? "规划中…" : "开始本节课"}
-              </button>
-            </>
-          )}
         </div>
       </section>
 
+      {!session ? (
+        <section className="autotutor-launch" aria-label="开始辅导">
+          <span className="autotutor-launch-seal" aria-hidden="true">辅</span>
+          <h2>{loading ? "Agent 正在规划本节课…" : "让 agent 为你规划一节课"}</h2>
+          <p>
+            {loading
+              ? "正在读取你的画像和错题本，安排知识点顺序与难度。"
+              : "开始后，agent 会读你的画像和错题本，安排知识点顺序、出题检验，并根据你的作答实时调整。"}
+          </p>
+          {focusTag && !loading && (
+            <p className="autotutor-launch-focus">将优先讲解你的薄弱知识点「{focusTag}」</p>
+          )}
+          {focusTag && rootCause && !loading && (
+            <p className="autotutor-launch-cause">
+              {rootCause.icon} 错因诊断：{rootCause.label} — {rootCause.description} agent 会据此调整讲法。
+            </p>
+          )}
+          <button
+            type="button"
+            className="autotutor-launch-btn"
+            onClick={() => void start()}
+            disabled={loading || !studentId}
+          >
+            {loading ? "规划中…" : "开始本节课"}
+          </button>
+          {error && <p className="learning-error">{error}</p>}
+          <ol className="autotutor-launch-steps" aria-label="开始后会发生什么">
+            <li><strong>读学情</strong><span>翻你的画像与错题本</span></li>
+            <li><strong>规划</strong><span>排知识点顺序和难度</span></li>
+            <li><strong>出题检验</strong><span>每讲一点就检验一次</span></li>
+            <li><strong>反思重规划</strong><span>答错就判断病因、改讲法</span></li>
+            <li><strong>退出票</strong><span>课末验收本节掌握度</span></li>
+            <li><strong>证据入库</strong><span>写回错题、复习与教师端</span></li>
+          </ol>
+        </section>
+      ) : (
       <section className="learning-command-grid">
         {/* 左：课程计划 */}
         <aside className="panel learning-control-panel">
@@ -494,6 +514,7 @@ function AutoTutorInner() {
           {session?.trace_id && <TraceTimeline traceId={session.trace_id} token={user?.token} />}
         </aside>
       </section>
+      )}
     </main>
   );
 }

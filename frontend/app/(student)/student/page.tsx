@@ -24,103 +24,35 @@ export default function StudentDashboardPage() {
   const { user } = useAuth();
   const displayName = user?.displayName || user?.actorId || "同学";
   const { profile, reviewPlan, todayPlan, loading, error, refreshTodayPlan } = useStudentWorkbenchData(user?.actorId, user?.token);
-  const pendingReview = todayPlan ? Math.max(todayPlan.summary.review_remaining || 0, 0) : null;
 
   const recentTopics = profile?.recent_topics ?? [];
   const weakTopics = profile?.weak_topics ?? [];
   const priorityWeakpoints = reviewPlan?.weakpoints ?? [];
   const priorityTopics = reviewPlan?.priority_topics ?? weakTopics;
-  const topReviewAction = reviewPlan?.recommended_actions?.[0];
 
   return (
     <main className="workbench-page student-workbench">
-      <section className="workbench-hero">
-        <div className="workbench-hero-copy student-hero-panel">
-          <div className="student-hero-topline">
-            <p className="workbench-kicker">学生学习工作台</p>
-            <span className="student-hero-seal" aria-hidden="true">史</span>
-          </div>
+      <section className="student-hero-band">
+        <div className="student-hero-band-copy">
+          <p className="workbench-kicker">学生学习工作台</p>
           <h1>{displayName}，今天从一个历史问题开始</h1>
-          {priorityTopics[0] && (
-            <div className="student-hero-question">
-              今日优先复习「{priorityTopics[0]}」
-            </div>
-          )}
-          <p>EduAgent 会把历史对话、教材学习、资料分析、作业批改和错题复习串起来，帮助你把薄弱点变成下一次练习任务。</p>
-          {(recentTopics[0] || priorityWeakpoints.length > 0 || weakTopics.length > 0) && (
+          <p>
+            EduAgent 把历史对话、教材学习、资料分析、作业批改和错题复习串起来，
+            帮助你把薄弱点变成下一次练习任务。
+          </p>
+          {(recentTopics[0] || priorityTopics[0]) && (
             <div className="student-hero-meta" aria-label="当前学习主题">
-              {recentTopics[0] && <span>{recentTopics[0]}</span>}
-              {priorityWeakpoints.length > 0 ? <span>错题本 {priorityWeakpoints.length} 个重点</span> : weakTopics.length > 0 && <span>薄弱点 {weakTopics.length} 个</span>}
+              {priorityTopics[0] && <span>优先复习 · {priorityTopics[0]}</span>}
+              {recentTopics[0] && <span>最近学过 · {recentTopics[0]}</span>}
             </div>
           )}
-          <div className="workbench-actions">
-            {pendingReview !== null && pendingReview > 0 && (
-              <Link href="/student/review" className="workbench-primary-link" style={{ background: "var(--cinnabar, #c94a38)" }}>
-                今日有 {pendingReview} 个知识点待复习
-              </Link>
-            )}
-            <Link href="/student/learning-path" className={pendingReview ? "workbench-secondary-link" : "workbench-primary-link"}>查看复习路径</Link>
-            <Link href="/student/review?tab=weakpoints" className="workbench-secondary-link">打开错题库</Link>
-          </div>
         </div>
-        <aside className="workbench-next-card student-dossier-card" aria-label="今日建议">
-          <span>今日学案</span>
-          {priorityWeakpoints.length > 0 ? (
-            <>
-              <h2>建议复习：{priorityWeakpoints[0].knowledge_tag}</h2>
-              <p>{topReviewAction || "以下是错题本中优先级最高的知识点，建议先复盘再练习。"}</p>
-              <ol className="student-dossier-steps">
-                {priorityWeakpoints.slice(0, 3).map((point) => (
-                  <li key={point.knowledge_tag}>{point.knowledge_tag} · 出错 {point.wrong_count} 次</li>
-                ))}
-              </ol>
-            </>
-          ) : weakTopics.length > 0 ? (
-            <>
-              <h2>建议复习：{weakTopics[0]}</h2>
-              <p>{topReviewAction || "以下是近期需要加强的知识点，建议逐一追问或做练习巩固。"}</p>
-              <ol className="student-dossier-steps">
-                {weakTopics.slice(0, 3).map((t) => <li key={t}>{t}</li>)}
-              </ol>
-            </>
-          ) : (
-            <>
-              <h2>开始你的第一次学习</h2>
-              <p>与历史人物对话、做练习或阅读教材，系统会自动记录你的学习轨迹。</p>
-            </>
-          )}
-          <Link href={priorityWeakpoints.length > 0 || weakTopics.length > 0 ? "/student/learning-path" : "/student/materials?tab=textbook"}>
-            {priorityWeakpoints.length > 0 || weakTopics.length > 0 ? "进入复习路径" : "进入教材"}
-          </Link>
-        </aside>
+        <span className="student-hero-band-seal" aria-hidden="true">史</span>
       </section>
 
       <ContinueLearningCard plan={todayPlan} loading={loading} failed={Boolean(error)} />
       <TodayPlanCard plan={todayPlan} loading={loading} error={Boolean(error)} onPlanRefresh={refreshTodayPlan} />
       <WeeklySummaryCard />
-
-      <section className="workbench-overview-grid" aria-label="今日任务">
-        <div className="workbench-metric student-metric">
-          <span className="student-metric-mark" aria-hidden="true">复</span>
-          <strong>{pendingReview !== null ? pendingReview : "—"}</strong>
-          <span>今日待复习</span>
-        </div>
-        <div className="workbench-metric student-metric">
-          <span className="student-metric-mark" aria-hidden="true">错</span>
-          <strong>{priorityWeakpoints.length > 0 ? priorityWeakpoints.length : weakTopics.length || "—"}</strong>
-          <span>错题本知识点</span>
-        </div>
-        <div className="workbench-metric student-metric">
-          <span className="student-metric-mark" aria-hidden="true">弱</span>
-          <strong>{priorityTopics[0] ? <span style={{ fontSize: "0.85em" }}>{priorityTopics[0]}</span> : "—"}</strong>
-          <span>优先复习</span>
-        </div>
-        <div className="workbench-metric student-metric">
-          <span className="student-metric-mark" aria-hidden="true">主</span>
-          <strong>{recentTopics.length > 0 ? <span style={{ fontSize: "0.85em" }}>{recentTopics[0]}</span> : "—"}</strong>
-          <span>最近主题</span>
-        </div>
-      </section>
 
       <section className="workbench-main-grid">
         <div className="workbench-section student-module-section">

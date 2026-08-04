@@ -4314,6 +4314,156 @@ textarea {
   color: var(--jade);
 }
 
+/* AutoTutor 未开课时的单栏引导：三栏空占位改为一个明确的主行动，
+   把「开始本节课」从右上角小卡提升为页面主按钮。 */
+.autotutor-launch {
+  position: relative;
+  margin-top: 22px;
+  padding: clamp(30px, 5vw, 52px) clamp(24px, 4vw, 44px);
+  border: 1px solid rgba(78, 55, 30, 0.16);
+  border-radius: 24px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(184, 139, 62, 0.14), transparent 60%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(248, 240, 226, 0.88)),
+    var(--paper-soft);
+  box-shadow: 0 18px 46px rgba(59, 39, 19, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.autotutor-launch-seal {
+  display: inline-flex;
+  width: 62px;
+  height: 62px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  border: 2px solid rgba(169, 53, 34, 0.72);
+  border-radius: 14px 9px 16px 10px;
+  color: var(--cinnabar-dark);
+  background: rgba(183, 66, 43, 0.07);
+  font-family: var(--font-display-family);
+  font-size: 30px;
+  font-weight: 900;
+  transform: rotate(-3deg);
+  box-shadow: inset 0 0 0 4px rgba(255, 252, 244, 0.78);
+}
+
+.autotutor-launch h2 {
+  margin: 0;
+  font-size: clamp(22px, 2.6vw, 32px);
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.autotutor-launch > p {
+  max-width: 56ch;
+  margin: 14px auto 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.autotutor-launch-focus {
+  color: var(--jade-dark) !important;
+  font-weight: 700;
+}
+
+.autotutor-launch-cause {
+  color: #8a5b00 !important;
+  font-size: 13px !important;
+}
+
+.autotutor-launch-btn {
+  margin-top: 26px;
+  padding: 13px 38px;
+  border: none;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: linear-gradient(135deg, var(--cinnabar), var(--cinnabar-dark));
+  box-shadow: 0 14px 30px rgba(183, 66, 43, 0.24);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: transform var(--ease), box-shadow var(--ease), opacity var(--ease);
+}
+.autotutor-launch-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 38px rgba(183, 66, 43, 0.3);
+}
+.autotutor-launch-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.autotutor-launch-btn:focus-visible {
+  outline: 3px solid var(--jade-dark);
+  outline-offset: 3px;
+}
+
+.autotutor-launch-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  max-width: 780px;
+  margin: 36px auto 0;
+  padding: 26px 0 0;
+  border-top: 1px solid rgba(96, 72, 44, 0.14);
+  list-style: none;
+  counter-reset: at-step;
+  text-align: left;
+}
+
+.autotutor-launch-steps li {
+  counter-increment: at-step;
+  display: grid;
+  gap: 3px;
+  padding-left: 26px;
+  position: relative;
+}
+
+.autotutor-launch-steps li::before {
+  content: counter(at-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(183, 66, 43, 0.1);
+  font-family: var(--font-accent-family);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cinnabar-dark);
+}
+
+.autotutor-launch-steps strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.autotutor-launch-steps span {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+@media (max-width: 620px) {
+  .autotutor-launch {
+    padding: 28px 20px;
+    border-radius: 20px;
+  }
+  .autotutor-launch-btn {
+    width: 100%;
+  }
+  /* 窄屏下状态卡与启动面板说的是同一件事，隐藏以免「辅」印章重复出现两次 */
+  .academy-shell:has(.autotutor-launch) .teaching-card {
+    display: none;
+  }
+}
+
 .learning-command-grid {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 320px;
@@ -4498,7 +4648,7 @@ textarea {
 }
 
 .learning-dialog-panel {
-  min-height: 650px;
+  min-height: 420px;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 16px;
@@ -9305,6 +9455,15 @@ textarea:focus {
   margin-top: 20px;
 }
 
+.student-hero-band .student-hero-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .student-hero-meta span {
   border: 1px solid rgba(96, 72, 44, 0.13);
   border-radius: 999px;
@@ -9313,6 +9472,76 @@ textarea:focus {
   background: rgba(255, 252, 244, 0.72);
   font-size: 12px;
   font-weight: 900;
+}
+
+/* 学生首页顶部定位带：只回答"我是谁、在学什么"，
+   "现在做什么"交给 ContinueLearningCard，避免同一件事重复出现在多张卡上。 */
+.student-hero-band {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: clamp(22px, 3vw, 30px) clamp(22px, 3vw, 32px);
+  border: 1px solid rgba(78, 55, 30, 0.16);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 86% 12%, rgba(184, 139, 62, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.94), rgba(248, 240, 226, 0.86)),
+    var(--paper-soft);
+  box-shadow: 0 18px 46px rgba(59, 39, 19, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.student-hero-band-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.student-hero-band h1 {
+  margin: 6px 0 0;
+  max-width: 22ch;
+  font-size: clamp(24px, 2.8vw, 38px);
+  line-height: 1.18;
+  color: var(--ink);
+}
+
+.student-hero-band p {
+  max-width: 62ch;
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.student-hero-band-seal {
+  display: inline-flex;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(169, 53, 34, 0.78);
+  border-radius: 12px 8px 14px 9px;
+  color: var(--cinnabar-dark);
+  background: rgba(183, 66, 43, 0.07);
+  font-family: var(--font-display-family);
+  font-size: 25px;
+  font-weight: 900;
+  transform: rotate(4deg);
+  box-shadow: inset 0 0 0 3px rgba(255, 252, 244, 0.78);
+}
+
+@media (max-width: 700px) {
+  .student-hero-band {
+    padding: 20px 18px;
+    border-radius: 20px;
+  }
+  .student-hero-band-seal {
+    width: 42px;
+    height: 42px;
+    font-size: 20px;
+  }
 }
 
 .student-dossier-card {
@@ -10781,7 +11010,10 @@ textarea:focus {
 @media (prefers-reduced-motion: reduce) {
   .student-workbench *,
   .student-workbench *::before,
-  .student-workbench *::after {
+  .student-workbench *::after,
+  .academy-shell *,
+  .academy-shell *::before,
+  .academy-shell *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

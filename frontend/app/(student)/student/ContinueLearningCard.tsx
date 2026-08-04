@@ -16,31 +16,6 @@ type ContinueCopy = {
   meta?: string;
 };
 
-type SummaryChip = { label: string; value: string; tone: "danger" | "gold" | "jade" | "muted" };
-
-function buildSummaryChips(plan: TodayPlan | null): SummaryChip[] {
-  const summary = plan?.summary;
-  if (!summary) return [];
-  const chips: SummaryChip[] = [];
-  if (summary.pending_assignments > 0) {
-    chips.push({
-      label: summary.overdue_assignments > 0 ? "待交/逾期" : "待交作业",
-      value: summary.overdue_assignments > 0 ? `${summary.pending_assignments} / ${summary.overdue_assignments}` : `${summary.pending_assignments}`,
-      tone: summary.overdue_assignments > 0 ? "danger" : "gold",
-    });
-  }
-  if (summary.review_total > 0 || summary.review_remaining > 0) {
-    chips.push({ label: "今日复习", value: `${summary.review_remaining}/${summary.review_total || summary.review_remaining}`, tone: "jade" });
-  }
-  if (summary.weakpoint_count > 0) {
-    chips.push({ label: "薄弱点", value: `${summary.weakpoint_count}`, tone: "gold" });
-  }
-  if (!chips.length && summary.all_clear) {
-    chips.push({ label: "今日状态", value: "已清空", tone: "jade" });
-  }
-  return chips.slice(0, 3);
-}
-
 function buildContinueCopy(plan: TodayPlan | null): ContinueCopy {
   const task = plan?.tasks?.[0];
   if (!task) {
@@ -142,7 +117,6 @@ export default function ContinueLearningCard({ plan, loading, failed = false }: 
   );
 
   const copy = buildContinueCopy(plan);
-  const chips = buildSummaryChips(plan);
   return (
     <section className={`cl-card ${copy.tone}`} aria-label="继续学习建议">
       <style>{CSS}</style>
@@ -152,15 +126,6 @@ export default function ContinueLearningCard({ plan, loading, failed = false }: 
         <h2 className="cl-title">{copy.title}</h2>
         <p className="cl-desc">{copy.description}</p>
         <p className="cl-reason"><strong>推荐理由：</strong>{copy.reason}</p>
-        {chips.length > 0 && (
-          <div className="cl-chips" aria-label="今日计划摘要">
-            {chips.map((chip) => (
-              <span key={chip.label} className={`cl-chip ${chip.tone}`}>
-                <small>{chip.label}</small><b>{chip.value}</b>
-              </span>
-            ))}
-          </div>
-        )}
         <div className="cl-actions">
           <Link href={copy.primaryHref} className="cl-primary">{copy.primaryLabel}<span aria-hidden="true"> →</span></Link>
           {copy.secondaryHref && copy.secondaryLabel && (

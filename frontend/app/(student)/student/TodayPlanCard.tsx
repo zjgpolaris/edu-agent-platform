@@ -108,7 +108,9 @@ export default function TodayPlanCard({ plan, loading, error = false, onPlanRefr
     </section>
   );
 
-  const { tasks, summary } = plan;
+  const { summary } = plan;
+  // 第一条任务已由「继续学习」主卡完整呈现，这里只列其余待办，避免同一件事说两遍。
+  const restTasks = plan.tasks.slice(1);
 
   return (
     <section className="tp-card" aria-label="今日计划">
@@ -145,7 +147,7 @@ export default function TodayPlanCard({ plan, loading, error = false, onPlanRefr
       <div className="tp-head">
         <div>
           <p className="tp-eyebrow">TODAY · 今日计划</p>
-          <h2 className="tp-title">今天优先完成这些</h2>
+          <h2 className="tp-title">{restTasks.length > 0 ? "接下来还有" : "今天优先完成这些"}</h2>
         </div>
         <div className="tp-head-right">
           {checkInStatus && (
@@ -183,9 +185,11 @@ export default function TodayPlanCard({ plan, loading, error = false, onPlanRefr
             </div>
           </div>
         </div>
+      ) : restTasks.length === 0 ? (
+        <p className="tp-only-one">今天只有上面这一件事，完成它就够了。</p>
       ) : (
         <ol className="tp-list">
-          {tasks.map((t, i) => (
+          {restTasks.map((t, i) => (
             <li key={i}>
               <Link href={t.href} className={`tp-task pri-${t.priority}`}>
                 <span className="tp-mark" aria-hidden="true">{KIND_MARK[t.kind]}</span>
@@ -245,6 +249,7 @@ const CSS = `
 .tp-badge.pri-high { background:#fdf6e3; color:#b0862b; }
 .tp-badge.pri-normal { background:#f0ebe0; color:var(--muted,#7a7068); }
 .tp-clear { display:flex; align-items:center; gap:14px; padding:8px 0; }
+.tp-only-one { margin:0; padding:2px 0 4px; font-size:13px; color:var(--muted,#7a7068); line-height:1.8; }
 .tp-clear-mark { width:40px; height:40px; flex:none; border-radius:50%; background:#f0faf5; color:var(--jade,#2d6a4f);
   display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700; }
 .tp-clear strong { font-size:15px; display:block; margin-bottom:2px; }
