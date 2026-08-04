@@ -42,25 +42,66 @@ def _decay_weight(last_wrong_at: str) -> float:
     return 1.0
 
 
+_PLACEHOLDER_OPTS = {"选项一", "选项二", "选项三", "选项四", "选项文字", "题目内容", "题目"}
+
 def _generate_question(tag: str) -> dict[str, Any]:
+    import logging
     from llm_config import llm_fast
+
+    _log = logging.getLogger(__name__)
+
+    # 使用与目标 tag 无关的固定示例，防止模型照抄示例内容
     prompt = (
-        f"为历史知识点「{tag}」出一道选择题，严格返回JSON，不要其他内容：\n"
-        '{"question":"题目内容","options":["A.选项一","B.选项二","C.选项三","D.选项四"],'
-        '"answer":"A","explanation":"简短解析（1-2句）"}'
+        f"你是历史老师，请为知识点「{tag}」出一道四选一选择题。\n"
+        "只输出一个 JSON 对象，不要输出其他任何内容（不要 markdown、不要注释）。\n"
+        "JSON 格式参考（下面是示例，请用「{tag}」的真实内容替换，不要照抄）：\n"
+        '{"question":"武则天是哪个朝代的皇帝？",'
+        '"options":["A.汉朝","B.唐朝","C.宋朝","D.明朝"],'
+        '"answer":"B",'
+        '"explanation":"武则天是中国历史上唯一的女皇帝，统治时期属于唐朝。"}\n'
+        f"现在请针对「{tag}」出题："
     )
-    try:
-        raw = llm_fast.invoke([{"role": "user", "content": prompt}]).content
+
+    def _try_parse(raw: str) -> dict[str, Any] | None:
         start, end = raw.find("{"), raw.rfind("}") + 1
-        data = json.loads(raw[start:end])
-    except Exception:
-        data = {
-            "question": f"关于「{tag}」，以下说法正确的是？",
-            "options": ["A. 选项一", "B. 选项二", "C. 选项三", "D. 选项四"],
-            "answer": "A",
-            "explanation": f"请复习{tag}相关内容。",
-        }
-    return {**data, "tag": tag, "done": False, "correct": None}
+        if start < 0 or end <= start:
+            return None
+        try:
+            data = json.loads(raw[start:end])
+        except json.JSONDecodeError:
+            return None
+        opts = data.get("options") or []
+        q = data.get("question", "")
+        if len(opts) != 4:
+            return None
+        combined = " ".join(opts) + " " + q
+        if any(p in combined for p in _PLACEHOLDER_OPTS):
+            return None
+        return data
+
+    for attempt in range(2):
+        try:
+            raw = llm_fast.invoke([{"role": "user", "content": prompt}]).content
+            data = _try_parse(raw)
+            if data is not None:
+                return {**data, "tag": tag, "done": False, "correct": None}
+            _log.warning("review _generate_question placeholder_detected attempt=%s tag=%s raw_preview=%s",
+                         attempt + 1, tag, raw[:120])
+        except Exception as exc:
+            _log.warning("review _generate_question failed attempt=%s tag=%s: %s", attempt + 1, tag, exc)
+
+    # 两次均失败，返回带明确错误提示的兜底题（至少题目是有意义的）
+    _log.error("review _generate_question gave up tag=%s", tag)
+    return {
+        "tag": tag,
+        "question": f"关于「{tag}」，以下说法正确的是？（题目生成失败，请刷新重试）",
+        "options": ["A. 暂无选项", "B. 暂无选项", "C. 暂无选项", "D. 暂无选项"],
+        "answer": "A",
+        "explanation": f"题目生成失败，请稍后刷新复习页面重试。",
+        "done": False,
+        "correct": None,
+        "_generation_failed": True,
+    }
 
 
 def get_today_session(student_id: str, today: str, *, hydrate: bool = True) -> dict | None:
