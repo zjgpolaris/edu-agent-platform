@@ -11,8 +11,21 @@ type Task = {
   tag: string; question: string; options: string[];
   answer: string; explanation: string; done: boolean; correct: boolean | null;
   is_variant?: boolean;
+  pending_generate?: boolean;
 };
 type Session = { date: string; completed: number; total: number; tasks: Task[] };
+
+const PLACEHOLDER_MARKERS = ["选项一", "选项二", "选项三", "选项四", "暂无选项", "题目内容"];
+
+/** 后端出题失败时会留下无法作答的占位题，前端不能把它当正常题呈现。 */
+function isUnusableTask(task: Task): boolean {
+  if (task.pending_generate) return true;
+  if (!task.options || task.options.length !== 4) return true;
+  if (task.options.some(o => !o?.trim())) return true;
+  if (!task.answer?.trim()) return true;
+  const combined = task.options.join(" ") + " " + (task.question || "");
+  return PLACEHOLDER_MARKERS.some(m => combined.includes(m));
+}
 
 const CSS = `
 .rv { font-family:var(--font-body-family); background:transparent; color:var(--ink); }
@@ -94,13 +107,17 @@ const CSS = `
 .rv-empty-link:hover { border-color:var(--cinnabar);background:rgba(183,66,43,.06); }
 .rv-empty-link.btn { cursor:pointer;font-family:var(--font-body-family); }
 .rv-error-text { margin:18px 0 -4px;padding:9px 12px;border-radius:3px;background:rgba(183,66,43,.06);border:1px solid rgba(183,66,43,.18);color:var(--cinnabar-dark);font-size:12px;line-height:1.7;letter-spacing:.04em; }
+.rv-regen { position:relative;z-index:1;padding:14px 0 4px; }
+.rv-regen-title { font-size:16px;font-weight:600;color:var(--ink);letter-spacing:.04em;margin:0 0 10px; }
+.rv-regen-desc { font-size:13px;color:var(--ink-soft);line-height:1.9;letter-spacing:.02em;margin:0; }
+.rv-regen-actions { display:flex;flex-wrap:wrap;gap:10px;margin-top:20px; }
 `;
 
 const WM = ["史", "文", "思", "知", "学", "悟", "道", "义"];
 
 function InjectStyles() {
   useEffect(() => {
-    const id = "rv-v3";
+    const id = "rv-v4";
     if (document.getElementById(id)) return;
     const el = document.createElement("style");
     el.id = id; el.textContent = CSS;
@@ -300,6 +317,26 @@ export default function ReviewTab() {
               </div>
               <span className="rv-qmeta">{current + 1} / {session.total}</span>
             </div>
+            {isUnusableTask(task) ? (
+              <div className="rv-regen">
+                <p className="rv-regen-title">这道题还没出好</p>
+                <p className="rv-regen-desc">
+                  「{task.tag}」的题目生成失败了，所以暂时没法作答。重新加载会再出一次题；
+                  也可以先跳到下一题，稍后回来。
+                </p>
+                <div className="rv-regen-actions">
+                  <button type="button" className="rv-btn rv-btn-outline" onClick={() => void loadSession()}>
+                    重新出题
+                  </button>
+                  {session.tasks.some((t, i) => i > current && !t.done) && (
+                    <button type="button" className="rv-btn rv-btn-fill" onClick={handleNext}>
+                      先做下一题 →
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="rv-q">{task.question}</div>
             <div className="rv-opts">
               {task.options.map((opt, i) => {
@@ -338,6 +375,8 @@ export default function ReviewTab() {
                 <button type="button" onClick={handleNext} className="rv-btn rv-btn-fill">下一题 →</button>
               )}
             </div>
+            </>
+            )}
           </div>
         )}
       </div>

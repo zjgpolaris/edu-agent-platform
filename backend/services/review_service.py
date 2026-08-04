@@ -124,16 +124,40 @@ def get_today_session(student_id: str, today: str, *, hydrate: bool = True) -> d
     return {"date": today, "completed": row["completed"], "total": row["total"], "tasks": tasks}
 
 
-def _hydrate_pending_tasks(student_id: str, today: str, tasks: list[dict]) -> list[dict]:
-    """为标了 pending_generate 的占位任务（来自作业错题追加）按需生成真实题目并落库。
+def is_unusable_question(task: dict[str, Any]) -> bool:
+    """判断一道已落库的复习题是否无法作答（占位、生成失败或选项残缺）。
 
-    只对未作答的占位题生成，避免每次读取都重复调用 LLM。
+    历史上生成失败的题目会被直接写库，因此读取时必须重新判定，
+    不能只信任写入时的标记。
     """
-    pending = [t for t in tasks if t.get("pending_generate") and not t.get("done")]
+    if task.get("pending_generate") or task.get("_generation_failed"):
+        return True
+    options = task.get("options") or []
+    if len(options) != 4 or not all(str(o).strip() for o in options):
+        return True
+    if not str(task.get("answer") or "").strip():
+        return True
+    combined = " ".join(str(o) for o in options) + " " + str(task.get("question") or "")
+    return any(p in combined for p in _PLACEHOLDER_OPTS) or "暂无选项" in combined
+
+
+def _hydrate_pending_tasks(student_id: str, today: str, tasks: list[dict]) -> list[dict]:
+    """为无法作答的未答题目按需生成真实题目并落库。
+
+    覆盖两类：作业错题追加的 pending_generate 占位题，以及早先生成失败
+    被写库的坏题。生成再次失败时保留占位标记，下次打开复习页会重试，
+    避免把"选项一/二/三/四"永久固化给学生。
+    """
+    pending = [t for t in tasks if not t.get("done") and is_unusable_question(t)]
     if not pending:
         return tasks
+    changed = False
     for t in pending:
         generated = _generate_question(t.get("tag", ""))
+        if generated.get("_generation_failed"):
+            # 保留占位标记，下次读取时重试；本次不覆盖已有内容
+            t["pending_generate"] = True
+            continue
         t.update(
             question=generated.get("question", t.get("question", "")),
             options=generated.get("options", []),
@@ -141,11 +165,14 @@ def _hydrate_pending_tasks(student_id: str, today: str, tasks: list[dict]) -> li
             explanation=generated.get("explanation", ""),
         )
         t.pop("pending_generate", None)
-    with get_connection() as conn:
-        conn.execute(
-            text("UPDATE review_sessions SET tasks_json=:tasks WHERE student_id=:sid AND date=:date"),
-            {"tasks": json.dumps(tasks, ensure_ascii=False), "sid": student_id, "date": today},
-        )
+        t.pop("_generation_failed", None)
+        changed = True
+    if changed:
+        with get_connection() as conn:
+            conn.execute(
+                text("UPDATE review_sessions SET tasks_json=:tasks WHERE student_id=:sid AND date=:date"),
+                {"tasks": json.dumps(tasks, ensure_ascii=False), "sid": student_id, "date": today},
+            )
     return tasks
 
 
@@ -166,6 +193,10 @@ def create_today_session(student_id: str, today: str) -> dict:
     weakpoints = get_weakpoints(student_id)
     top = sorted(weakpoints, key=lambda w: w["wrong_count"] * _decay_weight(w["last_wrong_at"]), reverse=True)[:8]
     tasks = [_pick_question(student_id, today, w) for w in top]
+    # 生成失败的题标记为待重试，下次打开复习页会重新生成，而不是固化成占位题
+    for t in tasks:
+        if is_unusable_question(t):
+            t["pending_generate"] = True
     with get_connection() as conn:
         conn.execute(
             text("""INSERT INTO review_sessions (id, student_id, date, tasks_json, completed, total, created_at)

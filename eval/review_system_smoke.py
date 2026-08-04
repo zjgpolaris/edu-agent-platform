@@ -18,7 +18,13 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from datetime import date
 
-from services.review_service import create_today_session, get_mastery_overview, get_today_session, submit_answer
+from services.review_service import (
+    create_today_session,
+    get_mastery_overview,
+    get_today_session,
+    is_unusable_question,
+    submit_answer,
+)
 
 STUDENT = "smoke-review"
 TODAY = date.today().isoformat()
@@ -61,12 +67,51 @@ def session_cached() -> None:
     assert s["date"] == TODAY
 
 
+def detects_placeholder_questions() -> None:
+    """出题失败留下的占位题必须被判为不可作答，否则会被当正常题发给学生。"""
+    placeholder = {
+        "tag": "辛亥革命历史意义",
+        "question": "关于「辛亥革命历史意义」，以下说法正确的是？",
+        "options": ["A. 选项一", "B. 选项二", "C. 选项三", "D. 选项四"],
+        "answer": "A",
+    }
+    assert is_unusable_question(placeholder), "占位选项未被识别"
+
+    generation_failed = {
+        "tag": "洋务运动目的",
+        "question": "关于「洋务运动目的」，以下说法正确的是？（题目生成失败，请刷新重试）",
+        "options": ["A. 暂无选项", "B. 暂无选项", "C. 暂无选项", "D. 暂无选项"],
+        "answer": "A",
+    }
+    assert is_unusable_question(generation_failed), "生成失败题未被识别"
+
+    pending = {"tag": "戊戌变法失败原因", "question": "关于「戊戌变法失败原因」的复习题",
+               "options": [], "answer": "", "pending_generate": True}
+    assert is_unusable_question(pending), "待生成占位题未被识别"
+
+    short_options = {"tag": "x", "question": "正常题面？", "options": ["A.甲", "B.乙"], "answer": "A"}
+    assert is_unusable_question(short_options), "选项数量不足未被识别"
+
+
+def accepts_valid_questions() -> None:
+    """正常题不能被误判，否则会被反复重新生成。"""
+    valid = {
+        "tag": "唐朝",
+        "question": "武则天是哪个朝代的皇帝？",
+        "options": ["A.汉朝", "B.唐朝", "C.宋朝", "D.明朝"],
+        "answer": "B",
+    }
+    assert not is_unusable_question(valid), "正常题被误判为占位题"
+
+
 if __name__ == "__main__":
     cases = [
         ("no_session_initially", no_session_initially),
         ("mastery_overview_empty", mastery_overview_empty),
         ("create_empty_session", create_empty_session),
         ("session_cached", session_cached),
+        ("detects_placeholder_questions", detects_placeholder_questions),
+        ("accepts_valid_questions", accepts_valid_questions),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)
     print(f"review_system_smoke={passed}/{len(cases)}")
