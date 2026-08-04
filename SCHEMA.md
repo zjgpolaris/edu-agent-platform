@@ -268,7 +268,7 @@ frontend/
 | `/history-games/multiplayer` | 多人游戏 |
 | `/learning-assistant` | 学习助手 |
 | `/student` | 学生学习工作台，含继续学习主卡（基于今日计划最高优先级任务）、今日计划、本周小结和 Agent 能力入口 |
-| `/student/auto-tutor` | AutoTutor 自主辅导 |
+| `/student/auto-tutor` | AutoTutor 自主辅导；未开课时渲染单栏 `.autotutor-launch` 引导（主按钮「开始本节课」+ 六步闭环说明），开课后才切换为「课程计划 / 当前题 / Agent 轨迹」三栏，避免三栏空占位与埋没主行动 |
 | `/student/review` | 复习中心：`tab=review` 今日任务（SM-2 自适应练习，区分加载失败/真空态，提交失败可重试），`tab=weakpoints` 错因档案馆/错题库（掌握度热力图、重点攻克、AutoTutor 精讲跳转）；旧 `/student/weakpoints` 仅作重定向安全网 |
 | `/student/materials` | 学习资料中心：`tab=materials` 我的资料上传/管理，`tab=textbook` 教材目录；资料/教材 tab 在移动端吸顶横向滚动；旧 `/student/textbook` 仅作重定向安全网 |
 | `/student/dashboard` | 学情总览：`tab=dashboard` 学情速览，`tab=report` 成长报告；`/student/report` 保留直达但不作为导航主入口 |
@@ -720,7 +720,7 @@ AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`aut
 | game_rounds | 游戏回合记录，含 TTL 过期时间 |
 | card_game_wrong_records | 卡牌游戏错题记录 |
 | card_game_reports | 卡牌游戏学习报告 |
-| review_sessions | 每日自适应复习会话，每学生每天一条，含任务列表与完成进度；`tasks_json` 可包含 `pending_generate=true` 占位题，首页/徽标/今日计划使用 `hydrate=false` 只读不触发 LLM，复习页使用 `hydrate=true` 时才按需生成真题并落库 |
+| review_sessions | 每日自适应复习会话，每学生每天一条，含任务列表与完成进度；`tasks_json` 可包含 `pending_generate=true` 占位题，首页/徽标/今日计划使用 `hydrate=false` 只读不触发 LLM，复习页使用 `hydrate=true` 时才按需生成真题并落库。hydrate 由 `is_unusable_question()` 判定，覆盖 `pending_generate`、生成失败标记、选项残缺与"选项一/二/三/四"等占位文案；LLM 生成失败时保留 `pending_generate` 供下次重试，不把占位题固化入库，前端 `ReviewTab` 同步兜底展示「重新出题」而非无效选项 |
 
 ---
 
@@ -792,7 +792,8 @@ AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`aut
 - 学习事件
 - 复习计划
 - 错题本
-- 学生首页继续学习主卡：复用 `GET /api/students/{id}/today` 的今日计划，按逾期作业/今日截止作业/今日复习/薄弱点优先级展示一个明确下一步动作，并在无待办时推荐教材或历史人物对话；`useStudentWorkbenchData` 将首页 profile/review-plan/today 聚合为单次数据加载，`ContinueLearningCard` 与 `TodayPlanCard` 共享同一份今日计划，避免重复请求和状态不一致；v1.25 起主卡补充推荐理由与待交作业/今日复习/薄弱点 summary chips，仍只读 `/today`，不 hydrate 复习题、不在首页自动启动 AutoTutor/LLM
+- 学生首页继续学习主卡：复用 `GET /api/students/{id}/today` 的今日计划，按逾期作业/今日截止作业/今日复习/薄弱点优先级展示一个明确下一步动作，并在无待办时推荐教材或历史人物对话；`useStudentWorkbenchData` 将首页 profile/review-plan/today 聚合为单次数据加载，`ContinueLearningCard` 与 `TodayPlanCard` 共享同一份今日计划，避免重复请求和状态不一致；仍只读 `/today`，不 hydrate 复习题、不在首页自动启动 AutoTutor/LLM
+- 学生首页信息层级去重：首页顶部改为 `.student-hero-band` 定位带（只回答"我是谁、在学什么"），"现在做什么"唯一由 `ContinueLearningCard` 承担，`TodayPlanCard` 只列该主卡之外的剩余待办（`tasks.slice(1)`，无剩余时提示"今天只有上面这一件事"）；移除与主卡重复的 hero CTA、「今日学案」侧卡、四格 metric 与主卡 summary chips，使同一条今日复习信息不再在首页出现多次
 - 学生端 `TabShell`：`/student/review`、`/student/materials`、`/student/dashboard` 复用统一 query tab 壳，默认 tab 不写 URL，非默认 tab 可刷新保留，并带 ARIA tab 语义与移动端横向滚动/吸顶样式
 - 学习偏好设置由后端 schema 驱动：`/student/settings` 读取 `GET /api/preferences/schema` 渲染维度和选项，再合并学生已保存偏好，避免前后端双写漂移
 - 学生作业提交前未答校验：在 `/student/assignments` 提交前列出未作答题号，学生可继续检查或确认仍然提交，避免无感提交空答案
@@ -845,6 +846,7 @@ AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`aut
 | `quality_dashboard_smoke.py` | 命题质量看板跨作业聚合测试（质检分布/有效性漏检误报/复核结论/高频问题/最难题排序/few-shot 反例/teacher 隔离），7 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `pilot_path_smoke.py` | v1.25/v1.26 试点主路径测试：验证 `seed_pilot_demo.py` 幂等、pilot 账号登录、学生今日计划/AutoTutor focus 链接、教师待复核/欠交/质检盲区信号、`/api/teacher/today-queue` 后端聚合队列、通知去重、review 占位任务不触发 LLM，以及 pilot seed 预置的 AutoTutor 退出票学习证据，8 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `today_plan_smoke.py` | 学生今日计划聚合测试（优先级排序/已交排除/逾期置顶/复习余量/薄弱点 focus 编码/DB 集成隔离），8 例离线，已接入 `run_core_evals.py`（SMOKE） |
+| `review_system_smoke.py` | SM-2 自适应复习测试（session 生成/幂等/掌握度总览）+ 占位题识别（`is_unusable_question` 判定占位选项、生成失败题、待生成任务、选项残缺，且不误判正常题），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `completion_overview_smoke.py` | 教师班级完成情况聚合测试（逐生计数/逾期判定/掉队排序/班级摘要/DB 集成隔离），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
 | `readiness_smoke.py` | Readiness / Eval 路由测试：验证 `/api/ready` 浅检查结构，以及 `/api/eval/latest`、`/api/eval/run` 只注册新版 `run_core_evals.py` 路由，避免旧 mock report_generator 遮蔽 |
