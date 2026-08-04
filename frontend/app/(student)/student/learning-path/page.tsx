@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
@@ -255,7 +255,7 @@ function layerNodes(nodes: GraphNode[]): GraphNode[][] {
 }
 
 function KnowledgeMap({ graph }: { graph: KnowledgeGraph }) {
-  const layers = layerNodes(graph.nodes);
+  const layers = useMemo(() => layerNodes(graph.nodes), [graph.nodes]);
   const nextTag = graph.next_recommended;
   const nextNode = graph.nodes.find((n) => n.tag === nextTag);
   const mapRef = useRef<HTMLDivElement>(null);

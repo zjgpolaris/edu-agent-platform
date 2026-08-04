@@ -264,10 +264,21 @@ const CSS = `
 @keyframes tpShimmer { 0%{background-position:120% 0} 100%{background-position:-120% 0} }
 .tp-load-err { font-size:13px; color:var(--cinnabar,#b7422b); padding:8px 0; margin:0; }
 /* 催办通知横幅 */
-.tp-notices { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
-.tp-notice { display:flex; align-items:flex-start; gap:8px; background:#fff8e1; border:1px solid #ffe082; border-radius:8px; padding:8px 10px; }
-.tp-notice-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
-.tp-notice-msg { flex:1; font-size:12px; color:#795548; line-height:1.5; }
-.tp-notice-dismiss { background:none; border:none; cursor:pointer; color:#a1887f; font-size:16px; line-height:1; padding:0 2px; flex-shrink:0; }
-.tp-notice-dismiss:hover { color:#6d4c41; }
+.tp-notices { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+.tp-notice {
+  display:flex; align-items:flex-start; gap:10px;
+  background:rgba(184,139,62,0.08);
+  border:1px solid rgba(184,139,62,0.28);
+  border-left:3px solid var(--gold,#b88b3e);
+  border-radius:12px; padding:10px 12px;
+}
+.tp-notice-icon { font-size:13px; flex-shrink:0; margin-top:1px; opacity:0.8; }
+.tp-notice-msg { flex:1; font-size:12px; color:var(--ink-soft,#66584b); line-height:1.6; font-weight:700; }
+.tp-notice-dismiss {
+  background:none; border:none; cursor:pointer;
+  color:var(--muted,#887967); font-size:16px; line-height:1;
+  padding:0 2px; flex-shrink:0;
+  transition:color 0.15s;
+}
+.tp-notice-dismiss:hover { color:var(--ink,#241b16); }
 `;

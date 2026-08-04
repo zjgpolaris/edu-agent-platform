@@ -72,12 +72,72 @@ export default function TabShell<T extends string>({ tabs, defaultTab, ariaLabel
 }
 
 const CSS = `
-.student-tabbar { display:flex; border-bottom:2px solid var(--border); background:var(--paper-soft,#fdfbf7); padding:0 24px; overflow-x:auto; scrollbar-width:none; }
-.student-tabbar::-webkit-scrollbar { display:none; }
-.student-tab { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:14px 20px; font-size:14px; font-weight:700; letter-spacing:.05em; color:var(--muted); background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; transition:color .18s, border-color .18s, background .18s; }
-.student-tab.active { color:var(--cinnabar); border-bottom-color:var(--cinnabar); background:rgba(183,66,43,.035); }
-.student-tab:hover:not(.active) { color:var(--ink); }
-.student-tab:focus-visible { outline:3px solid rgba(183,66,43,.22); outline-offset:-3px; }
-.student-tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; border-radius:9px; font-size:11px; font-weight:800; background:var(--cinnabar); color:#fff; line-height:1; }
-@media (max-width: 768px) { .student-tabbar { position:sticky; top:0; z-index:20; padding:0 14px; box-shadow:0 8px 22px rgba(59,39,19,.08); } .student-tab { padding:13px 16px; } }
+.student-tabbar {
+  display: flex;
+  border-bottom: 1px solid rgba(96,72,44,0.14);
+  background: rgba(253,250,244,0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 0 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 4px;
+}
+.student-tabbar::-webkit-scrollbar { display: none; }
+.student-tab {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 18px;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  border-radius: 8px 8px 0 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.student-tab.active {
+  color: var(--cinnabar);
+  border-bottom-color: var(--cinnabar);
+  background: rgba(183,66,43,0.04);
+  font-weight: 900;
+}
+.student-tab:hover:not(.active) {
+  color: var(--ink);
+  background: rgba(96,72,44,0.04);
+}
+.student-tab:active { transform: scale(0.97); }
+.student-tab:focus-visible {
+  outline: 3px solid rgba(183,66,43,0.22);
+  outline-offset: -3px;
+}
+.student-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--cinnabar);
+  color: #fff;
+  line-height: 1;
+  animation: badgePop 250ms var(--ease-spring) both;
+}
+@keyframes badgePop { from { transform: scale(0); } to { transform: scale(1); } }
+.student-tabpanel { animation: tabFadeIn 200ms ease both; }
+@keyframes tabFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 768px) {
+  .student-tabbar { position:sticky; top:0; z-index:20; padding:0 12px; box-shadow:0 8px 22px rgba(59,39,19,.07); }
+  .student-tab { padding:12px 14px; font-size:13px; }
+}
 `;

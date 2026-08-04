@@ -4,13 +4,22 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import {
+  Home, Bot, BookOpen, MessageSquare, Sword, Gamepad2, Map,
+  ClipboardList, RotateCcw, BrainCircuit, BarChart3, Route,
+  Sparkles, Award, BookMarked, HelpCircle, Users, FileText,
+  Camera, TrendingUp, Library, Settings, FlaskConical, LogOut,
+  ChevronDown, ChevronRight, LayoutDashboard, CalendarDays,
+  Pencil, Database, Star, Bell, Layers
+} from "lucide-react";
+import { useAuth as _useAuth } from "@/contexts/AuthContext";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 type NavItem = {
   label: string;
   href?: string;
-  icon: string;
+  LucideIcon?: React.ElementType;
   children?: NavItem[];
   badgeKey?: string;
   badgeKeys?: string[];
@@ -18,66 +27,60 @@ type NavItem = {
 
 type Badges = Record<string, number>;
 
-// 学生侧边栏：5 组，最多 6 子项/组
 const studentNav: NavItem[] = [
-  { label: "今日学习", href: "/student", icon: "⌂" },
-  { label: "自主辅导", href: "/student/auto-tutor", icon: "辅" },
+  { label: "今日学习", href: "/student", LucideIcon: Home },
+  { label: "自主辅导", href: "/student/auto-tutor", LucideIcon: Bot },
   {
-    // 教材同步+资料库合并为"学习资源"，用 tab 切换；学习助手独立保留
-    label: "学习资源", icon: "◎", children: [
-      { label: "学习资料", href: "/student/materials", icon: "册" },
-      { label: "学习助手", href: "/student/assistant", icon: "问" },
+    label: "学习资源", LucideIcon: BookOpen, children: [
+      { label: "学习资料", href: "/student/materials", LucideIcon: Library },
+      { label: "学习助手", href: "/student/assistant", LucideIcon: HelpCircle },
     ],
   },
   {
-    label: "历史探索", icon: "宫", children: [
-      { label: "人物对话馆", href: "/student/history/chat", icon: "人" },
-      { label: "历史辩论场", href: "/student/history/debate", icon: "辩" },
-      { label: "历史游戏厅", href: "/student/history/games", icon: "弈" },
-      { label: "历史地图", href: "/student/history/map", icon: "图" },
+    label: "历史探索", LucideIcon: Layers, children: [
+      { label: "人物对话馆", href: "/student/history/chat", LucideIcon: MessageSquare },
+      { label: "历史辩论场", href: "/student/history/debate", LucideIcon: Sword },
+      { label: "历史游戏厅", href: "/student/history/games", LucideIcon: Gamepad2 },
+      { label: "历史地图", href: "/student/history/map", LucideIcon: Map },
     ],
   },
   {
-    // 作业→复习中心（今日任务+错题库 合并）→智能练习 闭环链路
-    label: "练习复习", icon: "练", children: [
-      { label: "我的作业", href: "/student/assignments", icon: "业", badgeKey: "pending_assignments" },
-      { label: "复习中心", href: "/student/review", icon: "复", badgeKey: "pending_review" },
-      { label: "智能练习", href: "/student/quiz", icon: "练" },
+    label: "练习复习", LucideIcon: RotateCcw, children: [
+      { label: "我的作业", href: "/student/assignments", LucideIcon: ClipboardList, badgeKey: "pending_assignments" },
+      { label: "复习中心", href: "/student/review", LucideIcon: RotateCcw, badgeKey: "pending_review" },
+      { label: "智能练习", href: "/student/quiz", LucideIcon: BrainCircuit },
     ],
   },
   {
-    // 学情速览+成长报告已合并到 dashboard（2 tabs），移除独立成长报告入口
-    label: "我的成长", icon: "报", children: [
-      { label: "学情总览", href: "/student/dashboard", icon: "析" },
-      { label: "学习路径", href: "/student/learning-path", icon: "路" },
-      { label: "记忆中心", href: "/student/memory", icon: "忆" },
-      { label: "学习日历", href: "/student/calendar", icon: "历" },
-      { label: "我的成就", href: "/student/achievements", icon: "奖" },
+    label: "我的成长", LucideIcon: TrendingUp, children: [
+      { label: "学情总览", href: "/student/dashboard", LucideIcon: BarChart3 },
+      { label: "学习路径", href: "/student/learning-path", LucideIcon: Route },
+      { label: "记忆中心", href: "/student/memory", LucideIcon: Sparkles },
+      { label: "学习日历", href: "/student/calendar", LucideIcon: CalendarDays },
+      { label: "我的成就", href: "/student/achievements", LucideIcon: Award },
     ],
   },
 ];
 
-// 教师侧边栏：系统运维→教学分析，Eval 移至 footer
 const teacherNav: NavItem[] = [
-  { label: "班级总览", href: "/teacher", icon: "班" },
+  { label: "班级总览", href: "/teacher", LucideIcon: LayoutDashboard },
   {
-    label: "批改工作台", icon: "批", children: [
-      { label: "布置作业", href: "/teacher/assignments", icon: "业", badgeKeys: ["pending_review", "blind_spots_to_review"] },
-      { label: "作文批改", href: "/teacher/grading?tab=essay", icon: "文" },
-      { label: "拍照批改", href: "/teacher/grading?tab=homework", icon: "拍" },
+    label: "批改工作台", LucideIcon: Pencil, children: [
+      { label: "布置作业", href: "/teacher/assignments", LucideIcon: ClipboardList, badgeKeys: ["pending_review", "blind_spots_to_review"] },
+      { label: "作文批改", href: "/teacher/grading?tab=essay", LucideIcon: FileText },
+      { label: "拍照批改", href: "/teacher/grading?tab=homework", LucideIcon: Camera },
     ],
   },
   {
-    // 班级学情/命题质量 是教学核心分析，不是"运维"
-    label: "教学分析", icon: "析", children: [
-      { label: "班级学情", href: "/teacher/class-analytics", icon: "析" },
-      { label: "命题质量", href: "/teacher/quality-dashboard", icon: "质" },
+    label: "教学分析", LucideIcon: BarChart3, children: [
+      { label: "班级学情", href: "/teacher/class-analytics", LucideIcon: TrendingUp },
+      { label: "命题质量", href: "/teacher/quality-dashboard", LucideIcon: Star },
     ],
   },
   {
-    label: "教学备课", icon: "备", children: [
-      { label: "资料生成", href: "/teacher/materials", icon: "生" },
-      { label: "资源库", href: "/teacher/resources", icon: "库" },
+    label: "教学备课", LucideIcon: BookMarked, children: [
+      { label: "资料生成", href: "/teacher/materials", LucideIcon: Database },
+      { label: "资源库", href: "/teacher/resources", LucideIcon: Library },
     ],
   },
 ];
@@ -115,9 +118,7 @@ function Badge({ count, collapsed }: { count: number; collapsed: boolean }) {
 
 function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boolean; badges: Badges }) {
   const pathname = usePathname();
-  const isChildActive = item.children?.some(
-    (c) => c.href && isActivePath(pathname, c.href)
-  );
+  const isChildActive = item.children?.some((c) => c.href && isActivePath(pathname, c.href));
   const storageKey = `sidebar-group-${item.label}`;
   const [open, setOpen] = useState(() => {
     if (isChildActive) return true;
@@ -135,12 +136,17 @@ function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boole
     });
   }
 
+  const Icon = item.LucideIcon;
+
   if (!item.children) {
     const active = item.href ? isActivePath(pathname, item.href) : false;
     const count = navBadgeCount(item, badges);
     return (
       <Link href={item.href!} className={`sidebar-item${active ? " active" : ""}`} title={collapsed ? item.label : undefined}>
-        <span className="sidebar-icon">{item.icon}{collapsed && <Badge count={count} collapsed />}</span>
+        <span className="sidebar-icon">
+          {Icon && <Icon size={15} strokeWidth={2.2} />}
+          {collapsed && <Badge count={count} collapsed />}
+        </span>
         {!collapsed && <span className="sidebar-label">{item.label}</span>}
         {!collapsed && <Badge count={count} collapsed={false} />}
       </Link>
@@ -157,12 +163,19 @@ function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boole
         title={collapsed ? item.label : undefined}
         aria-expanded={open}
       >
-        <span className="sidebar-icon">{item.icon}{collapsed && <Badge count={groupCount} collapsed />}</span>
+        <span className="sidebar-icon">
+          {Icon && <Icon size={15} strokeWidth={2.2} />}
+          {collapsed && <Badge count={groupCount} collapsed />}
+        </span>
         {!collapsed && (
           <>
             <span className="sidebar-label">{item.label}</span>
             {!open && <Badge count={groupCount} collapsed={false} />}
-            <span className="sidebar-chevron">{open ? "▾" : "▸"}</span>
+            <span className="sidebar-chevron">
+              {open
+                ? <ChevronDown size={13} strokeWidth={2.5} />
+                : <ChevronRight size={13} strokeWidth={2.5} />}
+            </span>
           </>
         )}
       </button>
@@ -171,14 +184,16 @@ function NavGroup({ item, collapsed, badges }: { item: NavItem; collapsed: boole
           {item.children.map((child) => {
             const active = child.href ? isActivePath(pathname, child.href) : false;
             const count = navBadgeCount(child, badges);
+            const ChildIcon = child.LucideIcon;
             return (
               <Link
                 key={child.href}
                 href={child.href!}
                 className={`sidebar-item sidebar-child${active ? " active" : ""}`}
-                title={collapsed ? child.label : undefined}
               >
-                <span className="sidebar-icon">{child.icon}</span>
+                <span className="sidebar-icon">
+                  {ChildIcon && <ChildIcon size={13} strokeWidth={2.2} />}
+                </span>
                 <span className="sidebar-label">{child.label}</span>
                 <Badge count={count} collapsed={false} />
               </Link>
@@ -210,7 +225,6 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
       .catch(() => {});
   }, [role, user?.actorId, user?.token]);
 
-  // 通知徽标：按角色拉取待处理事项数，60s 轮询一次
   useEffect(() => {
     if (!user?.token) return;
     let cancelled = false;
@@ -259,7 +273,9 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
           )}
         </Link>
         <button className="sidebar-toggle" onClick={toggle} aria-label="收起/展开侧边栏">
-          {collapsed ? "▸" : "◂"}
+          {collapsed
+            ? <ChevronRight size={13} strokeWidth={2.8} />
+            : <ChevronRight size={13} strokeWidth={2.8} style={{ transform: "rotate(180deg)" }} />}
         </button>
       </div>
       {!collapsed && (
@@ -281,54 +297,56 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
             <span className={`sidebar-role-badge ${role}`}>{role === "teacher" ? "教师" : "学生"}</span>
           </div>
         )}
-        {/* 偏好设置（学生）/ Eval Dashboard（教师）移至 footer，降低视觉权重 */}
         {role === "student" && (
-          <Link href="/student/settings" className="sidebar-footer-link" title="偏好设置">⚙</Link>
+          <Link href="/student/settings" className="sidebar-footer-link" title="偏好设置">
+            <Settings size={14} strokeWidth={2} />
+          </Link>
         )}
         {role === "teacher" && (
-          <Link href="/eval" className="sidebar-footer-link" title="Eval Dashboard">测</Link>
+          <Link href="/eval" className="sidebar-footer-link" title="Eval Dashboard">
+            <FlaskConical size={14} strokeWidth={2} />
+          </Link>
         )}
-        <button className="sidebar-logout" onClick={handleLogout} title="退出登录">⏻</button>
+        <button className="sidebar-logout" onClick={handleLogout} title="退出登录">
+          <LogOut size={14} strokeWidth={2} />
+        </button>
       </div>
     </aside>
   );
 }
 
-type MobileNavItem = { href: string; icon: string; label: string; badgeKey?: string; badgeKeys?: string[] };
+type MobileNavItem = { href: string; LucideIcon: React.ElementType; label: string; badgeKey?: string; badgeKeys?: string[] };
 
-// 移动端主导航：4 个高频入口（首页/辅导/复习中心/作业）
 const STUDENT_MOBILE_NAV: MobileNavItem[] = [
-  { href: "/student", icon: "主", label: "首页" },
-  { href: "/student/auto-tutor", icon: "辅", label: "辅导" },
-  { href: "/student/review", icon: "复", label: "复习", badgeKey: "pending_review" },
-  { href: "/student/assignments", icon: "业", label: "作业", badgeKey: "pending_assignments" },
+  { href: "/student", LucideIcon: Home, label: "首页" },
+  { href: "/student/auto-tutor", LucideIcon: Bot, label: "辅导" },
+  { href: "/student/review", LucideIcon: RotateCcw, label: "复习", badgeKey: "pending_review" },
+  { href: "/student/assignments", LucideIcon: ClipboardList, label: "作业", badgeKey: "pending_assignments" },
 ];
-// 更多抽屉：其余功能，错题库并入复习中心，教材并入学习资料
 const STUDENT_MORE_NAV: MobileNavItem[] = [
-  { href: "/student/assistant", icon: "问", label: "学习助手" },
-  { href: "/student/materials", icon: "册", label: "学习资料" },
-  { href: "/student/materials?tab=textbook", icon: "本", label: "教材目录" },
-  { href: "/student/history/chat", icon: "人", label: "历史对话" },
-  { href: "/student/history/games", icon: "弈", label: "历史游戏" },
-  { href: "/student/review?tab=weakpoints", icon: "错", label: "错题库" },
-  { href: "/student/quiz", icon: "练", label: "智能练习" },
-  { href: "/student/dashboard", icon: "析", label: "学情总览" },
-  { href: "/student/dashboard?tab=report", icon: "报", label: "成长报告" },
-  { href: "/student/memory", icon: "忆", label: "记忆中心" },
-  { href: "/student/settings", icon: "设", label: "偏好设置" },
+  { href: "/student/assistant", LucideIcon: HelpCircle, label: "学习助手" },
+  { href: "/student/materials", LucideIcon: Library, label: "学习资料" },
+  { href: "/student/materials?tab=textbook", LucideIcon: BookOpen, label: "教材目录" },
+  { href: "/student/history/chat", LucideIcon: MessageSquare, label: "历史对话" },
+  { href: "/student/history/games", LucideIcon: Gamepad2, label: "历史游戏" },
+  { href: "/student/review?tab=weakpoints", LucideIcon: BrainCircuit, label: "错题库" },
+  { href: "/student/quiz", LucideIcon: BrainCircuit, label: "智能练习" },
+  { href: "/student/dashboard", LucideIcon: BarChart3, label: "学情总览" },
+  { href: "/student/dashboard?tab=report", LucideIcon: TrendingUp, label: "成长报告" },
+  { href: "/student/memory", LucideIcon: Sparkles, label: "记忆中心" },
+  { href: "/student/settings", LucideIcon: Settings, label: "偏好设置" },
 ];
 
-// 教师移动端：4 项高频入口（总览/作业/批改/学情）
 const TEACHER_MOBILE_NAV: MobileNavItem[] = [
-  { href: "/teacher", icon: "班", label: "总览" },
-  { href: "/teacher/assignments", icon: "业", label: "作业", badgeKeys: ["pending_review", "blind_spots_to_review"] },
-  { href: "/teacher/grading", icon: "批", label: "批改" },
-  { href: "/teacher/class-analytics", icon: "析", label: "学情" },
+  { href: "/teacher", LucideIcon: LayoutDashboard, label: "总览" },
+  { href: "/teacher/assignments", LucideIcon: ClipboardList, label: "作业", badgeKeys: ["pending_review", "blind_spots_to_review"] },
+  { href: "/teacher/grading", LucideIcon: Pencil, label: "批改" },
+  { href: "/teacher/class-analytics", LucideIcon: TrendingUp, label: "学情" },
 ];
 const TEACHER_MORE_NAV: MobileNavItem[] = [
-  { href: "/teacher/quality-dashboard", icon: "质", label: "命题质量" },
-  { href: "/teacher/materials", icon: "生", label: "资料生成" },
-  { href: "/teacher/resources", icon: "库", label: "资源库" },
+  { href: "/teacher/quality-dashboard", LucideIcon: Star, label: "命题质量" },
+  { href: "/teacher/materials", LucideIcon: Database, label: "资料生成" },
+  { href: "/teacher/resources", LucideIcon: Library, label: "资源库" },
 ];
 
 function badgeOf(badges: Badges, item: { badgeKey?: string; badgeKeys?: string[] }): number {
@@ -384,9 +402,13 @@ function MobileBottomNavInner({ role }: { role: "student" | "teacher" }) {
               {allItems.map((item) => {
                 const active = isPreciseMobileActive(pathname, item.href, currentSearch, allItems);
                 const count = badgeOf(badges, item);
+                const ItemIcon = item.LucideIcon;
                 return (
                   <Link key={item.href} href={item.href} className={`mbn-drawer-item${active ? " active" : ""}`} onClick={() => setMenuOpen(false)}>
-                    <span className="mbn-icon">{item.icon}{count > 0 && <span className="sidebar-badge-dot" />}</span>
+                    <span className="mbn-icon">
+                      <ItemIcon size={18} strokeWidth={2} />
+                      {count > 0 && <span className="sidebar-badge-dot" />}
+                    </span>
                     <span className="mbn-label">{item.label}</span>
                   </Link>
                 );
@@ -399,15 +421,22 @@ function MobileBottomNavInner({ role }: { role: "student" | "teacher" }) {
         {items.map((item) => {
           const active = isPreciseMobileActive(pathname, item.href, currentSearch, allItems);
           const count = badgeOf(badges, item);
+          const ItemIcon = item.LucideIcon;
           return (
             <Link key={item.href} href={item.href} className={`mbn-item${active ? " active" : ""}`}>
-              <span className="mbn-icon">{item.icon}{count > 0 && <span className="sidebar-badge-dot" />}</span>
+              <span className="mbn-icon">
+                <ItemIcon size={20} strokeWidth={active ? 2.5 : 1.8} />
+                {count > 0 && <span className="sidebar-badge-dot" />}
+              </span>
               <span className="mbn-label">{item.label}</span>
             </Link>
           );
         })}
         <button type="button" className={`mbn-item${activeMoreItem ? " active" : ""}`} onClick={() => setMenuOpen(true)} aria-expanded={menuOpen}>
-          <span className="mbn-icon">≡{moreCount > 0 && <span className="sidebar-badge-dot" />}</span>
+          <span className="mbn-icon">
+            <Layers size={20} strokeWidth={activeMoreItem ? 2.5 : 1.8} />
+            {moreCount > 0 && <span className="sidebar-badge-dot" />}
+          </span>
           <span className="mbn-label">{activeMoreItem?.label || "更多"}</span>
         </button>
       </nav>
