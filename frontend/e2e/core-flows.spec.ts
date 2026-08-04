@@ -67,7 +67,8 @@ test("学生可打开 AutoTutor 自主辅导入口", async ({ page }) => {
   await enterDemo(page, "student");
   await page.goto("/student/auto-tutor");
   await expect(page.getByRole("heading", { name: "AutoTutor 自主辅导" })).toBeVisible();
-  await expect(page.getByText("本节课计划")).toBeVisible();
+  // 未开课时页面渲染启动引导；「本节课计划」等三栏面板要开课后才出现
+  await expect(page.getByRole("button", { name: "开始本节课" })).toBeVisible();
 });
 
 test("教师可查看作业管理与 Pilot 作业", async ({ page }) => {
