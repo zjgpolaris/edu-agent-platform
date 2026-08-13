@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { Select, type SelectOption } from "./Select";
 import { TraceTimeline } from "@/components/TraceTimeline";
-import { buildTextbookRequestFields, shouldSubmitComposerKey } from "@/components/learningAssistantComposer";
+import { assistantCompletionLabel, buildTextbookRequestFields, shouldSubmitComposerKey, updateAssistantPlanStep, type AssistantPlanStep } from "@/components/learningAssistantComposer";
 
 type Textbook = { id: string; grade: string; book: string; status: string };
 type TocLesson = { id: string; title: string };
@@ -27,6 +27,8 @@ type ProfileContext = {
   review_plan?: { recommended_actions?: string[]; weak_topics?: string[]; recent_topics?: string[] };
   used_memory?: UsedMemory[];
 };
+type RoutingEvidence = { mode?: string; task_count?: number; reason_code?: string; missing_slots?: string[] };
+type PlanSummary = { completed_steps?: number; total_steps?: number; partial_reason?: string | null; failed_step?: string | null };
 type Message = {
   id: string;
   persistedId?: string;
@@ -37,6 +39,9 @@ type Message = {
   suggestions?: string[];
   activeGame?: Record<string, unknown>;
   feedback?: "resolved" | "unresolved";
+  plan?: AssistantPlanStep[];
+  completionStatus?: string;
+  routeMode?: string;
   evidence?: {
     history_messages?: number;
     generation_mode?: string;
@@ -45,6 +50,9 @@ type Message = {
     textbook?: { book_id?: string; lesson_id?: string; grade?: string; book?: string; lesson_title?: string } | null;
     used_memory_count?: number;
     tool_names?: string[];
+    routing?: RoutingEvidence;
+    plan_summary?: PlanSummary;
+    completion_status?: string;
   };
 };
 type AssistantSession = {
@@ -520,6 +528,8 @@ function LearningAssistantContent() {
       intent: item.intent || undefined,
       tools: item.role === "assistant" ? (item.tool_results || []).map(asToolResult).filter(Boolean) as ToolResult[] : undefined,
       feedback: item.metadata?.feedback,
+      completionStatus: item.metadata?.completion_status,
+      routeMode: item.metadata?.routing?.mode,
       evidence: item.metadata,
     }));
     setMessages(restored);
@@ -845,6 +855,47 @@ function LearningAssistantContent() {
         updateAssistant(assistantId, (current) => ({ ...current, intent: intentName }));
         return;
       }
+      if (event === "route") {
+        const taskCount = Array.isArray(data.tasks) ? data.tasks.length : 1;
+        const mode = typeof data.mode === "string" ? data.mode : "rule";
+        setStatus(taskCount > 1 ? `已拆分为 ${taskCount} 个学习目标` : "已理解学习目标");
+        updateAssistant(assistantId, (current) => ({ ...current, routeMode: mode }));
+        return;
+      }
+      if (event === "plan") {
+        const steps = Array.isArray(data.steps) ? data.steps.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")).map((item, index): AssistantPlanStep => ({
+          step_id: typeof item.step_id === "string" ? item.step_id : `step_${index + 1}`,
+          title: typeof item.title === "string" ? item.title : `步骤 ${index + 1}`,
+          kind: item.kind === "tool" || item.kind === "generation" ? item.kind : undefined,
+          operation: typeof item.operation === "string" ? item.operation : undefined,
+          status: "pending" as const,
+        })) : [];
+        updateAssistant(assistantId, (current) => ({ ...current, plan: steps }));
+        if (steps.length) setStatus(`正在执行学习计划 · 0/${steps.length}`);
+        return;
+      }
+      if (event === "plan_step") {
+        const stepId = typeof data.step_id === "string" ? data.step_id : "";
+        if (!stepId) return;
+        updateAssistant(assistantId, (current) => {
+          const currentPlan = current.plan || [];
+          const nextPlan = updateAssistantPlanStep(currentPlan, {
+            step_id: stepId,
+            status: typeof data.status === "string" ? data.status as AssistantPlanStep["status"] : undefined,
+            sequence: typeof data.sequence === "number" ? data.sequence : undefined,
+            latency_ms: typeof data.latency_ms === "number" ? data.latency_ms : undefined,
+            result_summary: typeof data.result_summary === "string" ? data.result_summary : undefined,
+          });
+          const completed = nextPlan.filter((step) => step.status === "completed").length;
+          setStatus(data.status === "waiting_confirmation" ? "学习计划等待确认" : data.status === "failed" ? "学习计划部分未完成" : `正在执行学习计划 · ${completed}/${nextPlan.length}`);
+          return { ...current, plan: nextPlan };
+        });
+        return;
+      }
+      if (event === "clarification") {
+        setStatus("需要补充学习范围");
+        return;
+      }
       if (event === "tool_start") {
         const toolName = typeof data.tool_name === "string" ? data.tool_name : "tool";
         setStatus(`正在调用${toolLabel(toolName)}`);
@@ -888,6 +939,8 @@ function LearningAssistantContent() {
           ...current,
           persistedId,
           text: finalText || current.text,
+          completionStatus: typeof data.completion_status === "string" ? data.completion_status : "completed",
+          routeMode: data.routing && typeof data.routing === "object" && typeof (data.routing as Record<string, unknown>).mode === "string" ? String((data.routing as Record<string, unknown>).mode) : current.routeMode,
           tools,
           activeGame: activeGame && typeof activeGame === "object" ? activeGame as Record<string, unknown> : undefined,
           evidence: {
@@ -904,9 +957,13 @@ function LearningAssistantContent() {
             } : null,
             used_memory_count: nextProfileContext?.used_memory?.length || 0,
             tool_names: tools.map((tool) => tool.tool_name),
+            routing: data.routing && typeof data.routing === "object" ? data.routing as RoutingEvidence : undefined,
+            plan_summary: data.plan_summary && typeof data.plan_summary === "object" ? data.plan_summary as PlanSummary : undefined,
+            completion_status: typeof data.completion_status === "string" ? data.completion_status : undefined,
           },
         }));
-        setStatus("已完成");
+        const completionStatus = typeof data.completion_status === "string" ? data.completion_status : "completed";
+        setStatus(assistantCompletionLabel(completionStatus));
         return;
       }
       if (event === "suggestions") {
@@ -1184,7 +1241,18 @@ function LearningAssistantContent() {
           ) : messages.map((item) => (
             <article className={`learning-message ${item.role}`} key={item.id}>
               {item.role === "assistant" && <div className="learning-assistant-label"><span aria-hidden="true">问</span> 随问</div>}
+              {item.role === "assistant" && item.plan?.length ? (
+                <div className="learning-plan-progress" aria-live="polite" aria-label="学习计划进度">
+                  {item.plan.map((step, index) => (
+                    <span className={`learning-plan-step ${step.status}`} key={`${item.id}-${step.step_id}`}>
+                      <i aria-hidden="true">{step.status === "completed" ? "✓" : step.status === "failed" ? "!" : index + 1}</i>
+                      {step.title}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <p>{item.text || "正在组织回答……"}</p>
+              {item.role === "assistant" && item.completionStatus === "partial" ? <p className="learning-partial-notice">部分任务未完成，已保留可验证的结果。</p> : null}
               {item.tools?.filter((tool) => !(item.intent === "quiz_generation" && tool.tool_name === "search_history_knowledge")).map((tool) => (
                 <div className={`learning-tool-card ${tool.ok ? "ok" : "error"}`} key={`${item.id}-${tool.tool_name}`}>
                   <div><strong>{toolLabel(tool.tool_name)}</strong><span>{tool.ok ? "已完成" : tool.error?.message || "执行失败"}</span></div>
@@ -1223,6 +1291,8 @@ function LearningAssistantContent() {
                     {item.evidence?.used_memory_count ? <p>结合了 {item.evidence.used_memory_count} 条近期学习记忆</p> : null}
                     {item.evidence?.generation_mode === "fallback" ? <p>本回答使用了稳定降级模式</p> : null}
                     {item.intent && <p>回答方式：{intentLabels[item.intent] || item.intent}</p>}
+                    {item.routeMode && <p>路由方式：{item.routeMode}</p>}
+                    {item.evidence?.plan_summary?.total_steps ? <p>计划完成：{item.evidence.plan_summary.completed_steps || 0}/{item.evidence.plan_summary.total_steps}</p> : null}
                     {(item.evidence?.tool_names?.length || item.tools?.length) ? <p>学习能力：{(item.evidence?.tool_names || item.tools?.map((tool) => tool.tool_name) || []).map(toolLabel).join("、")}</p> : null}
                   </div>
                 </details>

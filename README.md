@@ -59,7 +59,7 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 |------|------|------|
 | **自主辅导 AutoTutor** | `/student/auto-tutor` | 自主 plan→reflect→re_plan 闭环 |
 | 历史人物对话 | `/history-character` | RAG 取材 + 流式 SSE + 来源引用 |
-| **随问 · 学习助手** | `/student/assistant` | 自由提问 + 多轮上下文 + 工具调用 + RAG + 确认治理 |
+| **随问 · 学习助手** | `/student/assistant` | 混合语义路由 + 主动澄清 + 最多 3 步受限计划 + RAG / 工具确认治理 |
 | 今日复习 | `/student/review` | SM-2 间隔复习调度 |
 | 错题本 | `/student/weakpoints` | 薄弱点管理 |
 | 学习记忆 | `/student/memory` | Agent 写入的长期记忆 |
@@ -165,6 +165,32 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 传入 `--ready-url` 时，release gate 现在会输出 required / failed / warnings 摘要；若带 `--production`、`--ready-require-rag` 或 `--ready-require-external`，会把 RAG / 外部依赖配置作为 blocking readiness check。
 
 AgentOps 的 production summary 现在会额外聚合最近 trace 中的 RAG 诊断口径，包括 `diagnosis_code` 分布和 `failure_stage` 分布，便于区分问题主要发生在检索阶段还是生成阶段；教材问答与历史人物两条链路都已接入该统计。
+
+### 随问智能路由与受限计划（v1.29）
+
+学习助手使用“安全规则 → 确定性候选 → 可选结构化语义路由 → 槽位澄清 → allowlist 计划执行 → 证据检查”的链路。组合请求（例如“先解释洋务运动，再出 3 道选择题”）只会生成最多 3 步的确定性计划；工具仍统一经过 Tool Registry、Pydantic 参数校验、角色权限和高风险确认。空检索或只读工具失败最多执行一次受控 repair，不会无限重试。
+
+新能力默认采用安全灰度配置：
+
+```bash
+EDU_AGENT_ASSISTANT_SEMANTIC_ROUTER_ENABLED=false
+EDU_AGENT_ASSISTANT_ROUTER_SHADOW_MODE=true
+EDU_AGENT_ASSISTANT_ROUTER_CONFIDENCE_THRESHOLD=0.65
+EDU_AGENT_ASSISTANT_PLANNER_ENABLED=false
+```
+
+离线质量验证：
+
+```bash
+PYTHONPATH=backend python3 eval/intent_accuracy_eval.py   # 300 条路由/槽位/澄清 case
+PYTHONPATH=backend python3 eval/trajectory_eval.py        # 单工具、组合计划、澄清轨迹
+npm run release:gate:fast -- --skip-frontend             # 已包含学习助手与 AutoTutor 智能质量门禁
+
+# 手动 / nightly 真实模型盖章；无真实调用证据时以 NOT_RUN 失败退出，不会显示绿色 PASS
+PYTHONPATH=backend python3 eval/run_core_evals.py --require-real-llm
+```
+
+Eval 报告会记录 commit SHA、suite profile、真实 LLM 调用状态和生成时间；`/eval` 会对 commit 不一致或超过 7 天的报告标记 `STALE`，并分别展示 skipped / not-run / infra-failed / quality-failed。
 
 ### MCP Server
 

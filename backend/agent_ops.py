@@ -32,6 +32,11 @@ def _tool_name(event: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _data_scope(event: dict[str, Any]) -> str:
+    value = (event.get("metadata") or {}).get("data_scope")
+    return value if value in {"runtime", "eval", "demo_seed"} else "runtime"
+
+
 def _compact_recent(events: list[dict[str, Any]], *, fields: list[str], limit: int = 10) -> list[dict[str, Any]]:
     recent = []
     for event in events[:limit]:
@@ -156,6 +161,10 @@ def _build_production_summary(trace_limit: int = 20) -> dict[str, Any]:
     rag_failure_stage_counts: Counter[str] = Counter()
     fallback_count = 0
     llm_error_count = 0
+    repair_attempts: set[tuple[str, str, int, str]] = set()
+    repair_successes: set[tuple[str, str, int, str]] = set()
+    routing_count = 0
+    plan_step_count = 0
     total_steps = 0
     llm_calls = 0
 
@@ -163,6 +172,20 @@ def _build_production_summary(trace_limit: int = 20) -> dict[str, Any]:
         for event in trace.get("events") or []:
             total_steps += 1
             metadata = event.get("metadata") or {}
+            if event.get("event_type") == "repair":
+                repair_key = (
+                    str(trace.get("trace_id") or ""),
+                    str(metadata.get("step_id") or event.get("step_name") or "repair"),
+                    int(metadata.get("attempt") or 1),
+                    str(metadata.get("operation") or metadata.get("repair_type") or "unknown"),
+                )
+                repair_attempts.add(repair_key)
+                if event.get("status") == "success":
+                    repair_successes.add(repair_key)
+            if event.get("event_type") == "routing":
+                routing_count += 1
+            if event.get("event_type") == "plan_step":
+                plan_step_count += 1
             latency = event.get("latency_ms")
             if isinstance(latency, (int, float)):
                 step_latencies.append(float(latency))
@@ -193,6 +216,8 @@ def _build_production_summary(trace_limit: int = 20) -> dict[str, Any]:
 
     total_cost = round(sum(llm_costs), 6)
     avg_cost = round(total_cost / len(llm_costs), 6) if llm_costs else 0.0
+    repair_count = len(repair_attempts)
+    repair_success_count = len(repair_successes)
     return {
         "trace_window": len(recent_traces),
         "total_steps": total_steps,
@@ -217,6 +242,14 @@ def _build_production_summary(trace_limit: int = 20) -> dict[str, Any]:
             "sample_count": len(llm_costs),
             "total_usd_estimated": total_cost,
             "avg_usd_per_llm_call_estimated": avg_cost,
+        },
+        "runtime": {
+            "routing_count": routing_count,
+            "plan_step_count": plan_step_count,
+            "repair_count": repair_count,
+            "repair_success_count": repair_success_count,
+            "repair_success_rate": _rate(repair_success_count, repair_count),
+            "repair_rate": _rate(repair_count, routing_count),
         },
     }
 
@@ -250,8 +283,8 @@ def _readiness_status(*, coverage_rate: float, audit_failure: int, learning_fail
 def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
     limit = max(1, min(int(limit), 500))
     try:
-        audit_events = list_audit_events(limit=limit)
-        learning_events = list_learning_events(limit=limit)
+        all_audit_events = list_audit_events(limit=limit)
+        all_learning_events = list_learning_events(limit=limit)
     except Exception as exc:
         return {
             "schema_version": 1,
@@ -260,6 +293,14 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
             "status": "unavailable",
             "error": str(exc),
         }
+
+    audit_scope_counts = Counter(_data_scope(event) for event in all_audit_events)
+    learning_scope_counts = Counter(_data_scope(event) for event in all_learning_events)
+    # Production readiness and product metrics must not be polluted by offline
+    # eval or demo seed failures. Legacy records without data_scope remain
+    # runtime for backward compatibility.
+    audit_events = [event for event in all_audit_events if _data_scope(event) == "runtime"]
+    learning_events = [event for event in all_learning_events if _data_scope(event) == "runtime"]
 
     audit_with_trace = sum(1 for event in audit_events if _trace_id(event))
     learning_with_trace = sum(1 for event in learning_events if _trace_id(event))
@@ -310,6 +351,17 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
     assistant_followups = sum(1 for event in assistant_questions if event.get("event_type") == "followup_asked")
     assistant_answers = [event for event in learning_events if event.get("feature") == "learning_assistant" and event.get("event_type") == "answer_completed"]
     assistant_fallbacks = sum(1 for event in assistant_answers if (event.get("metadata") or {}).get("fallback_used") is True)
+    assistant_real_llm = sum(1 for event in assistant_answers if (event.get("metadata") or {}).get("generation_mode") == "llm")
+    assistant_routes = [event for event in learning_events if event.get("feature") == "learning_assistant" and event.get("event_type") == "intent_detected"]
+    assistant_semantic_routes = sum(1 for event in assistant_routes if (event.get("metadata") or {}).get("routing_mode") == "semantic")
+    assistant_clarifications = [event for event in learning_events if event.get("feature") == "learning_assistant" and event.get("event_type") == "clarification_requested"]
+    assistant_multi_intent = sum(1 for event in assistant_routes if int((event.get("metadata") or {}).get("task_count") or 0) > 1)
+    assistant_planned_answers = [event for event in assistant_answers if int((event.get("metadata") or {}).get("total_steps") or 0) > 0]
+    assistant_completed_plans = sum(1 for event in assistant_planned_answers if (event.get("metadata") or {}).get("completion_status") == "completed")
+    assistant_partial_plans = sum(1 for event in assistant_planned_answers if (event.get("metadata") or {}).get("completion_status") == "partial")
+    assistant_clarification_resolved = sum(1 for event in assistant_answers if (event.get("metadata") or {}).get("clarification_resolved") is True)
+    assistant_routing_feedback = [event for event in learning_events if event.get("feature") == "learning_assistant" and (event.get("metadata") or {}).get("routing_correct") is not None]
+    assistant_routing_correct = sum(1 for event in assistant_routing_feedback if (event.get("metadata") or {}).get("routing_correct") is True)
     context_feedback = [
         event for event in learning_events
         if event.get("feature") == "learning_assistant"
@@ -351,6 +403,11 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
         "schema_version": 1,
         "generated_at": _generated_at(),
         "window": {"limit": limit},
+        "data_scope": {
+            "active": "runtime",
+            "audit": dict(audit_scope_counts),
+            "learning": dict(learning_scope_counts),
+        },
         "status": _status(total_events, coverage_rate),
         "readiness": readiness,
         "trace_correlation": {
@@ -395,6 +452,24 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
             "answer_total": len(assistant_answers),
             "answer_fallback_total": assistant_fallbacks,
             "answer_fallback_rate": _rate(assistant_fallbacks, len(assistant_answers)),
+            "answer_real_llm_total": assistant_real_llm,
+            "answer_real_llm_rate": _rate(assistant_real_llm, len(assistant_answers)),
+            "routing_total": len(assistant_routes),
+            "semantic_routing_total": assistant_semantic_routes,
+            "semantic_routing_rate": _rate(assistant_semantic_routes, len(assistant_routes)),
+            "clarification_total": len(assistant_clarifications),
+            "clarification_rate": _rate(len(assistant_clarifications), len(assistant_routes)),
+            "clarification_resolved_total": assistant_clarification_resolved,
+            "clarification_resolution_rate": _rate(assistant_clarification_resolved, len(assistant_clarifications)),
+            "routing_feedback_total": len(assistant_routing_feedback),
+            "routing_accuracy": _rate(assistant_routing_correct, len(assistant_routing_feedback)),
+            "multi_intent_total": assistant_multi_intent,
+            "multi_intent_rate": _rate(assistant_multi_intent, len(assistant_routes)),
+            "planned_answer_total": len(assistant_planned_answers),
+            "plan_completed_total": assistant_completed_plans,
+            "plan_completion_rate": _rate(assistant_completed_plans, len(assistant_planned_answers)),
+            "partial_completion_total": assistant_partial_plans,
+            "partial_completion_rate": _rate(assistant_partial_plans, len(assistant_planned_answers)),
             "session_created_total": len(created_sessions),
             "session_resumed_total": len(created_sessions & resumed_sessions),
             "session_resume_rate": _rate(len(created_sessions & resumed_sessions), len(created_sessions)),

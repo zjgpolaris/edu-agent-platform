@@ -69,7 +69,9 @@ async def eval_latest(actor: Actor = Depends(require_auth)):
     runner = load_eval_runner()
     if not runner.LATEST_JSON.exists():
         raise HTTPException(status_code=404, detail="latest eval report not found")
-    return json.loads(runner.LATEST_JSON.read_text(encoding="utf-8"))
+    payload = json.loads(runner.LATEST_JSON.read_text(encoding="utf-8"))
+    payload["report_freshness"] = runner.report_runtime_status(payload)
+    return payload
 
 
 @router.get("/api/eval/report/json")
@@ -108,7 +110,8 @@ async def eval_run(req: EvalRunRequest, actor: Actor = Depends(require_auth)):
             results.append(await run_in_threadpool(runner.run_suite, name))
         except Exception as exc:
             results.append(runner.SuiteResult(name=name, command=[], returncode=1, duration_sec=0, stdout="", stderr="", passed_cases=0, failed_cases_count=1, total_cases=1, metrics={}, failed_cases=[], error=str(exc)))
-    summary = runner.build_json_summary(results, include_output=True)
+    profile = "custom" if req.suite and req.suite not in {"quick", "all"} else "core" if req.suite == "all" or not req.quick else "quick"
+    summary = runner.build_json_summary(results, include_output=True, profile=profile)
     runner.write_reports(summary)
     return summary
 
@@ -133,7 +136,8 @@ async def eval_run_stream(suite: str = "quick", actor: Actor = Depends(require_a
             except Exception as exc:
                 yield f"data: {json.dumps({'type': 'suite_error', 'suite': name, 'error': str(exc), 'index': i})}\n\n"
         try:
-            summary = runner.build_json_summary(results, include_output=True)
+            profile = "core" if suite == "all" else "quick" if suite == "quick" else "custom"
+            summary = runner.build_json_summary(results, include_output=True, profile=profile)
             runner.write_reports(summary)
             yield f"data: {json.dumps({'type': 'done', 'summary': summary})}\n\n"
         except Exception as exc:

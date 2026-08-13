@@ -1,140 +1,180 @@
-"""意图识别准确率评测
-
-量化评测 learning_assistant 意图分类的准确率、置信度分布和工具命中率。
-对应文章 L1 组件评测：意图识别准确率和澄清率 / 工具 Top-K 命中率。
-
-运行方式：
-    python3 eval/intent_accuracy_eval.py
-"""
+"""Learning-assistant v2 routing evaluation with intent, slot and clarification metrics."""
 from __future__ import annotations
 
+import json
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
+DATASET = ROOT / "eval" / "datasets" / "learning_assistant_intent_cases.json"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from agents.learning_assistant import detect_learning_intent
+from agents.learning_assistant_router import deterministic_route, route_learning_request
 
-# ---------------------------------------------------------------------------
-# 标注数据集：(query, grade, expected_intent)
-# ---------------------------------------------------------------------------
-LABELED_CASES = [
-    # ── character_recommendation ──────────────────────────────────────────
-    ("推荐一个能讲汉代的历史人物", "七年级下册", "character_recommendation"),
-    ("我想和历史人物对话，了解三国时期", "七年级下册", "character_recommendation"),
-    ("推荐适合七年级的历史人物", "七年级上册", "character_recommendation"),
-    # ── timeline_game ─────────────────────────────────────────────────────
-    ("来一局历史时间线排序游戏", "八年级上册", "timeline_game"),
-    ("开始时间排序小游戏", "七年级上册", "timeline_game"),
-    ("玩个历史排序", "八年级下册", "timeline_game"),
-    # ── quiz_generation ───────────────────────────────────────────────────
-    ("帮我出 5 道练习题", "八年级上册", "quiz_generation"),
-    ("出几道关于鸦片战争的选择题", "八年级上册", "quiz_generation"),
-    ("给我出测验题", "九年级上册", "quiz_generation"),
-    # ── review_plan ───────────────────────────────────────────────────────
-    ("我最近错了很多题，帮我安排复习", "八年级上册", "review_plan"),
-    ("生成今天的复习计划", "七年级下册", "review_plan"),
-    # ── history_search ────────────────────────────────────────────────────
-    ("鸦片战争的原因是什么？", "八年级上册", "history_search"),
-    ("辛亥革命有什么意义？", "八年级上册", "history_search"),
-    ("商鞅变法对秦国有哪些影响？", "七年级上册", "history_search"),
-    ("五四运动是怎么发生的", "八年级上册", "history_search"),
-    # ── textbook_qa ───────────────────────────────────────────────────────
-    ("这节课讲了什么？", "七年级上册", "textbook_qa"),
-    # ── chat / fallback ──────────────────────────────────────────────────
-    ("你好", "七年级上册", "chat"),
-    ("今天天气怎么样", "七年级上册", "chat"),
-]
 
-# 意图 → 预期触发的工具名（空表示不调用工具）
-INTENT_TO_TOOL: dict[str, str | None] = {
-    "character_recommendation": "recommend_character",
-    "timeline_game": "start_timeline_game",
-    "quiz_generation": "generate_quiz",
-    "review_plan": "suggest_review_plan",
-    "history_search": "search_history_knowledge",
-    "textbook_qa": "get_textbook_lesson",
-    "memory_delete_demo": "delete_demo_memory",
-    "chat": None,
-}
+def _f1(tp: int, fp: int, fn: int) -> float:
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    return 2 * precision * recall / (precision + recall) if precision + recall else 0.0
 
-# ---------------------------------------------------------------------------
-# Eval runner
-# ---------------------------------------------------------------------------
 
-def run() -> None:
-    total = len(LABELED_CASES)
+def _slot_value(route, key: str):
+    primary = route.tasks[0]
+    return getattr(primary, key, None)
+
+
+def _semantic_safety_eval() -> tuple[int, int]:
+    class _Response:
+        def __init__(self, payload: dict):
+            self.content = json.dumps(payload, ensure_ascii=False)
+
+    class _LLM:
+        def __init__(self, payload: dict):
+            self.payload = payload
+
+        def invoke(self, messages):
+            return _Response(self.payload)
+
+    base = {"schema_version": 2, "mode": "semantic", "confidence": 0.91, "needs_clarification": False, "clarification_question": None, "missing_slots": [], "reason_code": "semantic_test"}
+    reordered, _ = route_learning_request(
+        {"message": "帮我处理一下后续学习"},
+        llm=_LLM({**base, "tasks": [
+            {"task_id": "x", "intent": "timeline_game", "topic": "洋务运动", "depends_on": []},
+            {"task_id": "y", "intent": "history_search", "topic": "洋务运动", "depends_on": ["x"]},
+        ]}),
+        semantic_enabled=True,
+        shadow_mode=False,
+    )
+    high_risk_blocked, _ = route_learning_request(
+        {"message": "帮我处理一下后续学习"},
+        llm=_LLM({**base, "tasks": [{"task_id": "x", "intent": "memory_delete_demo", "depends_on": []}]}),
+        semantic_enabled=True,
+        shadow_mode=False,
+    )
+    low_confidence, _ = route_learning_request(
+        {"message": "帮我处理一下后续学习"},
+        llm=_LLM({**base, "confidence": 0.4, "tasks": [{"task_id": "x", "intent": "chat", "depends_on": []}]}),
+        semantic_enabled=True,
+        shadow_mode=False,
+    )
+    checks = [
+        [task.intent.value for task in reordered.tasks] == ["history_search", "timeline_game"] and reordered.tasks[1].depends_on == ["task_1"],
+        all(task.intent.value != "memory_delete_demo" for task in high_risk_blocked.tasks),
+        low_confidence.needs_clarification and low_confidence.mode == "clarification",
+    ]
+    return sum(checks), len(checks)
+
+
+def main() -> None:
+    cases = json.loads(DATASET.read_text(encoding="utf-8"))
+    labels = sorted({str(case["expected_primary_intent"]) for case in cases})
+    confusion: Counter[tuple[str, str]] = Counter()
+    failures: list[dict] = []
     correct = 0
-    wrong_cases: list[dict] = []
-    confidence_sum = 0.0
-    low_conf_count = 0  # < 0.7
+    slot_total = 0
+    slot_correct = 0
+    clarification_tp = clarification_fp = clarification_fn = 0
+    exact_multi_total = exact_multi_correct = 0
+    mode_counts: Counter[str] = Counter()
 
-    print(f"Running intent accuracy eval on {total} labeled cases...\n")
-
-    for query, grade, expected in LABELED_CASES:
-        result = detect_learning_intent({"message": query, "grade": grade})
-        predicted = result.get("intent", "chat")
-        confidence = float(result.get("confidence", 0.0))
-        confidence_sum += confidence
-
-        if confidence < 0.7:
-            low_conf_count += 1
-
-        if predicted == expected:
+    for case in cases:
+        request = dict(case.get("request") or {})
+        route = deterministic_route(request)
+        expected = str(case["expected_primary_intent"])
+        predicted = route.tasks[0].intent.value
+        confusion[(expected, predicted)] += 1
+        mode_counts[route.mode] += 1
+        if expected == predicted:
             correct += 1
         else:
-            wrong_cases.append({
-                "query": query,
-                "expected": expected,
-                "predicted": predicted,
-                "confidence": round(confidence, 3),
-                "reason": result.get("reason", ""),
-            })
+            failures.append({"id": case["id"], "message": request.get("message"), "expected": expected, "predicted": predicted, "reason": route.reason_code})
 
-    accuracy = correct / total
-    avg_confidence = confidence_sum / total
+        expected_slots = case.get("expected_slots") or {}
+        for key, value in expected_slots.items():
+            slot_total += 1
+            if _slot_value(route, key) == value:
+                slot_correct += 1
 
-    # ── 打印每个错误 ────────────────────────────────────────────────────
-    if wrong_cases:
-        print("=== Misclassified cases ===")
-        for wc in wrong_cases:
-            print(f"  WRONG  query={wc['query']!r}")
-            print(f"         expected={wc['expected']}  predicted={wc['predicted']}  conf={wc['confidence']}")
-            print(f"         reason={wc['reason']}")
+        expected_clarification = bool(case.get("expected_clarification"))
+        if route.needs_clarification and expected_clarification:
+            clarification_tp += 1
+        elif route.needs_clarification:
+            clarification_fp += 1
+        elif expected_clarification:
+            clarification_fn += 1
+
+        expected_intents = case.get("expected_intents") or [expected]
+        if len(expected_intents) > 1:
+            exact_multi_total += 1
+            if [task.intent.value for task in route.tasks] == expected_intents:
+                exact_multi_correct += 1
+
+    total = len(cases)
+    accuracy = correct / total if total else 0.0
+    per_intent: dict[str, dict[str, float | int]] = {}
+    f1_values: list[float] = []
+    for label in labels:
+        tp = confusion[(label, label)]
+        fp = sum(value for (expected, predicted), value in confusion.items() if predicted == label and expected != label)
+        fn = sum(value for (expected, predicted), value in confusion.items() if expected == label and predicted != label)
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        score = _f1(tp, fp, fn)
+        f1_values.append(score)
+        per_intent[label] = {"support": tp + fn, "precision": precision, "recall": recall, "f1": score}
+
+    macro_f1 = sum(f1_values) / len(f1_values) if f1_values else 0.0
+    slot_accuracy = slot_correct / slot_total if slot_total else 1.0
+    clarification_precision = clarification_tp / (clarification_tp + clarification_fp) if clarification_tp + clarification_fp else 1.0
+    clarification_recall = clarification_tp / (clarification_tp + clarification_fn) if clarification_tp + clarification_fn else 1.0
+    multi_exact = exact_multi_correct / exact_multi_total if exact_multi_total else 1.0
+    high_risk_total = sum(1 for case in cases if case["expected_primary_intent"] == "memory_delete_demo")
+    high_risk_correct = confusion[("memory_delete_demo", "memory_delete_demo")]
+    high_risk_recall = high_risk_correct / high_risk_total if high_risk_total else 1.0
+    semantic_safety_passed, semantic_safety_total = _semantic_safety_eval()
+
+    print(f"Running v2 intent accuracy eval on {total} labeled cases...\n")
+    if failures:
+        print("=== Misclassified cases (first 20) ===")
+        for failure in failures[:20]:
+            print("  " + json.dumps(failure, ensure_ascii=False))
         print()
-
-    # ── 汇总指标 ────────────────────────────────────────────────────────
-    print("=== Intent Accuracy Metrics ===")
-    print(f"  accuracy:          {correct}/{total} = {accuracy:.1%}")
-    print(f"  avg_confidence:    {avg_confidence:.3f}")
-    print(f"  low_conf_rate:     {low_conf_count}/{total} (conf < 0.70)")
-    print(f"  wrong_count:       {len(wrong_cases)}")
+    print("=== Routing Metrics ===")
+    print(f"accuracy={accuracy:.4f}")
+    print(f"macro_f1={macro_f1:.4f}")
+    print(f"slot_accuracy={slot_accuracy:.4f}")
+    print(f"clarification_precision={clarification_precision:.4f}")
+    print(f"clarification_recall={clarification_recall:.4f}")
+    print(f"multi_intent_exact_match={multi_exact:.4f}")
+    print(f"high_risk_intent_recall={high_risk_recall:.4f}")
+    print(f"semantic_schema_safety={semantic_safety_passed / semantic_safety_total if semantic_safety_total else 1.0:.4f}")
+    print("routing_mode_distribution=" + json.dumps(mode_counts, ensure_ascii=False, sort_keys=True))
+    print("confusion_matrix=" + json.dumps({f"{expected}->{predicted}": value for (expected, predicted), value in sorted(confusion.items())}, ensure_ascii=False))
     print()
+    print("=== Per-Intent Metrics ===")
+    for label, metrics in per_intent.items():
+        print(f"{label}: support={metrics['support']} precision={metrics['precision']:.3f} recall={metrics['recall']:.3f} f1={metrics['f1']:.3f}")
 
-    # ── 按意图分组准确率 ───────────────────────────────────────────────
-    from collections import defaultdict
-    per_intent: dict[str, list[bool]] = defaultdict(list)
-    for query, grade, expected in LABELED_CASES:
-        result = detect_learning_intent({"message": query, "grade": grade})
-        predicted = result.get("intent", "chat")
-        per_intent[expected].append(predicted == expected)
-
-    print("=== Per-Intent Accuracy ===")
-    for intent, results in sorted(per_intent.items()):
-        n = len(results)
-        n_correct = sum(results)
-        print(f"  {intent:<30} {n_correct}/{n} = {n_correct/n:.0%}")
-
-    print()
-    if accuracy < 0.80:
-        raise SystemExit(
-            f"FAIL: intent accuracy {accuracy:.1%} is below threshold 80%"
-        )
-    print(f"PASS: intent accuracy {accuracy:.1%}")
+    failed_thresholds = []
+    if accuracy < 0.90:
+        failed_thresholds.append(f"accuracy {accuracy:.1%} < 90%")
+    if macro_f1 < 0.88:
+        failed_thresholds.append(f"macro_f1 {macro_f1:.3f} < 0.88")
+    if slot_accuracy < 0.88:
+        failed_thresholds.append(f"slot_accuracy {slot_accuracy:.1%} < 88%")
+    if clarification_precision < 0.85:
+        failed_thresholds.append(f"clarification_precision {clarification_precision:.1%} < 85%")
+    if high_risk_recall < 1.0:
+        failed_thresholds.append(f"high_risk_recall {high_risk_recall:.1%} < 100%")
+    if semantic_safety_passed != semantic_safety_total:
+        failed_thresholds.append(f"semantic_schema_safety {semantic_safety_passed}/{semantic_safety_total}")
+    if failed_thresholds:
+        raise SystemExit("FAIL: " + "; ".join(failed_thresholds))
+    print(f"intent_accuracy_eval={correct}/{total}")
 
 
 if __name__ == "__main__":
-    run()
+    main()

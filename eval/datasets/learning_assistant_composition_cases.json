@@ -1,0 +1,662 @@
+[
+  {
+    "id": "composition_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先简单解释洋务运动，再给我出 3 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_002",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先讲讲鸦片战争为什么重要，然后来两道简答题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 2
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_003",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "解释一下辛亥革命，接着给我几道练习题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_004",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先说明五四运动的影响，再出一道题目考考我",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 1
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_005",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "用简单的话讲商鞅变法，之后生成 5 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 5
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先简单解释甲午战争，再给我出 3 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_007",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "先讲讲洋务运动为什么重要，然后来两道简答题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 2
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_008",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "解释一下鸦片战争，接着给我几道练习题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_009",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "先说明辛亥革命的影响，再出一道题目考考我",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 1
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_010",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "用简单的话讲五四运动，之后生成 5 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 5
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先简单解释商鞅变法，再给我出 3 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_012",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先讲讲甲午战争为什么重要，然后来两道简答题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 2
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_013",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "解释一下洋务运动，接着给我几道练习题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_014",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先说明鸦片战争的影响，再出一道题目考考我",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 1
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_015",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "用简单的话讲辛亥革命，之后生成 5 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 5
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先简单解释五四运动，再给我出 3 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_017",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "先讲讲商鞅变法为什么重要，然后来两道简答题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 2
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_018",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "解释一下甲午战争，接着给我几道练习题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_019",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "先说明洋务运动的影响，再出一道题目考考我",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 1
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_020",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "用简单的话讲鸦片战争，之后生成 5 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 5
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先简单解释辛亥革命，再给我出 3 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_022",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先讲讲五四运动为什么重要，然后来两道简答题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 2
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_023",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "解释一下商鞅变法，接着给我几道练习题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_024",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先说明甲午战争的影响，再出一道题目考考我",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 1
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_025",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "用简单的话讲洋务运动，之后生成 5 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 5
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_026",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "先简单解释鸦片战争，再给我出 3 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_027",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "先讲讲辛亥革命为什么重要，然后来两道简答题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 2
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_028",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "解释一下五四运动，接着给我几道练习题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 3
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_029",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "先说明商鞅变法的影响，再出一道题目考考我",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 1
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  },
+  {
+    "id": "composition_030",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "用简单的话讲甲午战争，之后生成 5 道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search",
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "history_search",
+    "expected_slots": {
+      "count": 5
+    },
+    "expected_plan_operations": [
+      "search_history_knowledge",
+      "answer_from_sources",
+      "quiz_from_sources"
+    ]
+  }
+]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 from uuid import uuid4
 
@@ -40,6 +41,7 @@ def record_audit_event(
         trace_id = current_trace_id()
         if trace_id and "trace_id" not in raw_metadata:
             raw_metadata["trace_id"] = trace_id
+        raw_metadata.setdefault("data_scope", os.getenv("EDU_AGENT_DATA_SCOPE", "runtime"))
         safe = _mask_metadata(_safe_metadata(raw_metadata))
         with get_connection() as conn:
             _ensure_audit_table(conn)

@@ -5,6 +5,7 @@ node_modules
 .next
 frontend/node_modules
 frontend/.next
+frontend/.next-e2e
 __pycache__
 *.pyc
 textbooks/raw/

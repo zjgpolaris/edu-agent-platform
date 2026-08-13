@@ -5663,6 +5663,63 @@ textarea {
   font-size: 11px;
 }
 
+.learning-plan-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0 0 10px 31px;
+}
+
+.learning-plan-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(96, 72, 44, 0.14);
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.learning-plan-step i {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: rgba(96, 72, 44, 0.1);
+  font-style: normal;
+  font-size: 10px;
+}
+
+.learning-plan-step.running {
+  border-color: rgba(15, 107, 95, 0.32);
+  color: var(--jade-dark);
+}
+
+.learning-plan-step.completed {
+  border-color: rgba(15, 107, 95, 0.2);
+  background: rgba(223, 238, 232, 0.52);
+  color: var(--jade-dark);
+}
+
+.learning-plan-step.failed,
+.learning-plan-step.cancelled {
+  border-color: rgba(177, 56, 45, 0.24);
+  background: rgba(255, 237, 232, 0.58);
+  color: var(--cinnabar);
+}
+
+.learning-partial-notice {
+  margin-top: 8px !important;
+  border-left: 3px solid rgba(177, 56, 45, 0.45);
+  padding-left: 9px;
+  color: var(--cinnabar);
+  font-size: 12px;
+}
+
 .learning-feedback-row span {
   color: var(--muted);
   font-size: 12px;

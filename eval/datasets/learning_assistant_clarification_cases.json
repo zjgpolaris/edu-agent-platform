@@ -1,0 +1,452 @@
+[
+  {
+    "id": "clarification_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这节课讲了什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_002",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这一课重点是什么？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_003",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "总结一下本课",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_004",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "课文哪里最容易考？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_005",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "教材这课为什么重要",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这节课讲了什么？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_007",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "这一课重点是什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_008",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "总结一下本课？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_009",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "课文哪里最容易考",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_010",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "教材这课为什么重要？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这节课讲了什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_012",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这一课重点是什么？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_013",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "总结一下本课",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_014",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "课文哪里最容易考？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_015",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "教材这课为什么重要",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这节课讲了什么？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_017",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "这一课重点是什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_018",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "总结一下本课？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_019",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "课文哪里最容易考",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_020",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "教材这课为什么重要？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这节课讲了什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_022",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这一课重点是什么？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_023",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "总结一下本课",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_024",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "课文哪里最容易考？",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  },
+  {
+    "id": "clarification_025",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "教材这课为什么重要",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true,
+    "expected_missing_slots": [
+      "book_id",
+      "lesson_id"
+    ]
+  }
+]

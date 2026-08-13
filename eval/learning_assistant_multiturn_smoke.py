@@ -5,6 +5,7 @@ import asyncio
 import os
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,8 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from fastapi import HTTPException
 from agents import learning_assistant as la
+from agents.learning_assistant_planner import build_task_plan
+from agents.learning_assistant_router import deterministic_route
 from api.routers.learning import (
     LearningAssistantContextUpdateRequest,
     LearningAssistantFeedbackRequest,
@@ -80,6 +83,33 @@ def main() -> None:
     assert "半殖民地" in final["response"], final
     assert final["context_usage"]["history_messages"] == 2
 
+    clarification_history = [{
+        "role": "assistant",
+        "content": "你指的是哪一课？",
+        "metadata": {
+            "completion_status": "needs_clarification",
+            "routing": {
+                "completion_status": "needs_clarification",
+                "pending_task": {"intent": "textbook_qa"},
+                "missing_slots": ["book_id", "lesson_id"],
+            },
+        },
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }]
+    resolved_route = deterministic_route({"message": "我指的是洋务运动", "conversation_history": clarification_history})
+    assert resolved_route.tasks[0].intent.value == "textbook_qa", resolved_route
+    assert resolved_route.tasks[0].topic == "洋务运动", resolved_route
+    assert resolved_route.needs_clarification is False
+    resolved_plan = build_task_plan(resolved_route, {"message": "我指的是洋务运动", "conversation_history": clarification_history}, enable_composition=False)
+    assert [step.operation for step in resolved_plan.steps] == ["search_history_knowledge", "answer_from_sources"], resolved_plan
+
+    expired_history = [{**clarification_history[0], "created_at": (datetime.now(timezone.utc) - timedelta(minutes=31)).isoformat()}]
+    expired_route = deterministic_route({"message": "我指的是洋务运动", "conversation_history": expired_history})
+    assert expired_route.tasks[0].intent.value == "history_search", expired_route
+    switched_route = deterministic_route({"message": "改讲辛亥革命为什么成功", "conversation_history": clarification_history})
+    assert switched_route.tasks[0].intent.value == "history_search", switched_route
+    assert switched_route.reason_code != "pending_clarification_resolved", switched_route
+
     feedback = asyncio.run(learning_assistant_feedback(
         session["session_id"],
         assistant_message["message_id"],
@@ -103,7 +133,14 @@ def main() -> None:
 
     original_stream = la.stream_learning_assistant_events
     la.stream_learning_assistant_events = lambda request: iter([
-        ("final", {"response": "换成生活中的例子：市场就像一扇被强行推开的门。", "intent": "chat", "tool_results": []}),
+        ("final", {
+            "response": "换成生活中的例子：市场就像一扇被强行推开的门。",
+            "intent": "chat",
+            "tool_results": [],
+            "routing": {"schema_version": 2, "mode": "rule", "task_count": 1, "reason_code": "general_chat"},
+            "plan_summary": {"completed_steps": 1, "total_steps": 1},
+            "completion_status": "completed",
+        }),
     ])
     try:
         api_result = asyncio.run(learning_assistant_chat(
@@ -114,6 +151,10 @@ def main() -> None:
         la.stream_learning_assistant_events = original_stream
     persisted_id = api_result["final"].get("message_id")
     assert persisted_id and any(item["message_id"] == persisted_id for item in list_messages(session["session_id"])), api_result
+    persisted_message = next(item for item in list_messages(session["session_id"]) if item["message_id"] == persisted_id)
+    assert persisted_message["metadata"]["routing"]["schema_version"] == 2
+    assert persisted_message["metadata"]["plan_summary"]["completed_steps"] == 1
+    assert persisted_message["metadata"]["completion_status"] == "completed"
 
     before_regenerate = list_messages(session["session_id"])
     la.stream_learning_assistant_events = lambda request: iter([

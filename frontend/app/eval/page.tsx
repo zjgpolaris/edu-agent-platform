@@ -52,6 +52,7 @@ type SuiteResult = {
 };
 type AgentOpsSummary = {
   status: string;
+  data_scope?: { active?: string; audit?: Record<string, number>; learning?: Record<string, number> };
   readiness?: {
     status: string;
     reasons?: string[];
@@ -79,6 +80,24 @@ type AgentOpsSummary = {
     answer_total?: number;
     answer_fallback_total?: number;
     answer_fallback_rate?: number;
+    answer_real_llm_total?: number;
+    answer_real_llm_rate?: number;
+    routing_total?: number;
+    semantic_routing_total?: number;
+    semantic_routing_rate?: number;
+    clarification_total?: number;
+    clarification_rate?: number;
+    clarification_resolved_total?: number;
+    clarification_resolution_rate?: number;
+    routing_feedback_total?: number;
+    routing_accuracy?: number;
+    multi_intent_total?: number;
+    multi_intent_rate?: number;
+    planned_answer_total?: number;
+    plan_completed_total?: number;
+    plan_completion_rate?: number;
+    partial_completion_total?: number;
+    partial_completion_rate?: number;
     session_created_total?: number;
     session_resumed_total?: number;
     session_resume_rate?: number;
@@ -111,6 +130,14 @@ type AgentOpsSummary = {
       sample_count?: number;
       total_usd_estimated?: number;
       avg_usd_per_llm_call_estimated?: number;
+    };
+    runtime?: {
+      routing_count?: number;
+      plan_step_count?: number;
+      repair_count?: number;
+      repair_success_count?: number;
+      repair_success_rate?: number;
+      repair_rate?: number;
     };
   };
   traces?: { recent?: Array<{ trace_id: string; latest_at?: string; status?: string; error_summary?: string; actions?: string[]; features?: string[]; tools?: string[] }> };
@@ -149,6 +176,10 @@ type EvalCandidate = {
 type RunResult = {
   ok: boolean;
   generated_at?: string;
+  evaluation_profile?: string;
+  source_revision?: { commit_sha?: string | null; short_sha?: string | null; dirty?: boolean | null };
+  report_freshness?: { status?: string; generated_at?: string; age_hours?: number | null; stale_after_hours?: number; reasons?: string[]; current_revision?: { short_sha?: string | null } };
+  llm_execution?: { status?: string; calls?: number; note?: string };
   summary?: EvalSummary;
   metrics?: EvalTopLevelMetrics;
   category_summary?: CategorySummary;
@@ -847,6 +878,10 @@ function ReportOverview({ result, token }: { result: RunResult; token?: string }
   const categorySummary = result.category_summary || {};
   const failedCases = result.suites.flatMap((suite) => (suite.failed_cases || []).map((item) => ({ suite: suite.name, category: suite.category || "other", item: normalizeFailedCase(item) })));
   const [downloadStatus, setDownloadStatus] = useState("");
+  const [reportViewedAt] = useState(() => Date.now());
+  const reportAgeHours = result.generated_at ? (reportViewedAt - new Date(result.generated_at).getTime()) / 3_600_000 : null;
+  const staleAfterHours = result.report_freshness?.stale_after_hours ?? 168;
+  const isStale = result.report_freshness?.status === "stale" || (reportAgeHours != null && reportAgeHours > staleAfterHours);
   async function downloadReport(kind: "json" | "markdown") {
     setDownloadStatus(`正在下载 latest.${kind === "json" ? "json" : "md"}…`);
     const res = await fetch(`${API}/api/eval/report/${kind}`, { headers: token ? authHeaders(token) : undefined });
@@ -867,6 +902,10 @@ function ReportOverview({ result, token }: { result: RunResult; token?: string }
     <div style={{ display: "grid", gap: "1rem", marginBottom: "1.25rem" }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center", color: "var(--ink-soft)", fontSize: "0.82rem" }}>
         {result.generated_at && <span>Report: {new Date(result.generated_at).toLocaleString()}</span>}
+        <Badge>{isStale ? "STALE" : "FRESH"}</Badge>
+        {result.evaluation_profile && <span>Profile: {result.evaluation_profile}</span>}
+        {result.source_revision?.short_sha && <span>Commit: {result.source_revision.short_sha}{result.source_revision.dirty ? " · dirty" : ""}</span>}
+        {result.llm_execution && <span>LLM: {result.llm_execution.status} · {result.llm_execution.calls ?? 0} calls</span>}
         <button type="button" onClick={() => void downloadReport("json")} style={{ border: "none", background: "transparent", color: "var(--jade-dark)", fontWeight: 700, cursor: "pointer", padding: 0 }}>下载 latest.json</button>
         <button type="button" onClick={() => void downloadReport("markdown")} style={{ border: "none", background: "transparent", color: "var(--jade-dark)", fontWeight: 700, cursor: "pointer", padding: 0 }}>下载 latest.md</button>
         {downloadStatus && <span>{downloadStatus}</span>}
@@ -913,6 +952,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
   const llm = production?.llm;
   const rag = production?.rag;
   const cost = production?.cost;
+  const runtime = production?.runtime;
   const assistantFeedback = summary?.learning_assistant;
   return (
     <div style={{
@@ -929,6 +969,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem", marginBottom: "0.85rem" }}>
             <OpsCard label="Readiness" value={readiness?.status || "--"} hint={readinessHint} />
+            <OpsCard label="数据口径" value={summary?.data_scope?.active || "runtime"} hint={`${summary?.data_scope?.learning?.eval ?? 0} eval events excluded`} />
             <OpsCard label="Trace 覆盖率" value={trace ? `${coverage}%` : "--"} hint={coverageHint} />
             <OpsCard label="Audit Events" value={String(summary?.audit?.total ?? "--")} hint={`${summary?.audit?.failure ?? 0} failed · ${Math.round((summary?.audit?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="Learning Events" value={String(summary?.learning?.total ?? "--")} hint={`${summary?.learning?.failure ?? 0} failed · ${Math.round((summary?.learning?.success_rate ?? 0) * 100)}% ok`} />
@@ -936,6 +977,13 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="随问追问率" value={assistantFeedback?.question_total ? `${Math.round((assistantFeedback.followup_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.followup_total ?? 0}/${assistantFeedback?.question_total ?? 0} questions`} />
             <OpsCard label="上下文解决率" value={assistantFeedback?.context_feedback_total ? `${Math.round((assistantFeedback.context_resolution_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.context_feedback_total ?? 0} feedback samples`} />
             <OpsCard label="随问降级率" value={assistantFeedback?.answer_total ? `${Math.round((assistantFeedback.answer_fallback_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.answer_fallback_total ?? 0}/${assistantFeedback?.answer_total ?? 0} answers`} />
+            <OpsCard label="真实 LLM 回答率" value={assistantFeedback?.answer_total ? `${Math.round((assistantFeedback.answer_real_llm_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.answer_real_llm_total ?? 0}/${assistantFeedback?.answer_total ?? 0} answers`} />
+            <OpsCard label="语义路由率" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.semantic_routing_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.semantic_routing_total ?? 0}/${assistantFeedback?.routing_total ?? 0} routes`} />
+            <OpsCard label="澄清率" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.clarification_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.clarification_total ?? 0} clarification`} />
+            <OpsCard label="澄清解决率" value={assistantFeedback?.clarification_total ? `${Math.round((assistantFeedback.clarification_resolution_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.clarification_resolved_total ?? 0}/${assistantFeedback?.clarification_total ?? 0} resolved`} />
+            <OpsCard label="多意图率" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.multi_intent_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.multi_intent_total ?? 0} composite routes`} />
+            <OpsCard label="计划完成率" value={assistantFeedback?.planned_answer_total ? `${Math.round((assistantFeedback.plan_completion_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.plan_completed_total ?? 0}/${assistantFeedback?.planned_answer_total ?? 0} plans`} />
+            <OpsCard label="部分完成率" value={assistantFeedback?.planned_answer_total ? `${Math.round((assistantFeedback.partial_completion_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.partial_completion_total ?? 0} partial plans`} />
             <OpsCard label="会话恢复率" value={assistantFeedback?.session_created_total ? `${Math.round((assistantFeedback.session_resume_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.session_resumed_total ?? 0}/${assistantFeedback?.session_created_total ?? 0} sessions`} />
             <OpsCard label="辅导返回率" value={assistantFeedback?.autotutor_question_total ? `${Math.round((assistantFeedback.autotutor_return_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.autotutor_return_total ?? 0}/${assistantFeedback?.autotutor_question_total ?? 0} handoffs`} />
             <OpsCard label="Tool Calls" value={String(summary?.tools?.total ?? "--")} hint={`${summary?.tools?.failure ?? 0} failed · ${Math.round((summary?.tools?.success_rate ?? 0) * 100)}% ok`} />
@@ -945,6 +993,8 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="Cost est." value={cost?.total_usd_estimated != null ? `$${cost.total_usd_estimated.toFixed(6)}` : "--"} hint={`${cost?.sample_count ?? 0} priced calls`} />
             <OpsCard label="LLM fallback" value={String(llm?.fallback_count ?? "--")} hint={`${llm?.error_count ?? 0} errors`} />
             <OpsCard label="RAG retrieval fail" value={String(rag?.failure_stage?.retrieval ?? 0)} hint={`${rag?.failure_stage?.generation ?? 0} generation issues`} />
+            <OpsCard label="受限计划步骤" value={String(runtime?.plan_step_count ?? "--")} hint={`${runtime?.routing_count ?? 0} routed requests`} />
+            <OpsCard label="Repair 成功率" value={runtime?.repair_count ? `${Math.round((runtime.repair_success_rate ?? 0) * 100)}%` : "--"} hint={`${runtime?.repair_success_count ?? 0}/${runtime?.repair_count ?? 0} repairs · rate ${Math.round((runtime?.repair_rate ?? 0) * 100)}%`} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
             <Rollup title="Top actions" items={summary?.audit?.by_action} />

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -417,6 +418,7 @@ def record_learning_event(event: LearningEvent) -> str | None:
     trace_id = current_trace_id()
     if trace_id and "trace_id" not in metadata:
         metadata["trace_id"] = trace_id
+    metadata.setdefault("data_scope", os.getenv("EDU_AGENT_DATA_SCOPE", "runtime"))
     event = LearningEvent.model_validate({**event.model_dump(), "metadata": _safe_metadata(metadata)})
     event_id = uuid4().hex
     created_at = now_iso()

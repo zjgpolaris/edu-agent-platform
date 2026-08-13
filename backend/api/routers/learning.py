@@ -403,6 +403,9 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                         "textbook": (session.get("context") or {}).get("textbook"),
                         "used_memory_count": len(((final.get("profile_context") or {}).get("used_memory") or [])),
                         "tool_names": [item.get("tool_name") for item in (final.get("tool_results") or []) if item.get("tool_name")],
+                        "routing": final.get("routing") or {},
+                        "plan_summary": final.get("plan_summary") or {},
+                        "completion_status": final.get("completion_status"),
                     },
                 )
                 final["message_id"] = persisted["message_id"]
@@ -450,6 +453,9 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                                 "textbook": (session.get("context") or {}).get("textbook"),
                                 "used_memory_count": len(((data.get("profile_context") or {}).get("used_memory") or [])),
                                 "tool_names": [item.get("tool_name") for item in (data.get("tool_results") or []) if item.get("tool_name")],
+                                "routing": data.get("routing") or {},
+                                "plan_summary": data.get("plan_summary") or {},
+                                "completion_status": data.get("completion_status"),
                             },
                         )
                         data = {**data, "message_id": persisted["message_id"]}

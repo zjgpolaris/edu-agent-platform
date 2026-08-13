@@ -113,6 +113,9 @@ backend/
 │   ├── essay_grader.py            # 作文批改
 │   ├── debate_supervisor.py       # 辩论主持
 │   ├── learning_assistant.py      # 学习助手
+│   ├── learning_assistant_router.py   # v1.29 结构化混合路由、槽位与澄清
+│   ├── learning_assistant_planner.py  # v1.29 最多 3 步的 allowlist 确定性计划
+│   ├── learning_assistant_runtime.py  # v1.29 串行执行、证据条件与单次受控 repair
 │   ├── auto_tutor.py              # AutoTutor 自主辅导闭环（plan→act→observe→judge→reflect→re_plan→exit_ticket→evidence→finalize）
 │   └── history_map_agent.py       # 历史地图代理
 │
@@ -326,7 +329,7 @@ frontend/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/learning/assistant/tools` | 工具列表 |
-| POST | `/api/learning/assistant/chat` | 学习助手对话 |
+| POST | `/api/learning/assistant/chat` | 学习助手对话；兼容原请求，SSE 新增 `route`、`plan`、`plan_step`、`clarification`、`repair_attempt`，`final` 增加 `routing`、`plan_summary`、`completion_status` |
 | POST | `/api/learning/assistant/tool-confirmation/cancel` | 取消工具确认 |
 
 ### AutoTutor 自主辅导
@@ -831,7 +834,10 @@ AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`aut
 | `material_rag_smoke.py` | 资料 RAG 测试 |
 | `material_rag_isolation_smoke.py` | 资料 RAG 隔离测试 |
 | `tool_registry_smoke.py` | 工具注册表测试 |
-| `learning_assistant_smoke.py` | 学习助手测试 |
+| `learning_assistant_smoke.py` | 学习助手工具、fallback、高风险确认与 guardrail 测试 |
+| `learning_assistant_multiturn_smoke.py` | 随问会话、指代继承、显式话题切换、澄清补槽、30 分钟超时重路由、计划元数据持久化、regenerate 与所有权隔离 |
+| `autotutor_question_handoff_smoke.py` | AutoTutor 随问 handoff 所有权与 `revision/phase/attempts/current_question` 状态中立性 |
+| `intent_accuracy_eval.py` | v1.29 的 300 条 train/dev/test 路由集；输出 accuracy、macro-F1、per-intent、slot、澄清、组合 exact match、高风险召回和混淆矩阵 |
 | `guardrails_smoke.py` | 防护机制测试 |
 | `weakpoints_smoke.py` | 错题本测试（含掌握度模型：连续答对才移除、答错重置连对、未跟踪 tag no-op），8 例 |
 | `knowledge_graph_smoke.py` | 知识图谱前置依赖测试（根节点 available、前置未掌握则 locked+locked_by、前置掌握解锁、错题标 weak、next_recommended 优先级、DAG 无环、图外孤立错题纳入、counts 一致）+ 薄弱点风险预测（前置链含 weak 则下游 at_risk、无 weak 时为空、weak 节点不重复计入、风险分反映 weak 前置数并降序）+ 班级地基薄弱点聚合（多生共享前置累加影响面、无 weak 返回空、按 impact 降序），16 例离线，已接入 `run_core_evals.py`（CORE/SMOKE） |
@@ -850,7 +856,7 @@ AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`aut
 | `completion_overview_smoke.py` | 教师班级完成情况聚合测试（逐生计数/逾期判定/掉队排序/班级摘要/DB 集成隔离），6 例离线，已接入 `run_core_evals.py`（SMOKE） |
 | `trace_smoke.py` | Agent Runtime 可视化测试 |
 | `readiness_smoke.py` | Readiness / Eval 路由测试：验证 `/api/ready` 浅检查结构，以及 `/api/eval/latest`、`/api/eval/run` 只注册新版 `run_core_evals.py` 路由，避免旧 mock report_generator 遮蔽 |
-| `trajectory_eval.py` | 学习助手工具调用轨迹准确率，已接入 `run_core_evals.py`（CORE/QUICK） |
+| `trajectory_eval.py` | 学习助手单工具 + 30 条组合计划 + 25 条澄清 + 8 条实际组合执行轨迹；验证选择、输入、输出利用、依赖、顺序和 completion，已接入 CORE/QUICK/fast gate |
 | `auto_tutor_trajectory_eval.py` | AutoTutor 自主辅导轨迹评测（规划合理性、反思触发正确性、闭环命中、focus_tags 优先规划、连错降难度、空错题本兜底、退出票 finalize 前检验、退出票 learning event 与错题回流），11 例，已接入 `run_core_evals.py`（CORE/QUICK），离线可跑 |
 | `production_rag_health_smoke.py` | 生产 RAG HTTP smoke，显式通过 `API_BASE` 指向线上后端，不进入默认本地 smoke/core 套件 |
 | `tool_permission_smoke.py` | 工具权限确认测试 |
@@ -960,7 +966,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | `scripts/release_gate.py` | 发布前统一闸门：Python 语法检查、后端 smoke/关键 smoke、前端 build；默认 PR CI 主门禁复用该入口，可选生产 RAG smoke；配合 `/api/ready` 做线上浅 readiness 检查 |
 | `scripts/build_pgvector_index.py` | 离线构建历史 RAG pgvector 索引（corpus.json → OpenAI-compatible embedding → rag_documents） |
 
-关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。默认 PR CI 不要求生产 `API_BASE`、线上 RAG、真实 LLM deep health 或生产认证；production smoke / `npm run release:gate:prod` / 手动 `production-readiness` 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
+关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。v1.29 随问灰度变量为 `EDU_AGENT_ASSISTANT_SEMANTIC_ROUTER_ENABLED=false`、`EDU_AGENT_ASSISTANT_ROUTER_SHADOW_MODE=true`、`EDU_AGENT_ASSISTANT_ROUTER_CONFIDENCE_THRESHOLD=0.65`、`EDU_AGENT_ASSISTANT_PLANNER_ENABLED=false`；评测 runner 自动设置内部 `EDU_AGENT_DATA_SCOPE=eval`，AgentOps 只用 `runtime` 事件计算生产 readiness，另行展示 eval/demo 计数。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。默认 PR CI 不要求生产 `API_BASE`、线上 RAG、真实 LLM deep health 或生产认证；production smoke / `npm run release:gate:prod` / 手动 `production-readiness` 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
 
 ---
 
@@ -1050,4 +1056,4 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-13 | 1.26.0 | AutoTutor 退出票与学习证据闭环：`auto_tutor.py` 新增 `phase=lesson/exit_ticket/completed`、`exit_ticket_result` 与 `evidence`，最后教学步骤后先进入退出票检验，退出票作答后才 finalize；`learning_events` 新增 `auto_tutor_exit_ticket` 语义并回写 `record_correct_evidence` / `record_weakpoint(source=auto_tutor_exit_ticket)`；`tutor_effectiveness_service.py` 统计退出票数/通过率与 `students_with_exit_ticket`；学生 AutoTutor 完成态展示学习证据卡，教师班级学情页展示退出票证据聚合；demo/pilot seed 预置退出票证据；扩展 `auto_tutor_trajectory_eval.py`、`tutor_effectiveness_smoke.py`、`pilot_path_smoke.py` |
 | 2026-07-14 | 1.26.1 | UX 状态反馈优化：学生复习页补加载失败/提交失败可重试反馈，智能练习页补教材/课次加载失败、空态与按钮禁用原因；教师作业列表补初始加载、错误重试、行动型空态与刷新失败保留旧数据提示，教师作业管理页 640px 以下优化列表、讲评洞察、答案与评阅/创建表单布局；同步前端技术栈为 Next.js 16 + React 19。纯前端 UX，后端 API 无变化 |
 | 2026-07-14 | 1.26.2 | 修复 Render/Docker 默认 SQLite 路径：`backend/db/engine.py` 按运行布局解析默认 `.data`，本地源码树使用仓库根 `.data/edu_agent.sqlite3`，Docker 镜像使用 `/app/.data/edu_agent.sqlite3`，并仅在 SQLite fallback 时创建目录，避免未设置 `DATABASE_URL` 的部署环境尝试创建 `/.data` 导致 PermissionError |
-
+| 2026-08-13 | 1.29.1 | 随问智能体升级：新增结构化混合 router、主动澄清与 30 分钟待补槽位、最多 3 步 allowlist planner/runtime、一次受控只读 repair、证据验证和 completed/partial/waiting 状态；扩展 SSE/会话持久化与计划进度 UI；新增 300 条意图集、组合/澄清/多轮评测，fast gate 纳入学习助手和 AutoTutor 质量 suite；AgentOps 增加语义路由、澄清、多意图、计划、repair、真实 LLM 指标；Eval 报告增加 commit/profile/freshness/LLM execution 并区分 skipped/not-run/infra/quality failure |

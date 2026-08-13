@@ -75,11 +75,41 @@ def eval_routes_use_core_runner() -> None:
     assert eval_run.__name__ == "eval_run"
 
 
+def eval_report_quality_contract() -> None:
+    runner = load_eval_runner()
+    result = runner.SuiteResult(
+        name="readiness_smoke",
+        command=["python", "eval/readiness_smoke.py"],
+        returncode=0,
+        duration_sec=0.1,
+        stdout="OK report_contract",
+        stderr="",
+        passed_cases=1,
+        failed_cases_count=0,
+        total_cases=1,
+        metrics={},
+        failed_cases=[],
+    )
+    offline = runner.build_json_summary([result], include_output=False, profile="custom")
+    assert offline["ok"] is True, offline
+    assert offline["llm_execution"]["status"] == "not_observed", offline
+    real_model = runner.build_json_summary([result], include_output=False, profile="custom", require_real_llm=True)
+    assert real_model["ok"] is False, real_model
+    assert real_model["llm_execution"]["status"] == "not_run", real_model
+    stale = runner.report_runtime_status({
+        "generated_at": "2020-01-01T00:00:00+00:00",
+        "source_revision": {"commit_sha": "outdated"},
+    })
+    assert stale["status"] == "stale", stale
+    assert "older_than_7_days" in stale["reasons"], stale
+
+
 if __name__ == "__main__":
     cases = [
         ("ready_endpoint_shape", ready_endpoint_shape),
         ("eval_routes_registered_once", eval_routes_registered_once),
         ("eval_routes_use_core_runner", eval_routes_use_core_runner),
+        ("eval_report_quality_contract", eval_report_quality_contract),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)
     print(f"readiness_smoke={passed}/{len(cases)}")

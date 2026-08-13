@@ -1,0 +1,4032 @@
+[
+  {
+    "id": "intent_character_recommendation_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "推荐一个能讲汉代的历史人物",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_002",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我想和历史人物聊聊三国",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_003",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我推荐一位唐朝人物",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_004",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我适合和谁聊宋代历史",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_005",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "推荐人物帮助我理解秦朝",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "想找一个历史人物对话",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_007",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "人物推荐：明朝",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_008",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "谁适合讲清楚清朝改革",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_009",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "推荐一个能讲汉代的历史人物。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_010",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "我想和历史人物聊聊三国。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我推荐一位唐朝人物。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_012",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我适合和谁聊宋代历史。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_013",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "推荐人物帮助我理解秦朝。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_014",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "想找一个历史人物对话。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_015",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "人物推荐：明朝。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "谁适合讲清楚清朝改革。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_017",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "推荐一个能讲汉代的历史人物，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_018",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我想和历史人物聊聊三国，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_019",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "给我推荐一位唐朝人物，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_020",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "我适合和谁聊宋代历史，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "推荐人物帮助我理解秦朝，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_022",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "想找一个历史人物对话，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_023",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "人物推荐：明朝，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_024",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "谁适合讲清楚清朝改革，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_025",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "推荐一个能讲汉代的历史人物，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_026",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我想和历史人物聊聊三国，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_027",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "给我推荐一位唐朝人物，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_028",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我适合和谁聊宋代历史，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_029",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "推荐人物帮助我理解秦朝，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_030",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "想找一个历史人物对话，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_031",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "人物推荐：明朝，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_032",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "谁适合讲清楚清朝改革，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_033",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "推荐一个能讲汉代的历史人物，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_034",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我想和历史人物聊聊三国，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_035",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我推荐一位唐朝人物，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_036",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我适合和谁聊宋代历史，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_037",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "推荐人物帮助我理解秦朝，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_038",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "想找一个历史人物对话，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_039",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "人物推荐：明朝，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_character_recommendation_040",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "谁适合讲清楚清朝改革，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "character_recommendation"
+    ],
+    "expected_primary_intent": "character_recommendation"
+  },
+  {
+    "id": "intent_timeline_game_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "来一局历史时间线游戏",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_002",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开始时间排序小游戏",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_003",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "玩一局中国近代史时间线",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_004",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我想玩历史排序",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_005",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开启时间巨轮",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "用闯关游戏复习历史时间",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_007",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "来一局唐朝时间线",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_008",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "开始历史时间排序",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_009",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "来一局历史时间线游戏。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_010",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "开始时间排序小游戏。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "玩一局中国近代史时间线。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_012",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我想玩历史排序。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_013",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开启时间巨轮。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_014",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "用闯关游戏复习历史时间。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_015",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "来一局唐朝时间线。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开始历史时间排序。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_017",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "来一局历史时间线游戏，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_018",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "开始时间排序小游戏，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_019",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "玩一局中国近代史时间线，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_020",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "我想玩历史排序，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开启时间巨轮，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_022",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "用闯关游戏复习历史时间，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_023",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "来一局唐朝时间线，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_024",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开始历史时间排序，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_025",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "来一局历史时间线游戏，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_026",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开始时间排序小游戏，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_027",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "玩一局中国近代史时间线，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_028",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我想玩历史排序，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_029",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "开启时间巨轮，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_030",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "用闯关游戏复习历史时间，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_031",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "来一局唐朝时间线，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_032",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开始历史时间排序，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_033",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "来一局历史时间线游戏，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_034",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "开始时间排序小游戏，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_035",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "玩一局中国近代史时间线，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_036",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我想玩历史排序，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_037",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "开启时间巨轮，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_038",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "用闯关游戏复习历史时间，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_039",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "来一局唐朝时间线，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_timeline_game_040",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "开始历史时间排序，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "timeline_game"
+    ],
+    "expected_primary_intent": "timeline_game"
+  },
+  {
+    "id": "intent_quiz_generation_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我出 3 道练习题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_002",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "针对鸦片战争来五道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 5,
+      "question_type": "choice"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_003",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我一套历史小测",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_004",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "考考我洋务运动",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_005",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "围绕辛亥革命来几道题目",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "生成两道简答题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 2,
+      "question_type": "short_answer"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_007",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我想刷题复习五四运动",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_008",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "出一道关于秦朝的题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_009",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "给我来三道选择题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_010",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "生成本课练习题",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我出 3 道练习题。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_012",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "针对鸦片战争来五道选择题。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 5,
+      "question_type": "choice"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_013",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我一套历史小测。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_014",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "考考我洋务运动。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_015",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "围绕辛亥革命来几道题目。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "生成两道简答题。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 2,
+      "question_type": "short_answer"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_017",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我想刷题复习五四运动。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_018",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "出一道关于秦朝的题。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_019",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "给我来三道选择题。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_020",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "生成本课练习题。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我出 3 道练习题，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_022",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "针对鸦片战争来五道选择题，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 5,
+      "question_type": "choice"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_023",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我一套历史小测，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_024",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "考考我洋务运动，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_025",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "围绕辛亥革命来几道题目，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_026",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "生成两道简答题，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 2,
+      "question_type": "short_answer"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_027",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我想刷题复习五四运动，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_028",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "出一道关于秦朝的题，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_029",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "给我来三道选择题，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_030",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "生成本课练习题，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_031",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我出 3 道练习题，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_032",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "针对鸦片战争来五道选择题，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 5,
+      "question_type": "choice"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_033",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我一套历史小测，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_034",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "考考我洋务运动，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_035",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "围绕辛亥革命来几道题目，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_036",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "生成两道简答题，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 2,
+      "question_type": "short_answer"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_037",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我想刷题复习五四运动，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_038",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "出一道关于秦朝的题，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_039",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "给我来三道选择题，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_040",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "生成本课练习题，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_041",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我出 3 道练习题，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_042",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "针对鸦片战争来五道选择题，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 5,
+      "question_type": "choice"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_043",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我一套历史小测，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_044",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "考考我洋务运动，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_045",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "围绕辛亥革命来几道题目，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_046",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "生成两道简答题，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 2,
+      "question_type": "short_answer"
+    }
+  },
+  {
+    "id": "intent_quiz_generation_047",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我想刷题复习五四运动，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_048",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "出一道关于秦朝的题，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_quiz_generation_049",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "给我来三道选择题，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation",
+    "expected_slots": {
+      "count": 3
+    }
+  },
+  {
+    "id": "intent_quiz_generation_050",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "生成本课练习题，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "quiz_generation"
+    ],
+    "expected_primary_intent": "quiz_generation"
+  },
+  {
+    "id": "intent_review_plan_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我制定复习计划",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_002",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我最近错得很多，安排一下复习",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_003",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我一些复习建议",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_004",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "今天应该怎么复习",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_005",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "按薄弱点生成学习计划",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我排接下来三天的复习",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_007",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我该如何复习历史",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_008",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "根据错题安排复习",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_009",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "制定今天的复习安排",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_010",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "帮我制定复习计划。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我最近错得很多，安排一下复习。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_012",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我一些复习建议。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_013",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "今天应该怎么复习。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_014",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "按薄弱点生成学习计划。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_015",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我排接下来三天的复习。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我该如何复习历史。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_017",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "根据错题安排复习。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_018",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "制定今天的复习安排。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_019",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "帮我制定复习计划，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_020",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "我最近错得很多，安排一下复习，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "给我一些复习建议，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_022",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "今天应该怎么复习，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_023",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "按薄弱点生成学习计划，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_024",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我排接下来三天的复习，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_025",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我该如何复习历史，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_026",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "根据错题安排复习，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_027",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "制定今天的复习安排，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_028",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "帮我制定复习计划，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_029",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "我最近错得很多，安排一下复习，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_030",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "给我一些复习建议，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_031",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "今天应该怎么复习，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_032",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "按薄弱点生成学习计划，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_033",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我排接下来三天的复习，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_034",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我该如何复习历史，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_035",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "根据错题安排复习，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_036",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "制定今天的复习安排，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_037",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "帮我制定复习计划，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_038",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "我最近错得很多，安排一下复习，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_039",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "给我一些复习建议，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_040",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "今天应该怎么复习，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_041",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "按薄弱点生成学习计划，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_042",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "帮我排接下来三天的复习，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_043",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "我该如何复习历史，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_044",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "根据错题安排复习，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_review_plan_045",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "制定今天的复习安排，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "review_plan"
+    ],
+    "expected_primary_intent": "review_plan"
+  },
+  {
+    "id": "intent_history_search_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "鸦片战争为什么爆发",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_002",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "辛亥革命有什么意义",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_003",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "商鞅变法带来了哪些影响",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_004",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "五四运动是怎么发生的",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_005",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "洋务运动为什么失败",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "甲午战争的结果是什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_007",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "科举制度是怎样发展的",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_008",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "安史之乱造成什么影响",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_009",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "秦始皇为什么统一文字",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_010",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "唐朝为什么会出现贞观之治",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "抗日战争胜利的原因",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_012",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "戊戌变法为什么失败",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_013",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "鸦片战争为什么爆发。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_014",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "辛亥革命有什么意义。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_015",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "商鞅变法带来了哪些影响。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "五四运动是怎么发生的。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_017",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "洋务运动为什么失败。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_018",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "甲午战争的结果是什么。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_019",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "科举制度是怎样发展的。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_020",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "安史之乱造成什么影响。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "秦始皇为什么统一文字。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_022",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "唐朝为什么会出现贞观之治。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_023",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "抗日战争胜利的原因。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_024",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "戊戌变法为什么失败。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_025",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "鸦片战争为什么爆发，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_026",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "辛亥革命有什么意义，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_027",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "商鞅变法带来了哪些影响，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_028",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "五四运动是怎么发生的，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_029",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "洋务运动为什么失败，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_030",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "甲午战争的结果是什么，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_031",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "科举制度是怎样发展的，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_032",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "安史之乱造成什么影响，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_033",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "秦始皇为什么统一文字，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_034",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "唐朝为什么会出现贞观之治，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_035",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "抗日战争胜利的原因，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_036",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "戊戌变法为什么失败，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_037",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "鸦片战争为什么爆发，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_038",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "辛亥革命有什么意义，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_039",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "商鞅变法带来了哪些影响，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_040",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "五四运动是怎么发生的，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_041",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "洋务运动为什么失败，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_042",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "甲午战争的结果是什么，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_043",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "科举制度是怎样发展的，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_044",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "安史之乱造成什么影响，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_045",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "秦始皇为什么统一文字，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_046",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "唐朝为什么会出现贞观之治，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_047",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "抗日战争胜利的原因，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_048",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "戊戌变法为什么失败，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_049",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "鸦片战争为什么爆发，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_050",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "辛亥革命有什么意义，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_051",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "商鞅变法带来了哪些影响，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_052",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "五四运动是怎么发生的，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_053",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "洋务运动为什么失败，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_054",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "甲午战争的结果是什么，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_055",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "科举制度是怎样发展的，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_056",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "安史之乱造成什么影响，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_057",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "秦始皇为什么统一文字，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_058",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "唐朝为什么会出现贞观之治，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_059",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "抗日战争胜利的原因，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_history_search_060",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "戊戌变法为什么失败，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "history_search"
+    ],
+    "expected_primary_intent": "history_search"
+  },
+  {
+    "id": "intent_textbook_qa_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这节课讲了什么",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_002",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "这一课的重点是什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_003",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "总结一下本课",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_004",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "课文有哪些易错点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_005",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "教材这一课为什么重要",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "本课主要内容是什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_007",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这节课讲了什么。",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_008",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这一课的重点是什么。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_009",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "总结一下本课。",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_010",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "课文有哪些易错点。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "教材这一课为什么重要。",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_012",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "本课主要内容是什么。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_013",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "这节课讲了什么，请说简单点",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_014",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "这一课的重点是什么，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_015",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "总结一下本课，请说简单点",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "课文有哪些易错点，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_017",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "教材这一课为什么重要，请说简单点",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_018",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "本课主要内容是什么，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_019",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这节课讲了什么，适合八年级",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_020",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这一课的重点是什么，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "总结一下本课，适合八年级",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_022",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "课文有哪些易错点，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_023",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "教材这一课为什么重要，适合八年级",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_024",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "本课主要内容是什么，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_025",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "这节课讲了什么，现在开始",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_026",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "这一课的重点是什么，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_027",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "总结一下本课，现在开始",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_028",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "课文有哪些易错点，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_textbook_qa_029",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "教材这一课为什么重要，现在开始",
+      "grade": "八年级上册",
+      "book_id": "history-grade-8a",
+      "lesson_id": "lesson-1"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": false
+  },
+  {
+    "id": "intent_textbook_qa_030",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "本课主要内容是什么，现在开始",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "textbook_qa"
+    ],
+    "expected_primary_intent": "textbook_qa",
+    "expected_clarification": true
+  },
+  {
+    "id": "intent_chat_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "你好",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_002",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "谢谢你",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_003",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "今天天气怎么样",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_004",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "你是谁",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_005",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "再见",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "现在几点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_007",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "讲个笑话",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_008",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "你能做什么",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_009",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "你好。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_010",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "谢谢你。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_011",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "今天天气怎么样。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_012",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "你是谁。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_013",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "再见。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_014",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "现在几点。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_015",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "讲个笑话。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_016",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "你能做什么。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_017",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "你好，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_018",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "谢谢你，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_019",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "今天天气怎么样，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_020",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "你是谁，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_021",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "再见，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_022",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "现在几点，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_023",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "讲个笑话，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_024",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "你能做什么，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_chat_025",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "你好，适合八年级",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "chat"
+    ],
+    "expected_primary_intent": "chat"
+  },
+  {
+    "id": "intent_memory_delete_demo_001",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "演示高风险工具，删除演示记忆",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_002",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "删除 demo memory",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_003",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "确认删除演示记忆",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_004",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "删除demomemory",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_005",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "演示高风险工具，删除演示记忆。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_006",
+    "source": "generated_reviewed",
+    "split": "train",
+    "request": {
+      "message": "删除 demo memory。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_007",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "确认删除演示记忆。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_008",
+    "source": "generated_reviewed",
+    "split": "dev",
+    "request": {
+      "message": "删除demomemory。",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_009",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "演示高风险工具，删除演示记忆，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  },
+  {
+    "id": "intent_memory_delete_demo_010",
+    "source": "generated_reviewed",
+    "split": "test",
+    "request": {
+      "message": "删除 demo memory，请说简单点",
+      "grade": "八年级上册"
+    },
+    "expected_intents": [
+      "memory_delete_demo"
+    ],
+    "expected_primary_intent": "memory_delete_demo"
+  }
+]

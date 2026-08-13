@@ -18,6 +18,8 @@ function resolvePython(): string {
 
 const python = resolvePython();
 process.env.E2E_PYTHON = python;
+const backendPort = process.env.E2E_BACKEND_PORT || "18080";
+const frontendPort = process.env.E2E_FRONTEND_PORT || "13000";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -26,7 +28,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: `http://127.0.0.1:${frontendPort}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -42,23 +44,25 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `${JSON.stringify(python)} -m uvicorn backend.api.main:app --host 127.0.0.1 --port 8000`,
+      command: `${JSON.stringify(python)} -m uvicorn backend.api.main:app --host 127.0.0.1 --port ${backendPort}`,
       cwd: "..",
       env: {
         PYTHONPATH: "backend",
         EDU_AGENT_AUTH_REQUIRED: "true",
         EDU_AGENT_DB_PATH: "/tmp/edu-agent-playwright.sqlite3",
         JWT_SECRET: "edu-agent-playwright-only-secret",
+        EDU_AGENT_LLM_DISABLED: "1",
+        EDU_AGENT_ASSISTANT_PLANNER_ENABLED: "true",
       },
-      url: "http://127.0.0.1:8000/api/health",
-      reuseExistingServer: !process.env.CI,
+      url: `http://127.0.0.1:${backendPort}/api/health`,
+      reuseExistingServer: false,
       timeout: 120_000,
     },
     {
-      command: "npm run dev -- --hostname 127.0.0.1",
-      env: { NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:8000" },
-      url: "http://127.0.0.1:3000",
-      reuseExistingServer: !process.env.CI,
+      command: `npm run dev -- --hostname 127.0.0.1 --port ${frontendPort}`,
+      env: { NEXT_PUBLIC_API_BASE_URL: `http://127.0.0.1:${backendPort}`, NEXT_DIST_DIR: ".next-e2e" },
+      url: `http://127.0.0.1:${frontendPort}`,
+      reuseExistingServer: false,
       timeout: 120_000,
     },
   ],

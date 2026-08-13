@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Docker(Render) 部署用精简自包含产物；Vercel 会忽略该字段、走自有构建。
   output: "standalone",
   async redirects() {

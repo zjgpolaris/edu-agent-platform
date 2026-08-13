@@ -1,6 +1,8 @@
 import { defineConfig } from "eslint/config";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 export default defineConfig([{
+    ignores: [".next/**", ".next-e2e/**"],
+}, {
     extends: [...nextCoreWebVitals],
     rules: {
         // Next 16 enables React Compiler diagnostics in its recommended config.

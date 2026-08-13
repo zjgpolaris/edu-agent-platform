@@ -11,12 +11,14 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 os.environ["EDU_AGENT_DB_PATH"] = str(Path(tempfile.gettempdir()) / "edu-agent-agent-ops-smoke.sqlite3")
+os.environ["EDU_AGENT_DATA_SCOPE"] = "runtime"
 try:
     Path(os.environ["EDU_AGENT_DB_PATH"]).unlink()
 except FileNotFoundError:
     pass
 
 from agent_ops import build_agent_ops_summary
+from security.audit_log import record_audit_event
 from student_profile import LearningEvent, try_record_learning_event
 from trace_store import create_trace_id, emit_trace_event, trace_context
 
@@ -41,8 +43,30 @@ def main() -> None:
             session_id="la_session_1",
             feature="learning_assistant",
             event_type="answer_completed",
-            metadata={"fallback_used": fallback_used},
+            metadata={
+                "fallback_used": fallback_used,
+                "generation_mode": "fallback" if fallback_used else "llm",
+                "total_steps": 3,
+                "completed_steps": 2 if fallback_used else 3,
+                "completion_status": "partial" if fallback_used else "completed",
+                "clarification_resolved": not fallback_used,
+            },
         ))
+    for routing_mode, task_count in (("semantic", 2), ("rule", 1)):
+        assert try_record_learning_event(LearningEvent(
+            student_id="agent-ops-student",
+            session_id="la_session_1",
+            feature="learning_assistant",
+            event_type="intent_detected",
+            metadata={"routing_mode": routing_mode, "task_count": task_count},
+        ))
+    assert try_record_learning_event(LearningEvent(
+        student_id="agent-ops-student",
+        session_id="la_session_1",
+        feature="learning_assistant",
+        event_type="clarification_requested",
+        metadata={"missing_slots": ["lesson_id"]},
+    ))
     for assistant_session_id in ("la_handoff_1", "la_handoff_2"):
         assert try_record_learning_event(LearningEvent(
             student_id="agent-ops-student",
@@ -58,6 +82,22 @@ def main() -> None:
         event_type="autotutor_question_returned",
         metadata={"assistant_session_id": "la_handoff_1"},
     ))
+    assert try_record_learning_event(LearningEvent(
+        student_id="agent-ops-student",
+        session_id="eval-only",
+        feature="learning_assistant",
+        event_type="answer_feedback",
+        success=False,
+        metadata={"feedback": "unresolved", "data_scope": "eval"},
+    ))
+    assert record_audit_event(
+        actor_id="eval-only",
+        action="tool.failed",
+        resource_type="tool",
+        resource_id="eval-only-tool",
+        success=False,
+        metadata={"data_scope": "eval"},
+    )
     trace_id = create_trace_id()
     with trace_context(trace_id):
         emit_trace_event(
@@ -97,6 +137,27 @@ def main() -> None:
             latency_ms=42,
             metadata={"tool_name": "search_history_knowledge"},
         )
+        emit_trace_event(
+            agent_name="learning_assistant",
+            step_name="route",
+            event_type="routing",
+            status="success",
+            metadata={"routing_mode": "semantic", "task_count": 2},
+        )
+        emit_trace_event(
+            agent_name="learning_assistant",
+            step_name="step_1",
+            event_type="plan_step",
+            status="success",
+            metadata={"operation": "search_history_knowledge"},
+        )
+        emit_trace_event(
+            agent_name="learning_assistant",
+            step_name="repair_1",
+            event_type="repair",
+            status="success",
+            metadata={"operation": "search_history_knowledge"},
+        )
 
     summary = build_agent_ops_summary(limit=100)
     production = summary.get("production") or {}
@@ -104,7 +165,9 @@ def main() -> None:
     llm = production.get("llm") or {}
     rag = production.get("rag") or {}
     cost = production.get("cost") or {}
+    runtime = production.get("runtime") or {}
     assistant_feedback = summary.get("learning_assistant") or {}
+    data_scope = summary.get("data_scope") or {}
 
     assert latency.get("p95_ms") is not None
     assert latency.get("llm_p95_ms") == 320
@@ -114,13 +177,27 @@ def main() -> None:
     assert (rag.get("diagnosis") or {}).get("generation_uncited_sources", 0) >= 1
     assert (rag.get("failure_stage") or {}).get("generation", 0) >= 1
     assert cost.get("total_usd_estimated", 0) >= 0.000352
+    assert runtime.get("routing_count", 0) >= 1
+    assert runtime.get("plan_step_count", 0) >= 1
+    assert runtime.get("repair_count", 0) >= 1
+    assert runtime.get("repair_success_rate") == 1.0
     assert assistant_feedback.get("feedback_total") == 2
+    assert (data_scope.get("learning") or {}).get("eval") == 1
+    assert (data_scope.get("audit") or {}).get("eval") == 1
+    assert (summary.get("audit") or {}).get("failure") == 0
     assert assistant_feedback.get("resolved") == 1
     assert assistant_feedback.get("unresolved") == 1
     assert assistant_feedback.get("resolution_rate") == 0.5
     assert assistant_feedback.get("followup_rate") == 0.5
     assert assistant_feedback.get("context_resolution_rate") == 1.0
     assert assistant_feedback.get("answer_fallback_rate") == 0.5
+    assert assistant_feedback.get("answer_real_llm_rate") == 0.5
+    assert assistant_feedback.get("semantic_routing_rate") == 0.5
+    assert assistant_feedback.get("clarification_rate") == 0.5
+    assert assistant_feedback.get("clarification_resolution_rate") == 1.0
+    assert assistant_feedback.get("multi_intent_rate") == 0.5
+    assert assistant_feedback.get("plan_completion_rate") == 0.5
+    assert assistant_feedback.get("partial_completion_rate") == 0.5
     assert assistant_feedback.get("session_resume_rate") == 0.5
     assert assistant_feedback.get("autotutor_return_rate") == 0.5
     print("agent_ops_smoke=PASS")

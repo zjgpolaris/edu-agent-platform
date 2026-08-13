@@ -5,13 +5,14 @@ import { expect, test, type Page } from "@playwright/test";
 test.beforeEach(async ({ context }) => {
   // Keep the real FastAPI boundary while avoiding browser/system proxy rules
   // that can intercept localhost cross-port requests on managed desktops.
-  await context.route(/http:\/\/(localhost|127\.0\.0\.1):8000\/.*/, async (route) => {
+  const backendPort = process.env.E2E_BACKEND_PORT || "18080";
+  await context.route(new RegExp(`http:\\/\\/(localhost|127\\.0\\.0\\.1):${backendPort}\\/.*`), async (route) => {
     const browserRequest = route.request();
     const headers = { ...browserRequest.headers() };
     delete headers.host;
     delete headers["content-length"];
     const apiResponse = await fetch(
-      browserRequest.url().replace(/http:\/\/(localhost|127\.0\.0\.1):8000/, "http://127.0.0.1:8000"),
+      browserRequest.url().replace(new RegExp(`http:\\/\\/(localhost|127\\.0\\.0\\.1):${backendPort}`), `http://127.0.0.1:${backendPort}`),
       {
         method: browserRequest.method(),
         headers,
@@ -84,6 +85,17 @@ test("学生打开随问后可直接提问或按需添加教材", async ({ page 
   await expect(page.getByRole("dialog", { name: "添加教材上下文" })).toBeVisible();
   await page.getByRole("button", { name: "暂不使用" }).click();
   await expect(page.getByRole("dialog", { name: "添加教材上下文" })).toHaveCount(0);
+});
+
+test("随问可执行解释后出题的三步受限计划", async ({ page }) => {
+  test.setTimeout(60_000);
+  await enterDemo(page, "student");
+  await page.goto("/student/assistant");
+  await page.getByRole("textbox", { name: "学习问题" }).fill("先解释洋务运动，再出3道选择题");
+  await page.getByRole("button", { name: "发送问题" }).click();
+  await expect(page.getByLabel("学习计划进度")).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator(".learning-plan-step.completed")).toHaveCount(3, { timeout: 45_000 });
+  await expect(page.getByText(/已为你生成 3 道练习题/)).toBeVisible();
 });
 
 test("教师可查看作业管理与 Pilot 作业", async ({ page }) => {

@@ -33,6 +33,7 @@ OFFLINE_DETERMINISTIC_SUITES = {
     # fallbacks. Credentials in a developer shell must not turn them into slow,
     # quota-dependent integration tests.
     "learning_assistant_smoke",
+    "intent_accuracy_eval",
     "trajectory_eval",
     "auto_tutor_trajectory_eval",
     "autotutor_teaching_quality_eval",
@@ -51,6 +52,7 @@ CORE_SUITES = [
     "textbook_qa_eval",
     "game_generation_eval",
     "agent_ops_smoke",
+    "readiness_smoke",
     "autotutor_session_recovery_smoke",
     "learning_assistant_multiturn_smoke",
     "autotutor_question_handoff_smoke",
@@ -79,6 +81,7 @@ CORE_SUITES = [
 QUICK_SUITES = [
     # Offline-first: these run without LLM/embed and always produce metrics
     "agent_ops_smoke",
+    "readiness_smoke",
     "autotutor_session_recovery_smoke",
     "learning_assistant_multiturn_smoke",
     "autotutor_question_handoff_smoke",
@@ -638,7 +641,7 @@ class SuiteResult:
 
     @property
     def ok(self) -> bool:
-        return self.returncode == 0
+        return self.returncode == 0 and self.failed_cases_count == 0
 
     @property
     def status(self) -> str:
@@ -759,6 +762,7 @@ def run_suite(name: str, *, verbose: bool = False) -> SuiteResult:
     if env.get("PYTHONPATH"):
         pythonpath_parts.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+    env["EDU_AGENT_DATA_SCOPE"] = "eval"
     if name in OFFLINE_DETERMINISTIC_SUITES:
         env["EDU_AGENT_LLM_DISABLED"] = "1"
         # Keep routing/trajectory checks isolated from a developer's remote
@@ -936,20 +940,106 @@ def _summary_metrics(results: list[SuiteResult], *, passed_cases: int, total_cas
     }
 
 
-def build_json_summary(results: list[SuiteResult], *, include_output: bool) -> dict[str, Any]:
+def source_revision() -> dict[str, Any]:
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip())
+        return {"commit_sha": commit, "short_sha": commit[:12], "dirty": dirty}
+    except (OSError, subprocess.SubprocessError):
+        return {"commit_sha": None, "short_sha": None, "dirty": None}
+
+
+def report_runtime_status(summary: dict[str, Any]) -> dict[str, Any]:
+    current = source_revision()
+    generated_at = summary.get("generated_at")
+    age_hours: float | None = None
+    if isinstance(generated_at, str):
+        try:
+            generated = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+            if generated.tzinfo is None:
+                generated = generated.replace(tzinfo=timezone.utc)
+            age_hours = round((datetime.now(timezone.utc) - generated).total_seconds() / 3600, 2)
+        except ValueError:
+            pass
+    report_commit = (summary.get("source_revision") or {}).get("commit_sha")
+    current_commit = current.get("commit_sha")
+    commit_mismatch = bool(report_commit and current_commit and report_commit != current_commit)
+    too_old = age_hours is not None and age_hours > 168
+    reasons = (["commit_mismatch"] if commit_mismatch else []) + (["older_than_7_days"] if too_old else [])
+    return {
+        "status": "stale" if reasons else "fresh",
+        "generated_at": generated_at,
+        "age_hours": age_hours,
+        "stale_after_hours": 168,
+        "reasons": reasons,
+        "current_revision": current,
+    }
+
+
+def build_json_summary(
+    results: list[SuiteResult],
+    *,
+    include_output: bool,
+    profile: str = "custom",
+    require_real_llm: bool = False,
+) -> dict[str, Any]:
     failed_suites = [result.name for result in results if not result.ok]
+    skipped_suites = [result.name for result in results if result.status == "skipped" or result.skipped_cases_count > 0]
+    required_by_profile = {"core": CORE_SUITES, "quick": QUICK_SUITES, "smoke": SMOKE_SUITES}
+    expected_suites = required_by_profile.get(profile, [result.name for result in results])
+    result_names = {result.name for result in results}
+    not_run_suites = [name for name in expected_suites if name not in result_names]
+    infra_markers = ("quota", "timeout", "credential", "connection", "infra", "provider")
+    infra_failed_suites = [
+        result.name for result in results
+        if not result.ok and any(marker in str(result.error or result.stderr or "").lower() for marker in infra_markers)
+    ]
+    quality_failed_suites = [name for name in failed_suites if name not in infra_failed_suites]
     total_cases = sum(result.total_cases for result in results)
     passed_cases = sum(result.passed_cases for result in results)
     failed_cases = sum(result.failed_cases_count for result in results)
     skipped_cases = sum(result.skipped_cases_count for result in results)
     total_suites = len(results)
-    passed_suites = total_suites - len(failed_suites)
+    passed_suites = sum(1 for result in results if result.ok and result.name not in skipped_suites)
     duration_sec = round(sum(result.duration_sec for result in results), 3)
+    agent_ops = collect_agent_ops_snapshot()
+    llm_calls = int((((agent_ops.get("production") or {}).get("llm") or {}).get("calls") or 0))
+    llm_case_observations = sum(
+        int(metric.get("passed") or 0)
+        for result in results
+        for name, metric in result.metrics.items()
+        if name in {"llm_generation_rate", "real_llm_call_rate"} and isinstance(metric, dict)
+    )
+    observed_llm_calls = llm_calls + llm_case_observations
+    generated_at = datetime.now(timezone.utc).isoformat()
     return {
         "schema_version": 2,
         "failed_case_schema_version": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "ok": not failed_suites,
+        "generated_at": generated_at,
+        "evaluation_profile": profile,
+        "source_revision": source_revision(),
+        "report_freshness": {"status": "fresh", "generated_at": generated_at, "stale_after_hours": 168},
+        "llm_execution": {
+            "status": "observed" if observed_llm_calls else "not_run" if require_real_llm else "not_observed",
+            "required": require_real_llm,
+            "calls": observed_llm_calls,
+            "note": "检测到真实 LLM 执行证据" if observed_llm_calls else "本次报告未检测到真实 LLM 执行证据；离线 profile 不把 fallback 等同于真实模型质量",
+        },
+        "ok": not failed_suites and not skipped_suites and not not_run_suites and (not require_real_llm or observed_llm_calls > 0),
         "summary": {
             "total": total_cases,
             "passed": passed_cases,
@@ -962,12 +1052,17 @@ def build_json_summary(results: list[SuiteResult], *, include_output: bool) -> d
         "total_suites": total_suites,
         "passed_suites": passed_suites,
         "failed_suites": failed_suites,
+        "quality_failed_suites": quality_failed_suites,
+        "infra_failed_suites": infra_failed_suites,
+        "skipped_suites": skipped_suites,
+        "not_run_suites": not_run_suites,
+        "required_suites": list(expected_suites),
         "passed": passed_suites,
         "total": total_suites,
         "passed_cases": passed_cases,
         "total_cases": total_cases,
         "duration_sec": duration_sec,
-        "agent_ops": collect_agent_ops_snapshot(),
+        "agent_ops": agent_ops,
         "suites": [result.to_dict(include_output=include_output) for result in results],
     }
 
@@ -978,6 +1073,9 @@ def build_markdown_report(summary: dict[str, Any]) -> str:
         "# EduAgent Eval Report",
         "",
         f"Generated: {summary['generated_at']}",
+        f"Profile: {summary.get('evaluation_profile', 'custom')}",
+        f"Revision: {(summary.get('source_revision') or {}).get('short_sha') or 'unknown'}{' (dirty)' if (summary.get('source_revision') or {}).get('dirty') else ''}",
+        f"LLM execution: {(summary.get('llm_execution') or {}).get('status', 'unknown')} ({(summary.get('llm_execution') or {}).get('calls', 0)} calls)",
         "",
         f"Overall: {status}",
         f"Suites: {summary['passed_suites']}/{summary['total_suites']} passed",
@@ -1019,6 +1117,15 @@ def build_markdown_report(summary: dict[str, Any]) -> str:
     else:
         lines.append("None.")
 
+    lines.extend(["", "## Incomplete suites", ""])
+    incomplete = [
+        *(f"SKIPPED: {name}" for name in summary.get("skipped_suites") or []),
+        *(f"NOT_RUN: {name}" for name in summary.get("not_run_suites") or []),
+        *(f"INFRA_FAILED: {name}" for name in summary.get("infra_failed_suites") or []),
+        *(f"QUALITY_FAILED: {name}" for name in summary.get("quality_failed_suites") or []),
+    ]
+    lines.extend(f"- {item}" for item in incomplete) if incomplete else lines.append("None.")
+
     lines.extend(["", "## Failed cases", ""])
     failed_case_rows = []
     for suite in summary.get("suites") or []:
@@ -1043,11 +1150,13 @@ def build_markdown_report(summary: dict[str, Any]) -> str:
     rag = production.get("rag") or {}
     cost = production.get("cost") or {}
     readiness = agent_ops.get("readiness") or {}
+    data_scope = agent_ops.get("data_scope") or {}
     lines.extend([
         "",
         "## AgentOps",
         "",
         f"Status: {agent_ops.get('status', 'unknown')}",
+        f"Data scope: active={data_scope.get('active', 'runtime')}, audit={data_scope.get('audit', {})}, learning={data_scope.get('learning', {})}",
         f"Readiness: {readiness.get('status', 'unknown')} ({', '.join(readiness.get('reasons') or []) or 'no blocking reasons'})",
         f"Trace coverage: {trace.get('coverage_rate', 0)} ({trace.get('audit_with_trace', 0) + trace.get('learning_with_trace', 0)}/{trace.get('audit_total', 0) + trace.get('learning_total', 0)} events)",
         f"Audit events: {audit.get('total', 0)} total, {audit.get('failure', 0)} failed, success_rate={audit.get('success_rate', 0)}",
@@ -1112,6 +1221,7 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true", help="Print each suite's raw output.")
     parser.add_argument("--include-output", action="store_true", help="Include raw stdout/stderr in JSON output.")
     parser.add_argument("--no-report", action="store_true", help="Do not write eval/reports/latest.* artifacts.")
+    parser.add_argument("--require-real-llm", action="store_true", help="Require observable real-model execution; zero LLM calls makes the report NOT_RUN/failing.")
     args = parser.parse_args()
 
     results: list[SuiteResult] = []
@@ -1121,7 +1231,8 @@ def main() -> None:
         if args.fail_fast and not result.ok:
             break
 
-    summary = build_json_summary(results, include_output=args.include_output)
+    profile = "custom" if args.suite else "smoke" if args.smoke else "quick" if args.quick else "core"
+    summary = build_json_summary(results, include_output=args.include_output, profile=profile, require_real_llm=args.require_real_llm)
     if not args.no_report:
         write_reports(summary)
 
@@ -1132,7 +1243,7 @@ def main() -> None:
         if not args.no_report:
             print(f"Reports: {summary['report_paths']['json']}, {summary['report_paths']['markdown']}")
 
-    if any(not result.ok for result in results):
+    if not summary["ok"]:
         raise SystemExit(1)
 
 
