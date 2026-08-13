@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type LessonItem = {
   id: string;
@@ -391,7 +392,10 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
             <span>本地笔记</span>
             <span>自测练习</span>
           </div>
-          <a className="hero-game-link" href={`/textbook-learning/${lesson.book_id}`}>返回教材目录</a>
+          <div className="learning-suggestion-row">
+            <Link className="hero-game-link" href={`/textbook-learning/${lesson.book_id}`}>返回教材目录</Link>
+            <Link className="hero-game-link" href={`/student/assistant?book_id=${encodeURIComponent(lesson.book_id)}&lesson_id=${encodeURIComponent(lesson.lesson_id)}`}>在随问中继续</Link>
+          </div>
         </div>
         <div className="teaching-card textbook-boundary-card" aria-label="本课导学">
           <div className="seal-mark" aria-hidden="true">导</div>
@@ -413,9 +417,9 @@ export default function LessonLearningClient({ lesson, toc }: { lesson: Lesson; 
             <section className="side-toc-unit" key={unit.title}>
               <strong>{unit.title}</strong>
               {unit.lessons.map((tocLesson) => (
-                <a className={tocLesson.id === lesson.lesson_id ? "active" : ""} href={`/textbook-learning/${lesson.book_id}/${tocLesson.id}`} key={tocLesson.id}>
+                <Link className={tocLesson.id === lesson.lesson_id ? "active" : ""} href={`/textbook-learning/${lesson.book_id}/${tocLesson.id}`} key={tocLesson.id}>
                   {tocLesson.title}
-                </a>
+                </Link>
               ))}
             </section>
           ))}

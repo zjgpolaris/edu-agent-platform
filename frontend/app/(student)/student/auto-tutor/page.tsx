@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -474,9 +475,9 @@ function AutoTutorInner() {
                   )}
                   {q.teaching.example && <p style={{ margin: "8px 0 0", fontSize: "0.84rem", color: "var(--muted)" }}>例子：{q.teaching.example}</p>}
                   <div className="learning-suggestion-row" style={{ marginTop: 10 }}>
-                    <a href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}`}>我有疑问</a>
-                    <a href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}&prompt=${encodeURIComponent("请结合当前知识点换一个生活化例子解释。")}`}>换个例子</a>
-                    <a href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}&prompt=${encodeURIComponent("请把当前讲解改成更简单的说法。")}`}>讲简单一点</a>
+                    <Link href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}`}>我有疑问</Link>
+                    <Link href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}&prompt=${encodeURIComponent("请结合当前知识点换一个生活化例子解释。")}`}>换个例子</Link>
+                    <Link href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}&prompt=${encodeURIComponent("请把当前讲解改成更简单的说法。")}`}>讲简单一点</Link>
                   </div>
                 </div>
               )}

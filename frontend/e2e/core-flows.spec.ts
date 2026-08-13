@@ -5,13 +5,13 @@ import { expect, test, type Page } from "@playwright/test";
 test.beforeEach(async ({ context }) => {
   // Keep the real FastAPI boundary while avoiding browser/system proxy rules
   // that can intercept localhost cross-port requests on managed desktops.
-  await context.route("http://localhost:8000/**", async (route) => {
+  await context.route(/http:\/\/(localhost|127\.0\.0\.1):8000\/.*/, async (route) => {
     const browserRequest = route.request();
     const headers = { ...browserRequest.headers() };
     delete headers.host;
     delete headers["content-length"];
     const apiResponse = await fetch(
-      browserRequest.url().replace("http://localhost:8000", "http://127.0.0.1:8000"),
+      browserRequest.url().replace(/http:\/\/(localhost|127\.0\.0\.1):8000/, "http://127.0.0.1:8000"),
       {
         method: browserRequest.method(),
         headers,
@@ -69,6 +69,21 @@ test("学生可打开 AutoTutor 自主辅导入口", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "AutoTutor 自主辅导" })).toBeVisible();
   // 未开课时页面渲染启动引导；「本节课计划」等三栏面板要开课后才出现
   await expect(page.getByRole("button", { name: "开始本节课" })).toBeVisible();
+});
+
+test("学生打开随问后可直接提问或按需添加教材", async ({ page }) => {
+  await enterDemo(page, "student");
+  await page.goto("/student/assistant");
+  await expect(page.getByRole("heading", { name: "随问", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "学习问题" })).toBeEnabled();
+  await expect(page.getByRole("heading", { name: "学习上下文" })).toHaveCount(0);
+  await page.getByRole("button", { name: "历史会话" }).click();
+  await expect(page.getByRole("dialog", { name: "历史会话" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭历史会话" }).click();
+  await page.getByRole("button", { name: "添加教材上下文" }).click();
+  await expect(page.getByRole("dialog", { name: "添加教材上下文" })).toBeVisible();
+  await page.getByRole("button", { name: "暂不使用" }).click();
+  await expect(page.getByRole("dialog", { name: "添加教材上下文" })).toHaveCount(0);
 });
 
 test("教师可查看作业管理与 Pilot 作业", async ({ page }) => {

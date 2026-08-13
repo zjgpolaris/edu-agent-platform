@@ -20,15 +20,23 @@ sys.path.insert(0, str(ROOT / "backend"))
 from fastapi import HTTPException
 from agents import learning_assistant as la
 from api.routers.learning import (
+    LearningAssistantContextUpdateRequest,
     LearningAssistantFeedbackRequest,
     LearningAssistantRequest,
+    LearningAssistantSessionUpdateRequest,
+    LearningAssistantTextbookContext,
     learning_assistant_chat,
     learning_assistant_feedback,
+    learning_assistant_get_session,
+    learning_assistant_list_sessions,
+    learning_assistant_update_context,
+    learning_assistant_update_session,
 )
 from security.auth import Actor
 from services.learning_assistant_session_service import append_message, create_session, get_latest_session, list_messages
 from student_profile import list_learning_events
 from tools.base import ToolResult
+from textbook_learning.loader import get_toc, list_textbooks
 
 
 def main() -> None:
@@ -106,6 +114,88 @@ def main() -> None:
         la.stream_learning_assistant_events = original_stream
     persisted_id = api_result["final"].get("message_id")
     assert persisted_id and any(item["message_id"] == persisted_id for item in list_messages(session["session_id"])), api_result
+
+    before_regenerate = list_messages(session["session_id"])
+    la.stream_learning_assistant_events = lambda request: iter([
+        ("final", {"response": "重新生成：市场像一扇被强行推开的门。", "intent": "chat", "tool_results": []}),
+    ])
+    try:
+        regenerated = asyncio.run(learning_assistant_chat(
+            LearningAssistantRequest(
+                session_id=session["session_id"],
+                message="该字段会由后端可信历史覆盖",
+                regenerate_message_id=persisted_id,
+                stream=False,
+            ),
+            Actor(actor_id=student_id, role="student"),
+        ))
+    finally:
+        la.stream_learning_assistant_events = original_stream
+    after_regenerate = list_messages(session["session_id"])
+    assert len(after_regenerate) == len(before_regenerate)
+    assert regenerated["final"]["response"].startswith("重新生成")
+    assert after_regenerate[-2]["content"] == "换个例子"
+
+    ready_book = next(item for item in list_textbooks() if item.status == "ready")
+    ready_lesson = get_toc(ready_book.id).units[0].lessons[0]
+    context_result = asyncio.run(learning_assistant_update_context(
+        session["session_id"],
+        LearningAssistantContextUpdateRequest(textbook=LearningAssistantTextbookContext(book_id=ready_book.id, lesson_id=ready_lesson.id)),
+        Actor(actor_id=student_id, role="student"),
+    ))
+    assert context_result["context"]["textbook"]["lesson_id"] == ready_lesson.id
+    restored_session = asyncio.run(learning_assistant_get_session(session["session_id"], Actor(actor_id=student_id, role="student")))
+    assert restored_session["context"]["textbook"]["book"] == ready_book.book
+
+    renamed = asyncio.run(learning_assistant_update_session(
+        session["session_id"],
+        LearningAssistantSessionUpdateRequest(title="鸦片战争复习"),
+        Actor(actor_id=student_id, role="student"),
+    ))
+    assert renamed["title"] == "鸦片战争复习"
+    listed = asyncio.run(learning_assistant_list_sessions(student_id, "all", 50, Actor(actor_id=student_id, role="student")))
+    assert any(item["session_id"] == session["session_id"] and item["message_count"] >= 4 for item in listed["sessions"])
+
+    archived = asyncio.run(learning_assistant_update_session(
+        session["session_id"],
+        LearningAssistantSessionUpdateRequest(status="archived"),
+        Actor(actor_id=student_id, role="student"),
+    ))
+    assert archived["status"] == "archived"
+    active_only = asyncio.run(learning_assistant_list_sessions(student_id, "active", 50, Actor(actor_id=student_id, role="student")))
+    assert all(item["session_id"] != session["session_id"] for item in active_only["sessions"])
+    asyncio.run(learning_assistant_update_session(
+        session["session_id"],
+        LearningAssistantSessionUpdateRequest(status="active"),
+        Actor(actor_id=student_id, role="student"),
+    ))
+
+    detached = asyncio.run(learning_assistant_update_context(
+        session["session_id"],
+        LearningAssistantContextUpdateRequest(textbook=None),
+        Actor(actor_id=student_id, role="student"),
+    ))
+    assert "textbook" not in detached["context"]
+
+    for operation in (
+        lambda: asyncio.run(learning_assistant_list_sessions(student_id, "all", 50, Actor(actor_id="other-student", role="student"))),
+        lambda: asyncio.run(learning_assistant_update_session(
+            session["session_id"],
+            LearningAssistantSessionUpdateRequest(title="越权修改"),
+            Actor(actor_id="other-student", role="student"),
+        )),
+        lambda: asyncio.run(learning_assistant_update_context(
+            session["session_id"],
+            LearningAssistantContextUpdateRequest(textbook=LearningAssistantTextbookContext(book_id=ready_book.id, lesson_id=ready_lesson.id)),
+            Actor(actor_id="other-student", role="student"),
+        )),
+    ):
+        try:
+            operation()
+        except HTTPException as exc:
+            assert exc.status_code == 403
+        else:
+            raise AssertionError("cross-student session management was not rejected")
 
     try:
         asyncio.run(learning_assistant_feedback(

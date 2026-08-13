@@ -56,6 +56,11 @@ def main() -> None:
     assert "'answer'" not in serialized and '"answer"' not in serialized
     assert _state_signature(get_session(started["session_id"])) == _state_signature(before)
 
+    resumed = asyncio.run(learning_assistant_create_session(req, Actor(actor_id=student_id, role="student")))
+    assert resumed["session_id"] == created["session_id"]
+    assert resumed["messages"] == []
+    assert _state_signature(get_session(started["session_id"])) == _state_signature(before)
+
     returned = asyncio.run(learning_assistant_return_to_source(created["session_id"], Actor(actor_id=student_id, role="student")))
     assert returned["return_path"] == "/student/auto-tutor"
     return_events = list_learning_events(student_id=student_id, feature="auto_tutor", event_type="autotutor_question_returned")
