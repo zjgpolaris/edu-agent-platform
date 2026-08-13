@@ -22,14 +22,42 @@ from trace_store import create_trace_id, emit_trace_event, trace_context
 
 
 def main() -> None:
-    for feedback in ("resolved", "unresolved"):
+    for feedback, history_messages in (("resolved", 2), ("unresolved", 0)):
         assert try_record_learning_event(LearningEvent(
             student_id="agent-ops-student",
             session_id="la_agent_ops",
             feature="learning_assistant",
             event_type="answer_feedback",
-            metadata={"feedback": feedback},
+            metadata={"feedback": feedback, "history_messages": history_messages},
         ))
+    for session_id in ("la_session_1", "la_session_2"):
+        assert try_record_learning_event(LearningEvent(student_id="agent-ops-student", session_id=session_id, feature="learning_assistant", event_type="session_created"))
+    assert try_record_learning_event(LearningEvent(student_id="agent-ops-student", session_id="la_session_1", feature="learning_assistant", event_type="session_resumed"))
+    assert try_record_learning_event(LearningEvent(student_id="agent-ops-student", session_id="la_session_1", feature="learning_assistant", event_type="question_asked"))
+    assert try_record_learning_event(LearningEvent(student_id="agent-ops-student", session_id="la_session_1", feature="learning_assistant", event_type="followup_asked"))
+    for fallback_used in (True, False):
+        assert try_record_learning_event(LearningEvent(
+            student_id="agent-ops-student",
+            session_id="la_session_1",
+            feature="learning_assistant",
+            event_type="answer_completed",
+            metadata={"fallback_used": fallback_used},
+        ))
+    for assistant_session_id in ("la_handoff_1", "la_handoff_2"):
+        assert try_record_learning_event(LearningEvent(
+            student_id="agent-ops-student",
+            session_id=f"at_{assistant_session_id}",
+            feature="auto_tutor",
+            event_type="autotutor_question_asked",
+            metadata={"assistant_session_id": assistant_session_id},
+        ))
+    assert try_record_learning_event(LearningEvent(
+        student_id="agent-ops-student",
+        session_id="at_la_handoff_1",
+        feature="auto_tutor",
+        event_type="autotutor_question_returned",
+        metadata={"assistant_session_id": "la_handoff_1"},
+    ))
     trace_id = create_trace_id()
     with trace_context(trace_id):
         emit_trace_event(
@@ -70,7 +98,7 @@ def main() -> None:
             metadata={"tool_name": "search_history_knowledge"},
         )
 
-    summary = build_agent_ops_summary(limit=10)
+    summary = build_agent_ops_summary(limit=100)
     production = summary.get("production") or {}
     latency = production.get("latency") or {}
     llm = production.get("llm") or {}
@@ -90,6 +118,11 @@ def main() -> None:
     assert assistant_feedback.get("resolved") == 1
     assert assistant_feedback.get("unresolved") == 1
     assert assistant_feedback.get("resolution_rate") == 0.5
+    assert assistant_feedback.get("followup_rate") == 0.5
+    assert assistant_feedback.get("context_resolution_rate") == 1.0
+    assert assistant_feedback.get("answer_fallback_rate") == 0.5
+    assert assistant_feedback.get("session_resume_rate") == 0.5
+    assert assistant_feedback.get("autotutor_return_rate") == 0.5
     print("agent_ops_smoke=PASS")
 
 

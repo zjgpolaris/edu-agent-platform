@@ -1,7 +1,7 @@
 # 「随问 · 学习助手」与 AutoTutor 协同 Spec
 
 **日期：** 2026-08-13
-**状态：** P0 已实现 / P1 增强项保留
+**状态：** P0 与 Phase 4 已实现 / P1 UI 增强项保留
 **目标版本：** v1.27
 **适用范围：** EduAgent 学生端自由提问、多轮学习助手、AutoTutor 课中提问协同
 
@@ -111,8 +111,8 @@ Exit Ticket → Evidence → Review
 1. AutoTutor 页面内使用抽屉展示随问，而不是整页跳转。
 2. 会话列表、重命名、归档。
 3. 回答中展示所使用的课程上下文与史料来源。
-4. 学生可以对回答选择“解决了 / 仍没懂”。
-5. “仍没懂”可生成更简单解释，但不直接改变 AutoTutor 掌握度。
+4. 学生可以对回答选择“解决了 / 仍没懂”。（已实现）
+5. “仍没懂”可生成更简单解释，但不直接改变 AutoTutor 掌握度。（已实现）
 
 ### 5.3 非目标
 
@@ -456,6 +456,14 @@ AgentOps 新增建议指标：
 - `assistant_answer_fallback_rate`
 - `autotutor_question_return_rate`
 
+实现口径：
+
+- 会话恢复率按唯一随问 session 计算，避免刷新页面重复计数。
+- 追问率为 `followup_asked / (question_asked + followup_asked)`。
+- 上下文解决率只统计带历史消息的回答反馈样本。
+- 回答降级率来自 `answer_completed.metadata.fallback_used`。
+- AutoTutor 返回率按唯一 handoff session 计算，返回操作必须先写事件再导航。
+
 ## 14. Learning Event 语义
 
 新增或规范事件：
@@ -567,9 +575,9 @@ npm run build --prefix frontend
 
 ### Phase 4：效果证据
 
-- 增加“解决了 / 仍没懂”。
-- 聚合随问追问率、上下文解析率和 AutoTutor 返回率。
-- 在 Eval Dashboard / AgentOps 展示指标。
+- 增加“解决了 / 仍没懂”。（已完成）
+- 聚合会话恢复率、随问追问率、上下文解决率、回答降级率和 AutoTutor 返回率。（已完成）
+- 在 Eval Dashboard / AgentOps 展示指标。（已完成）
 
 ## 18. 代码改动清单
 
@@ -619,5 +627,7 @@ npm run build --prefix frontend
 - 增加 `question_asked`、`followup_asked`、`answer_completed`、`autotutor_question_asked` learning events。
 - 增加“解决了 / 仍没懂”回答反馈；“仍没懂”会在同一会话触发更简单、带例子的重讲。
 - 回答反馈持久化到消息 metadata，并写入 `answer_feedback` learning event；AgentOps 展示随问解决率。
+- 增加 `session_created`、`session_resumed`、`autotutor_question_returned` 事件，回答事件记录生成模式和上下文消息数。
+- AgentOps 与 Eval Dashboard 展示会话恢复率、追问率、上下文解决率、回答降级率和 AutoTutor 返回率。
 
 P1 中的页面内抽屉和会话列表管理仍属于后续增强项，不属于 v1.27 P0 完成红线。

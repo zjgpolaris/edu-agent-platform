@@ -655,6 +655,22 @@ export default function LearningAssistantPage() {
     }
   }
 
+  async function returnToAutoTutor() {
+    if (!assistantSession || assistantSession.source_feature !== "auto_tutor") return;
+    setErrorMessage("");
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/learning/assistant/sessions/${assistantSession.session_id}/return-to-source`, {
+        method: "POST",
+        headers: requestHeaders,
+      });
+      if (!response.ok) throw new Error(`返回辅导失败：${response.status}`);
+      const result = await response.json() as { return_path?: string };
+      window.location.assign(result.return_path || assistantSession.context?.return_path || "/student/auto-tutor");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "返回辅导失败");
+    }
+  }
+
   async function confirmToolExecution() {
     if (!pendingConfirmation || !lastRequestText) return;
     setRuntimeSteps((current) => current.map((step) => step.status === "waiting_confirmation" ? { ...step, status: "confirmed" } : step));
@@ -736,7 +752,7 @@ export default function LearningAssistantPage() {
           {assistantSession?.source_feature === "auto_tutor" && (
             <div style={{ margin: "0 0 10px", padding: "9px 12px", borderRadius: 10, background: "rgba(47,111,79,0.07)", display: "flex", justifyContent: "space-between", gap: 12 }}>
               <span>正在询问：AutoTutor · {assistantSession.context?.knowledge_point || "当前知识点"}</span>
-              <a href={assistantSession.context?.return_path || "/student/auto-tutor"}>返回辅导</a>
+              <button type="button" onClick={() => void returnToAutoTutor()}>返回辅导</button>
             </div>
           )}
           <div className="learning-message-list" ref={msgListRef}>

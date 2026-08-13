@@ -234,7 +234,7 @@ def _source_context_text(context: dict[str, Any]) -> str:
     ).strip()
 
 
-def _generate_history_answer(message: str, sources: list[dict[str, Any]], history: list[dict[str, Any]] | None = None, source_context: dict[str, Any] | None = None) -> str:
+def _generate_history_answer(message: str, sources: list[dict[str, Any]], history: list[dict[str, Any]] | None = None, source_context: dict[str, Any] | None = None) -> tuple[str, str]:
     if not sources:
         return _generate_chat_answer(message, history or [], source_context or {})
     context = build_untrusted_context_block(sources[:4], title="史料")
@@ -245,12 +245,15 @@ def _generate_history_answer(message: str, sources: list[dict[str, Any]], histor
         {"role": "user", "content": f"课程上下文：\n{course_context}\n\n最近对话：\n{conversation}\n\n当前问题：{message}\n\n史料：\n{context}\n\n请用 2-4 句话回答，并点出一个可继续追问的方向。"},
     ]
     try:
-        return llm_fast.invoke(prompt).content.strip()
+        response = llm_fast.invoke(prompt).content.strip()
+        if response:
+            return response, "llm"
     except Exception:
-        return _fallback_history_answer(sources)
+        pass
+    return _fallback_history_answer(sources), "fallback"
 
 
-def _generate_chat_answer(message: str, history: list[dict[str, Any]], source_context: dict[str, Any]) -> str:
+def _generate_chat_answer(message: str, history: list[dict[str, Any]], source_context: dict[str, Any]) -> tuple[str, str]:
     conversation = _history_text(history)
     course_context = _source_context_text(source_context)
     prompt = [
@@ -263,31 +266,31 @@ def _generate_chat_answer(message: str, history: list[dict[str, Any]], source_co
     try:
         response = llm_fast.invoke(prompt).content.strip()
         if response:
-            return response
+            return response, "llm"
     except Exception:
         pass
     topic = source_context.get("knowledge_point")
     if topic:
-        return f"你问的是当前知识点「{topic}」。可以结合刚才的讲解继续理解：{(source_context.get('teaching') or {}).get('explanation') or '先抓住核心史实、原因和影响。'}"
+        return f"你问的是当前知识点「{topic}」。可以结合刚才的讲解继续理解：{(source_context.get('teaching') or {}).get('explanation') or '先抓住核心史实、原因和影响。'}", "fallback"
     if history:
-        return f"你是在继续追问刚才的内容。请把想进一步理解的人物、事件或观点说得更具体一些，我会接着解释。"
-    return f"关于“{message}”，请补充对应的历史人物、事件或教材章节，我会结合史料具体回答。"
+        return "你是在继续追问刚才的内容。请把想进一步理解的人物、事件或观点说得更具体一些，我会接着解释。", "fallback"
+    return f"关于“{message}”，请补充对应的历史人物、事件或教材章节，我会结合史料具体回答。", "fallback"
 
 
-def _final_for_intent(intent: LearningIntent, message: str, tool_results: list[dict[str, Any]], *, history: list[dict[str, Any]] | None = None, source_context: dict[str, Any] | None = None) -> tuple[str, list[str]]:
+def _final_for_intent(intent: LearningIntent, message: str, tool_results: list[dict[str, Any]], *, history: list[dict[str, Any]] | None = None, source_context: dict[str, Any] | None = None) -> tuple[str, list[str], str]:
     first = tool_results[0] if tool_results else None
     data = (first or {}).get("data") or {}
     if first and not first.get("ok"):
         error = first.get("error") or {}
         if error.get("code") == "confirmation_required":
-            return error.get("message") or "这个工具需要你确认后才会执行。", ["确认执行高风险工具", "取消这次操作", "换成普通历史问答"]
-        return error.get("message") or "这个工具暂时执行失败，你可以换个说法再试。", ["换个问题再试", "改成普通历史问答", "回到教材目录"]
+            return error.get("message") or "这个工具需要你确认后才会执行。", ["确认执行高风险工具", "取消这次操作", "换成普通历史问答"], "template"
+        return error.get("message") or "这个工具暂时执行失败，你可以换个说法再试。", ["换个问题再试", "改成普通历史问答", "回到教材目录"], "template"
 
     if intent == "quiz_generation":
         quiz = data.get("quiz") or {}
         questions = quiz.get("questions") or []
         if questions:
-            return f"我已为你生成 {len(questions)} 道练习题。", ["再来 3 道选择题", "解释第 1 题", "换成简答题"]
+            return f"我已为你生成 {len(questions)} 道练习题。", ["再来 3 道选择题", "解释第 1 题", "换成简答题"], "template"
         sources = data.get("sources") or []
         if sources:
             import re
@@ -313,37 +316,39 @@ def _final_for_intent(intent: LearningIntent, message: str, tool_results: list[d
                 prefix = ""
                 if weakpoint_tag and any(w in message for w in ["解释", "讲解", "先说"]):
                     prefix = _explain_topic(weakpoint_tag, sources) + "\n\n"
-                return f"{prefix}已为你生成 {len(generated)} 道练习题，答对即可从错题本移除。", ["再来一道", "换成选择题", "我答对了，下一个知识点"]
-        return "请先在左侧选择教材和课文，我可以为你生成针对性练习题。", ["选择教材后再试", "换成历史问答"]
+                return f"{prefix}已为你生成 {len(generated)} 道练习题，答对即可从错题本移除。", ["再来一道", "换成选择题", "我答对了，下一个知识点"], "template"
+        return "请先在左侧选择教材和课文，我可以为你生成针对性练习题。", ["选择教材后再试", "换成历史问答"], "template"
     if intent == "character_recommendation":
         recommendations = data.get("recommendations") or []
         names = "、".join(item.get("name", "") for item in recommendations[:3] if item.get("name"))
-        return f"我推荐你先和{names or '这些历史人物'}聊一聊。", ["开始和第一位人物对话", "换一个角度推荐", "只推荐教材覆盖高的人物"]
+        return f"我推荐你先和{names or '这些历史人物'}聊一聊。", ["开始和第一位人物对话", "换一个角度推荐", "只推荐教材覆盖高的人物"], "template"
     if intent == "timeline_game":
         game = data.get("game") or {}
         title = game.get("title") or game.get("round_title") or "历史时间线游戏"
-        return f"已创建《{title}》，你可以开始按时间顺序修复历史线索。", ["开始游戏", "换成困难难度", "围绕同一专题再来一局"]
+        return f"已创建《{title}》，你可以开始按时间顺序修复历史线索。", ["开始游戏", "换成困难难度", "围绕同一专题再来一局"], "template"
     if intent == "textbook_qa":
         lesson = data.get("lesson") or {}
         lesson_title = lesson.get("lesson_title") or "这课内容"
         items = lesson.get("items") or []
         highlights = "；".join(f"{item.get('topic')}：{item.get('text')}" for item in items[:3])
         if highlights:
-            return f"围绕《{lesson_title}》，可以先抓住这些要点：{highlights}", ["生成练习题", "总结本课", "推荐相关历史人物"]
-        return f"我已读取《{lesson_title}》，你可以继续问这课的重点、影响或易错点。", ["生成练习题", "总结本课", "解释重点"]
+            return f"围绕《{lesson_title}》，可以先抓住这些要点：{highlights}", ["生成练习题", "总结本课", "推荐相关历史人物"], "template"
+        return f"我已读取《{lesson_title}》，你可以继续问这课的重点、影响或易错点。", ["生成练习题", "总结本课", "解释重点"], "template"
     if intent == "history_search":
-        return _generate_history_answer(message, data.get("sources") or [], history, source_context), ["生成练习题", "换一个角度解释", "再简单一点"]
+        response, generation_mode = _generate_history_answer(message, data.get("sources") or [], history, source_context)
+        return response, ["生成练习题", "换一个角度解释", "再简单一点"], generation_mode
     if intent == "memory_delete_demo":
         if data.get("deleted"):
-            return "已完成高风险工具确认演示：只删除了 demo 范围内的学习记忆，没有影响真实学生画像。", ["再演示一次高风险工具", "查看工具轨迹", "换成普通历史问答"]
-        return "这个演示工具用于展示高风险确认流程。", ["演示高风险工具，删除演示记忆", "换成普通历史问答"]
+            return "已完成高风险工具确认演示：只删除了 demo 范围内的学习记忆，没有影响真实学生画像。", ["再演示一次高风险工具", "查看工具轨迹", "换成普通历史问答"], "template"
+        return "这个演示工具用于展示高风险确认流程。", ["演示高风险工具，删除演示记忆", "换成普通历史问答"], "template"
     if intent == "review_plan":
         actions = data.get("recommended_actions") or []
         if actions:
             plan_text = "；".join(actions[:3])
-            return f"根据你的学习记录，建议：{plan_text}", ["生成针对性练习题", "推荐相关历史人物", "查看薄弱知识点"]
-        return "暂时没有足够的学习记录来制定复习计划，先做几道练习题或和历史人物聊聊吧。", ["来一道练习题", "推荐一个历史人物"]
-    return _generate_chat_answer(message, history or [], source_context or {}), ["换个简单的说法", "结合教材解释", "围绕这个知识点出一道题"]
+            return f"根据你的学习记录，建议：{plan_text}", ["生成针对性练习题", "推荐相关历史人物", "查看薄弱知识点"], "template"
+        return "暂时没有足够的学习记录来制定复习计划，先做几道练习题或和历史人物聊聊吧。", ["来一道练习题", "推荐一个历史人物"], "template"
+    response, generation_mode = _generate_chat_answer(message, history or [], source_context or {})
+    return response, ["换个简单的说法", "结合教材解释", "围绕这个知识点出一道题"], generation_mode
 
 
 def _record_assistant_event(
@@ -513,20 +518,20 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
         yield "tool_result", tool_summary
 
     answer_started = perf_counter()
-    response, suggestions = _final_for_intent(intent, message, tool_results, history=history, source_context=source_context)
+    response, suggestions, generation_mode = _final_for_intent(intent, message, tool_results, history=history, source_context=source_context)
     answer_metadata = {
         "intent": intent,
         "used_tool_count": len(tool_results),
-        **_llm_runtime_metadata(generation_mode="template_or_llm", response_chars=len(response)),
+        **_llm_runtime_metadata(generation_mode=generation_mode, response_chars=len(response)),
     }
     yield _runtime_step("answer_synthesis", "Answer Synthesis", "llm_or_template", "success", sequence=7, started_at=answer_started, metadata=answer_metadata)
 
     memory_started = perf_counter()
     suggestions, profile_context = _personalize_suggestions(req.get("student_id"), suggestions)
-    _record_assistant_event(req, event_type="answer_completed", intent=intent, topic=topic, ok=True, metadata={"tool_count": len(tool_results)})
+    _record_assistant_event(req, event_type="answer_completed", intent=intent, topic=topic, ok=True, metadata={"tool_count": len(tool_results), "generation_mode": generation_mode, "fallback_used": generation_mode == "fallback", "history_messages": len(history), "source_feature": req.get("source_feature")})
     yield _runtime_step("memory_update", "Persist Interaction", "memory", "success", sequence=8, started_at=memory_started, metadata={"student_id": req.get("student_id"), "session_id": req.get("session_id"), "profile_context_loaded": bool(profile_context), "used_memory_count": len((profile_context or {}).get("used_memory") or []), "wrote_event": bool(req.get("student_id"))})
     trace_id = current_trace_id()
     if response:
         yield "delta", {"text": response}
-    yield "final", {"session_id": req.get("session_id"), "response": response, "intent": intent, "tool_results": tool_results, "profile_context": profile_context, "context_usage": {"history_messages": len(history), "source_feature": req.get("source_feature"), "source_session_id": req.get("source_session_id")}, "trace_id": trace_id}
+    yield "final", {"session_id": req.get("session_id"), "response": response, "intent": intent, "tool_results": tool_results, "profile_context": profile_context, "generation_mode": generation_mode, "context_usage": {"history_messages": len(history), "source_feature": req.get("source_feature"), "source_session_id": req.get("source_session_id")}, "trace_id": trace_id}
     yield "suggestions", {"suggestions": suggestions, "trace_id": trace_id}

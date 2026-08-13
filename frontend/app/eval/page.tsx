@@ -66,7 +66,26 @@ type AgentOpsSummary = {
   };
   audit?: { total: number; failure: number; success_rate?: number; by_action?: Record<string, number> };
   learning?: { total: number; failure: number; success_rate?: number; by_feature?: Record<string, number> };
-  learning_assistant?: { feedback_total?: number; resolved?: number; unresolved?: number; resolution_rate?: number; unresolved_rate?: number };
+  learning_assistant?: {
+    feedback_total?: number;
+    resolved?: number;
+    unresolved?: number;
+    resolution_rate?: number;
+    followup_total?: number;
+    question_total?: number;
+    followup_rate?: number;
+    context_feedback_total?: number;
+    context_resolution_rate?: number;
+    answer_total?: number;
+    answer_fallback_total?: number;
+    answer_fallback_rate?: number;
+    session_created_total?: number;
+    session_resumed_total?: number;
+    session_resume_rate?: number;
+    autotutor_question_total?: number;
+    autotutor_return_total?: number;
+    autotutor_return_rate?: number;
+  };
   tools?: { total?: number; failure?: number; success_rate?: number; by_tool_name?: Record<string, number>; by_failure?: Record<string, number> };
   production?: {
     trace_window?: number;
@@ -914,6 +933,11 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="Audit Events" value={String(summary?.audit?.total ?? "--")} hint={`${summary?.audit?.failure ?? 0} failed · ${Math.round((summary?.audit?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="Learning Events" value={String(summary?.learning?.total ?? "--")} hint={`${summary?.learning?.failure ?? 0} failed · ${Math.round((summary?.learning?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="随问解决率" value={assistantFeedback?.feedback_total ? `${Math.round((assistantFeedback.resolution_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.resolved ?? 0} 解决 · ${assistantFeedback?.unresolved ?? 0} 仍没懂`} />
+            <OpsCard label="随问追问率" value={assistantFeedback?.question_total ? `${Math.round((assistantFeedback.followup_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.followup_total ?? 0}/${assistantFeedback?.question_total ?? 0} questions`} />
+            <OpsCard label="上下文解决率" value={assistantFeedback?.context_feedback_total ? `${Math.round((assistantFeedback.context_resolution_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.context_feedback_total ?? 0} feedback samples`} />
+            <OpsCard label="随问降级率" value={assistantFeedback?.answer_total ? `${Math.round((assistantFeedback.answer_fallback_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.answer_fallback_total ?? 0}/${assistantFeedback?.answer_total ?? 0} answers`} />
+            <OpsCard label="会话恢复率" value={assistantFeedback?.session_created_total ? `${Math.round((assistantFeedback.session_resume_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.session_resumed_total ?? 0}/${assistantFeedback?.session_created_total ?? 0} sessions`} />
+            <OpsCard label="辅导返回率" value={assistantFeedback?.autotutor_question_total ? `${Math.round((assistantFeedback.autotutor_return_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.autotutor_return_total ?? 0}/${assistantFeedback?.autotutor_question_total ?? 0} handoffs`} />
             <OpsCard label="Tool Calls" value={String(summary?.tools?.total ?? "--")} hint={`${summary?.tools?.failure ?? 0} failed · ${Math.round((summary?.tools?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="Trace IDs" value={String(trace?.unique_trace_ids ?? "--")} hint="recent window" />
             <OpsCard label="p95 latency" value={latency?.p95_ms != null ? `${Math.round(latency.p95_ms)}ms` : "--"} hint={`${latency?.sample_count ?? 0} trace steps`} />

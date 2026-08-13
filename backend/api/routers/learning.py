@@ -86,6 +86,13 @@ async def learning_assistant_create_session(req: LearningAssistantSessionCreateR
         source_session_id=req.source_session_id,
         context=context,
     )
+    record_event_if_student(
+        req.student_id,
+        session_id=session["session_id"],
+        feature="learning_assistant",
+        event_type="session_created",
+        metadata={"source_feature": req.source_feature},
+    )
     record_audit_event(actor_id=actor.actor_id, action="learning_assistant.session_created", resource_type="student", resource_id=req.student_id, metadata={"session_id": session["session_id"], "source_feature": req.source_feature})
     return session
 
@@ -107,9 +114,38 @@ async def learning_assistant_get_latest_session(student_id: str, actor: Actor = 
     from services.learning_assistant_session_service import get_latest_session
     assert_student_access(actor, student_id)
     try:
-        return await run_in_threadpool(get_latest_session, student_id)
+        session = await run_in_threadpool(get_latest_session, student_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="暂无随问会话")
+    if session.get("messages"):
+        record_event_if_student(
+            student_id,
+            session_id=session["session_id"],
+            feature="learning_assistant",
+            event_type="session_resumed",
+            metadata={"message_count": len(session["messages"])},
+        )
+    return session
+
+
+@router.post("/api/learning/assistant/sessions/{session_id}/return-to-source")
+async def learning_assistant_return_to_source(session_id: str, actor: Actor = Depends(require_auth)):
+    from services.learning_assistant_session_service import get_session
+    try:
+        session = await run_in_threadpool(get_session, session_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="随问会话不存在")
+    assert_student_access(actor, str(session["student_id"]))
+    if session.get("source_feature") != "auto_tutor" or not session.get("source_session_id"):
+        raise HTTPException(status_code=409, detail="当前随问会话没有可返回的自主辅导")
+    record_event_if_student(
+        str(session["student_id"]),
+        session_id=str(session["source_session_id"]),
+        feature="auto_tutor",
+        event_type="autotutor_question_returned",
+        metadata={"assistant_session_id": session_id},
+    )
+    return {"ok": True, "return_path": (session.get("context") or {}).get("return_path") or "/student/auto-tutor"}
 
 
 @router.post("/api/learning/assistant/sessions/{session_id}/messages/{message_id}/feedback")
@@ -141,6 +177,7 @@ async def learning_assistant_feedback(
                 "message_id": message_id,
                 "feedback": req.feedback,
                 "source_feature": session.get("source_feature"),
+                "history_messages": result["history_messages"],
             },
         )
     return {
@@ -206,7 +243,20 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
             events = list(stream_learning_assistant_events(request_data))
             final = next((data for event, data in events if event == "final"), None)
             if session and final and final.get("response"):
-                persisted = await run_in_threadpool(append_message, req.session_id, "assistant", final["response"], intent=final.get("intent"), trace_id=trace_id, tool_results=final.get("tool_results") or [])
+                context_usage = final.get("context_usage") or {}
+                persisted = await run_in_threadpool(
+                    append_message,
+                    req.session_id,
+                    "assistant",
+                    final["response"],
+                    intent=final.get("intent"),
+                    trace_id=trace_id,
+                    tool_results=final.get("tool_results") or [],
+                    metadata={
+                        "history_messages": int(context_usage.get("history_messages") or 0),
+                        "generation_mode": final.get("generation_mode"),
+                    },
+                )
                 final["message_id"] = persisted["message_id"]
             suggestions = next((data for event, data in events if event == "suggestions"), None)
             intent = next((data for event, data in events if event == "intent"), None)
@@ -235,7 +285,20 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                         break
                     event, data = item
                     if event == "final" and session and data.get("response"):
-                        persisted = await run_in_threadpool(append_message, req.session_id, "assistant", data["response"], intent=data.get("intent"), trace_id=trace_id, tool_results=data.get("tool_results") or [])
+                        context_usage = data.get("context_usage") or {}
+                        persisted = await run_in_threadpool(
+                            append_message,
+                            req.session_id,
+                            "assistant",
+                            data["response"],
+                            intent=data.get("intent"),
+                            trace_id=trace_id,
+                            tool_results=data.get("tool_results") or [],
+                            metadata={
+                                "history_messages": int(context_usage.get("history_messages") or 0),
+                                "generation_mode": data.get("generation_mode"),
+                            },
+                        )
                         data = {**data, "message_id": persisted["message_id"]}
                     yield sse_frame(event, data)
                     await asyncio.sleep(0)

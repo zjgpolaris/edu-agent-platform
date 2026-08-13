@@ -223,7 +223,13 @@ def set_message_feedback(session_id: str, message_id: str, feedback: str) -> dic
         if existing:
             if existing != feedback:
                 raise ValueError("learning assistant feedback already recorded")
-            return {"message_id": message_id, "session_id": session_id, "feedback": existing, "changed": False}
+            return {
+                "message_id": message_id,
+                "session_id": session_id,
+                "feedback": existing,
+                "changed": False,
+                "history_messages": int(metadata.get("history_messages") or 0),
+            }
         metadata["feedback"] = feedback
         metadata["feedback_at"] = now_iso()
         conn.execute(text("""UPDATE assistant_messages SET metadata_json=:metadata_json
@@ -232,4 +238,10 @@ def set_message_feedback(session_id: str, message_id: str, feedback: str) -> dic
             "session_id": session_id,
             "message_id": message_id,
         })
-    return {"message_id": message_id, "session_id": session_id, "feedback": feedback, "changed": True}
+    return {
+        "message_id": message_id,
+        "session_id": session_id,
+        "feedback": feedback,
+        "changed": True,
+        "history_messages": int(metadata.get("history_messages") or 0),
+    }

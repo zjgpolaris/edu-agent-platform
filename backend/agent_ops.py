@@ -306,6 +306,33 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
     assistant_feedback_total = len(assistant_feedback)
     assistant_resolved = assistant_feedback.count("resolved")
     assistant_unresolved = assistant_feedback.count("unresolved")
+    assistant_questions = [event for event in learning_events if event.get("feature") == "learning_assistant" and event.get("event_type") in {"question_asked", "followup_asked"}]
+    assistant_followups = sum(1 for event in assistant_questions if event.get("event_type") == "followup_asked")
+    assistant_answers = [event for event in learning_events if event.get("feature") == "learning_assistant" and event.get("event_type") == "answer_completed"]
+    assistant_fallbacks = sum(1 for event in assistant_answers if (event.get("metadata") or {}).get("fallback_used") is True)
+    context_feedback = [
+        event for event in learning_events
+        if event.get("feature") == "learning_assistant"
+        and event.get("event_type") == "answer_feedback"
+        and int((event.get("metadata") or {}).get("history_messages") or 0) > 0
+    ]
+    context_resolved = sum(1 for event in context_feedback if (event.get("metadata") or {}).get("feedback") == "resolved")
+    created_sessions = {
+        str(event.get("session_id")) for event in learning_events
+        if event.get("feature") == "learning_assistant" and event.get("event_type") == "session_created" and event.get("session_id")
+    }
+    resumed_sessions = {
+        str(event.get("session_id")) for event in learning_events
+        if event.get("feature") == "learning_assistant" and event.get("event_type") == "session_resumed" and event.get("session_id")
+    }
+    autotutor_question_sessions = {
+        str((event.get("metadata") or {}).get("assistant_session_id")) for event in learning_events
+        if event.get("feature") == "auto_tutor" and event.get("event_type") == "autotutor_question_asked" and (event.get("metadata") or {}).get("assistant_session_id")
+    }
+    autotutor_return_sessions = {
+        str((event.get("metadata") or {}).get("assistant_session_id")) for event in learning_events
+        if event.get("feature") == "auto_tutor" and event.get("event_type") == "autotutor_question_returned" and (event.get("metadata") or {}).get("assistant_session_id")
+    }
     audit_success = sum(1 for event in audit_events if event.get("success") is True)
     audit_failure = len(audit_events) - audit_success
     total_tool_calls = sum(tool_counts.values())
@@ -359,6 +386,21 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
             "unresolved": assistant_unresolved,
             "resolution_rate": _rate(assistant_resolved, assistant_feedback_total),
             "unresolved_rate": _rate(assistant_unresolved, assistant_feedback_total),
+            "question_total": len(assistant_questions),
+            "followup_total": assistant_followups,
+            "followup_rate": _rate(assistant_followups, len(assistant_questions)),
+            "context_feedback_total": len(context_feedback),
+            "context_resolved": context_resolved,
+            "context_resolution_rate": _rate(context_resolved, len(context_feedback)),
+            "answer_total": len(assistant_answers),
+            "answer_fallback_total": assistant_fallbacks,
+            "answer_fallback_rate": _rate(assistant_fallbacks, len(assistant_answers)),
+            "session_created_total": len(created_sessions),
+            "session_resumed_total": len(created_sessions & resumed_sessions),
+            "session_resume_rate": _rate(len(created_sessions & resumed_sessions), len(created_sessions)),
+            "autotutor_question_total": len(autotutor_question_sessions),
+            "autotutor_return_total": len(autotutor_question_sessions & autotutor_return_sessions),
+            "autotutor_return_rate": _rate(len(autotutor_question_sessions & autotutor_return_sessions), len(autotutor_question_sessions)),
         },
         "tools": {
             "total": total_tool_calls,
