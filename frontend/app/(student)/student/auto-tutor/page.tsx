@@ -23,6 +23,11 @@ type CurrentQuestion = {
   knowledge_point: string;
   difficulty: string;
   strategy: string;
+  teaching?: {
+    explanation: string;
+    key_points: string[];
+    example?: string;
+  } | null;
   question: string;
   options: string[];
   step_index: number;
@@ -72,6 +77,7 @@ type SessionState = {
   grade?: string | null;
   status: "awaiting_answer" | "completed";
   phase?: "lesson" | "exit_ticket" | "completed";
+  revision: number;
   lesson_plan: PlanStep[];
   current_step_index: number;
   current_question: CurrentQuestion | null;
@@ -83,6 +89,7 @@ type SessionState = {
   runtime_steps: RuntimeStep[];
   reflection?: Reflection;
   last_answer_correct?: boolean;
+  stale_answer_ignored?: boolean;
 };
 
 type RootCauseInfo = {
@@ -117,6 +124,7 @@ const runtimeStatusLabel: Record<string, string> = {
 
 function eventTone(eventType: string): string {
   if (eventType === "exit_ticket") return "#7a4bb0";
+  if (eventType === "teach" || eventType === "reteach") return "#247a73";
   if (eventType === "reflect") return "#b8004d";
   if (eventType === "re_plan") return "#b87a00";
   if (eventType === "plan") return "#2f6f4f";
@@ -236,13 +244,19 @@ function AutoTutorInner() {
       const res = await fetch(`${apiBaseUrl}/api/autotutor/answer`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ session_id: session.session_id, answer: letter, student_id: studentId }),
+        body: JSON.stringify({
+          session_id: session.session_id,
+          answer: letter,
+          student_id: studentId,
+          expected_revision: session.revision,
+        }),
       });
       if (!res.ok) throw new Error(`提交失败：${res.status}`);
       const data = (await res.json()) as SessionState;
       setSession(data);
       setSelected(null);
-      if (data.status === "completed") setStatus("本节课已完成，学习证据已写入");
+      if (data.stale_answer_ignored) setStatus("已同步最新辅导进度");
+      else if (data.status === "completed") setStatus("本节课已完成，学习证据已写入");
       else if (data.phase === "exit_ticket") setStatus("进入退出票检验，请完成最后一题证明掌握");
       else if (data.reflection) setStatus("Agent 反思后调整了计划，请再试一次");
       else setStatus(data.last_answer_correct ? "答对了，进入下一个知识点" : "请作答当前题目");
@@ -299,6 +313,7 @@ function AutoTutorInner() {
             <div className="hero-flow" aria-label="AutoTutor 闭环">
               <span>读学情</span>
               <span>规划</span>
+              <span>讲解</span>
               <span>出题检验</span>
               <span>反思重规划</span>
               <span>退出票检验</span>
@@ -351,6 +366,7 @@ function AutoTutorInner() {
           <ol className="autotutor-launch-steps" aria-label="开始后会发生什么">
             <li><strong>读学情</strong><span>翻你的画像与错题本</span></li>
             <li><strong>规划</strong><span>排知识点顺序和难度</span></li>
+            <li><strong>先讲解</strong><span>结合史料讲清关键点</span></li>
             <li><strong>出题检验</strong><span>每讲一点就检验一次</span></li>
             <li><strong>反思重规划</strong><span>答错就判断病因、改讲法</span></li>
             <li><strong>退出票</strong><span>课末验收本节掌握度</span></li>
@@ -445,6 +461,23 @@ function AutoTutorInner() {
                   <p style={{ margin: "6px 0 2px", fontSize: "0.85rem" }}><b>诊断：</b>{lastReflection.diagnosis}</p>
                   <p style={{ margin: "2px 0", fontSize: "0.85rem" }}><b>调整：</b>{adjustmentLabel[lastReflection.adjustment] || lastReflection.adjustment}</p>
                   <p style={{ margin: "2px 0 0", fontSize: "0.85rem" }}>{lastReflection.explanation}</p>
+                </div>
+              )}
+              {q.kind !== "exit_ticket" && q.teaching && (
+                <div style={{ border: "1px solid var(--line, #e2ded3)", background: "rgba(47,111,79,0.05)", borderRadius: 10, padding: "12px 14px", margin: "10px 0 14px" }}>
+                  <strong style={{ color: "var(--jade-dark,#2f6f4f)" }}>{q.replanned ? "换一种讲法" : "先理解，再作答"}</strong>
+                  <p style={{ margin: "7px 0", lineHeight: 1.7 }}>{q.teaching.explanation}</p>
+                  {!!q.teaching.key_points?.length && (
+                    <div className="learning-runtime-chips">
+                      {q.teaching.key_points.map((point) => <small key={point}>{point}</small>)}
+                    </div>
+                  )}
+                  {q.teaching.example && <p style={{ margin: "8px 0 0", fontSize: "0.84rem", color: "var(--muted)" }}>例子：{q.teaching.example}</p>}
+                  <div className="learning-suggestion-row" style={{ marginTop: 10 }}>
+                    <a href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}`}>我有疑问</a>
+                    <a href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}&prompt=${encodeURIComponent("请结合当前知识点换一个生活化例子解释。")}`}>换个例子</a>
+                    <a href={`/student/assistant?autotutor_session_id=${encodeURIComponent(session.session_id)}&prompt=${encodeURIComponent("请把当前讲解改成更简单的说法。")}`}>讲简单一点</a>
+                  </div>
                 </div>
               )}
               <p className="quiz-question-text" style={{ fontSize: "1rem", margin: "10px 0" }}>{q.question}</p>

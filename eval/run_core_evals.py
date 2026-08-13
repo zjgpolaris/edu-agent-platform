@@ -35,6 +35,7 @@ OFFLINE_DETERMINISTIC_SUITES = {
     "learning_assistant_smoke",
     "trajectory_eval",
     "auto_tutor_trajectory_eval",
+    "autotutor_teaching_quality_eval",
 }
 EXTERNAL_QUOTA_ERROR_MARKERS = (
     "allocationquota.freetieronly",
@@ -51,6 +52,8 @@ CORE_SUITES = [
     "game_generation_eval",
     "agent_ops_smoke",
     "autotutor_session_recovery_smoke",
+    "learning_assistant_multiturn_smoke",
+    "autotutor_question_handoff_smoke",
     "learning_assistant_smoke",
     "intent_accuracy_eval",
     "material_rag_smoke",
@@ -68,6 +71,7 @@ CORE_SUITES = [
     "trace_smoke",
     "trajectory_eval",
     "auto_tutor_trajectory_eval",
+    "autotutor_teaching_quality_eval",
     "debate_multi_agent_smoke",
     "mcp_client_smoke",
     "agent_job_smoke",
@@ -76,6 +80,8 @@ QUICK_SUITES = [
     # Offline-first: these run without LLM/embed and always produce metrics
     "agent_ops_smoke",
     "autotutor_session_recovery_smoke",
+    "learning_assistant_multiturn_smoke",
+    "autotutor_question_handoff_smoke",
     "release_gate_smoke",
     "tool_registry_smoke",
     "guardrails_smoke",
@@ -84,6 +90,7 @@ QUICK_SUITES = [
     "learning_closure_smoke",
     "trajectory_eval",
     "auto_tutor_trajectory_eval",
+    "autotutor_teaching_quality_eval",
     "debate_multi_agent_smoke",
     "rag_groundedness_eval",
     "mcp_client_smoke",
@@ -146,6 +153,8 @@ SMOKE_SUITES = [
 SUITE_FILES = {
     "agent_ops_smoke": EVAL_DIR / "agent_ops_smoke.py",
     "autotutor_session_recovery_smoke": EVAL_DIR / "autotutor_session_recovery_smoke.py",
+    "learning_assistant_multiturn_smoke": EVAL_DIR / "learning_assistant_multiturn_smoke.py",
+    "autotutor_question_handoff_smoke": EVAL_DIR / "autotutor_question_handoff_smoke.py",
     "history_character_smoke": EVAL_DIR / "history_character_smoke.py",
     "history_character_eval": EVAL_DIR / "history_character_eval.py",
     "rag_retrieval_eval": EVAL_DIR / "rag_retrieval_eval.py",
@@ -180,6 +189,7 @@ SUITE_FILES = {
     "readiness_smoke": EVAL_DIR / "readiness_smoke.py",
     "trajectory_eval": EVAL_DIR / "trajectory_eval.py",
     "auto_tutor_trajectory_eval": EVAL_DIR / "auto_tutor_trajectory_eval.py",
+    "autotutor_teaching_quality_eval": EVAL_DIR / "autotutor_teaching_quality_eval.py",
     "debate_multi_agent_smoke": EVAL_DIR / "debate_multi_agent_smoke.py",
     "mcp_client_smoke": EVAL_DIR / "mcp_client_smoke.py",
     "agent_job_smoke": EVAL_DIR / "agent_job_smoke.py",
@@ -223,6 +233,18 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "category": "agent",
         "kind": "smoke",
         "priority": "p1",
+    },
+    "learning_assistant_multiturn_smoke": {
+        "label": "随问多轮会话 Smoke",
+        "category": "agent",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "autotutor_question_handoff_smoke": {
+        "label": "AutoTutor 随问协同 Smoke",
+        "category": "agent",
+        "kind": "smoke",
+        "priority": "p0",
     },
     "history_character_smoke": {
         "label": "历史人物 Smoke",
@@ -502,6 +524,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "auto_tutor_trajectory_eval": {
         "label": "AutoTutor 自主辅导轨迹",
+        "category": "agent",
+        "kind": "quality",
+        "priority": "p0",
+    },
+    "autotutor_teaching_quality_eval": {
+        "label": "AutoTutor 教学内容质量",
         "category": "agent",
         "kind": "quality",
         "priority": "p0",

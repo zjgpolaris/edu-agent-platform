@@ -111,6 +111,7 @@ def case_wrong_answer_triggers_replan() -> tuple[bool, str, dict]:
     after = [(p["knowledge_point"], p["difficulty"], p["replanned"]) for p in res["lesson_plan"]]
     has_reflect_step = any(s["event_type"] == "reflect" for s in res["runtime_steps"])
     has_replan_step = any(s["event_type"] == "re_plan" for s in res["runtime_steps"])
+    has_reteach_step = any(s["event_type"] == "reteach" for s in res["runtime_steps"])
     detail = {"before": before, "after": after, "replans": res["replans"], "reflection": bool(res.get("reflection"))}
     if res.get("last_answer_correct"):
         return False, "answer unexpectedly judged correct", detail
@@ -120,6 +121,10 @@ def case_wrong_answer_triggers_replan() -> tuple[bool, str, dict]:
         return False, "no re-plan happened", detail
     if not (has_reflect_step and has_replan_step):
         return False, "reflect/re_plan trace steps missing", detail
+    if not has_reteach_step:
+        return False, "re-plan did not produce a reteach step", detail
+    if not ((res.get("current_question") or {}).get("teaching") or {}).get("explanation"):
+        return False, "re-planned question has no teaching content", detail
     if not any(p["replanned"] for p in res["lesson_plan"]):
         return False, "no step marked replanned", detail
     return True, "ok", detail
@@ -239,6 +244,10 @@ def case_empty_weakpoints_still_plans() -> tuple[bool, str, dict]:
         return False, "plan contains empty knowledge_point", detail
     if not all(p.get("difficulty") in {"easy", "medium", "hard"} for p in plan):
         return False, "plan contains invalid difficulty", detail
+    if not ((st.get("current_question") or {}).get("teaching") or {}).get("explanation"):
+        return False, "first question was generated without teaching content", detail
+    if not any(step["event_type"] == "teach" for step in st["runtime_steps"]):
+        return False, "teach trace step missing", detail
     return True, "ok", detail
 
 

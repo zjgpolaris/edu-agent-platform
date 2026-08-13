@@ -248,6 +248,35 @@ agent_jobs = Table(
     Index("idx_agent_jobs_status_created", "status", "created_at"),
 )
 
+assistant_sessions = Table(
+    "assistant_sessions", metadata,
+    Column("session_id", Text, primary_key=True),
+    Column("student_id", Text, nullable=False),
+    Column("title", Text),
+    Column("status", Text, nullable=False),
+    Column("source_feature", Text, nullable=False),
+    Column("source_session_id", Text),
+    Column("context_json", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+    Index("idx_assistant_sessions_student_updated", "student_id", "updated_at"),
+    Index("idx_assistant_sessions_source", "source_feature", "source_session_id"),
+)
+
+assistant_messages = Table(
+    "assistant_messages", metadata,
+    Column("message_id", Text, primary_key=True),
+    Column("session_id", Text, nullable=False),
+    Column("role", Text, nullable=False),
+    Column("content", Text, nullable=False),
+    Column("intent", Text),
+    Column("trace_id", Text),
+    Column("tool_results_json", Text, nullable=False),
+    Column("metadata_json", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("idx_assistant_messages_session_created", "session_id", "created_at"),
+)
+
 student_notifications = Table(
     "student_notifications", metadata,
     Column("id", Text, primary_key=True),

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
@@ -32,6 +32,16 @@ type Message = {
   tools?: ToolResult[];
   suggestions?: string[];
   activeGame?: Record<string, unknown>;
+};
+type AssistantSession = {
+  session_id: string;
+  student_id: string;
+  title?: string | null;
+  status: "active" | "archived";
+  source_feature: "standalone" | "auto_tutor" | "textbook";
+  source_session_id?: string | null;
+  context?: { knowledge_point?: string; return_path?: string };
+  messages?: Array<{ message_id: string; role: "user" | "assistant" | "system_context"; content: string; intent?: string | null }>;
 };
 type ToolSummary = Record<string, unknown> & { tool_name?: string; ok?: boolean | undefined };
 type RuntimeStepStatus = "running" | "success" | "failed" | "waiting_confirmation" | "confirmed" | "cancelled";
@@ -91,7 +101,7 @@ const intentLabels: Record<string, string> = {
   timeline_game: "时间线游戏",
   history_search: "历史检索",
   memory_delete_demo: "高风险工具演示",
-  chat: "学习引导",
+  chat: "自由问答",
 };
 const toolLabels: Record<string, string> = {
   search_history_knowledge: "史料检索",
@@ -150,9 +160,9 @@ function runtimeStepSummary(step: RuntimeStep): string {
 }
 
 const PIPELINE_PHASES = [
-  { label: "意图识别", en: "Intent", sequences: [1, 2, 3] },
-  { label: "工具调用", en: "Tool", sequences: [4, 5] },
-  { label: "结果整合", en: "Synthesis", sequences: [6, 7] },
+  { label: "理解上下文", en: "Context", sequences: [1, 2, 3] },
+  { label: "工具调用", en: "Tool", sequences: [4, 5, 6] },
+  { label: "回答与记录", en: "Synthesis", sequences: [7, 8] },
 ];
 
 function AgentPipeline({ steps }: { steps: RuntimeStep[] }) {
@@ -315,8 +325,9 @@ function renderToolPreview(tool: ToolResult) {
 export default function LearningAssistantPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const [message, setMessage] = useState(searchParams.get("q") ?? "");
+  const [message, setMessage] = useState(searchParams.get("q") ?? searchParams.get("prompt") ?? "");
   const studentId = user?.actorId ?? "";
+  const sourceAutoTutorId = searchParams.get("autotutor_session_id") ?? "";
   const [books, setBooks] = useState<Textbook[]>([]);
   const [bookId, setBookId] = useState("");
   const [units, setUnits] = useState<TocUnit[]>([]);
@@ -345,7 +356,7 @@ export default function LearningAssistantPage() {
     {
       id: "welcome",
       role: "assistant",
-      text: "我是统一学习助手。你可以让我查历史问题、生成练习、推荐历史人物，或者启动时间线游戏。",
+      text: "我是随问学习助手。有问题可以直接问，也可以继续追问刚才的内容。",
       suggestions: examples,
     },
   ]);
@@ -363,7 +374,86 @@ export default function LearningAssistantPage() {
   const [toolRegistry, setToolRegistry] = useState<ToolInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [assistantSession, setAssistantSession] = useState<AssistantSession | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const msgListRef = useRef<HTMLDivElement>(null);
+  const sourceInitializedRef = useRef("");
+
+  const requestHeaders = useMemo(
+    () => ({ "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) }),
+    [user?.token]
+  );
+
+  const hydrateSession = useCallback((session: AssistantSession) => {
+    setAssistantSession(session);
+    const restored = (session.messages || []).filter((item) => item.role !== "system_context").map((item) => ({
+      id: item.message_id,
+      role: item.role as "user" | "assistant",
+      text: item.content,
+      intent: item.intent || undefined,
+    }));
+    if (restored.length) setMessages(restored);
+  }, []);
+
+  const createSession = useCallback(async (sourceSessionId?: string): Promise<AssistantSession> => {
+    const response = await fetch(`${apiBaseUrl}/api/learning/assistant/sessions`, {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify({
+        student_id: studentId,
+        source_feature: sourceSessionId ? "auto_tutor" : "standalone",
+        source_session_id: sourceSessionId || null,
+      }),
+    });
+    if (!response.ok) throw new Error(`创建随问会话失败：${response.status}`);
+    const session = await response.json() as AssistantSession;
+    setAssistantSession(session);
+    return session;
+  }, [requestHeaders, studentId]);
+
+  useEffect(() => {
+    if (!studentId || !user?.token || sessionReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (sourceAutoTutorId) {
+          if (sourceInitializedRef.current === sourceAutoTutorId) return;
+          sourceInitializedRef.current = sourceAutoTutorId;
+          const session = await createSession(sourceAutoTutorId);
+          if (!cancelled) hydrateSession(session);
+        } else {
+          const response = await fetch(`${apiBaseUrl}/api/learning/assistant/students/${studentId}/latest-session`, { headers: requestHeaders });
+          if (response.ok) {
+            const session = await response.json() as AssistantSession;
+            if (!cancelled) hydrateSession(session);
+          }
+        }
+      } catch (error) {
+        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "恢复随问会话失败");
+      } finally {
+        if (!cancelled) setSessionReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [studentId, user?.token, sourceAutoTutorId, sessionReady, requestHeaders, createSession, hydrateSession]);
+
+  async function startNewConversation() {
+    if (!studentId || loading) return;
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      const session = await createSession();
+      setMessages([{ id: "welcome-new", role: "assistant", text: "新对话已开始。你可以问任何学习问题。", suggestions: examples }]);
+      setAssistantSession(session);
+      setTraceId("");
+      setRuntimeSteps([]);
+      setStatus("等待你的问题");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "创建新对话失败");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => { msgListRef.current?.scrollTo({ top: msgListRef.current.scrollHeight, behavior: "smooth" }); }, [messages]);
 
@@ -506,10 +596,12 @@ export default function LearningAssistantPage() {
     setStatus("正在发送学习任务");
 
     try {
+      const activeSession = assistantSession || await createSession(sourceAutoTutorId || undefined);
       const response = await fetch(`${apiBaseUrl}/api/learning/assistant/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) },
+        headers: requestHeaders,
         body: JSON.stringify({
+          session_id: activeSession.session_id,
           message: text,
           student_id: studentId || null,
           grade: grade || null,
@@ -568,9 +660,9 @@ export default function LearningAssistantPage() {
     <main className="academy-shell learning-assistant-shell">
       <section className="academy-hero learning-command-hero">
         <div className="hero-copy">
-          <div className="eyebrow">Learning Command Desk</div>
-          <h1>统一学习助手</h1>
-          <p>把史料检索、教材问答、测验生成、人物推荐和时间线游戏收束到一个对话入口。你提出学习目标，助手选择合适工具并把结果整理成下一步行动。</p>
+          <div className="eyebrow">Ask Anything</div>
+          <h1>随问 · 学习助手</h1>
+          <p>有问题就问。可以追问刚才的内容，也可以让我查史料、解释教材、生成练习或规划下一步。</p>
           <div className="hero-flow" aria-label="学习助手能力">
             <span>识别意图</span>
             <span>调用工具</span>
@@ -582,7 +674,8 @@ export default function LearningAssistantPage() {
           <div className="seal-mark" aria-hidden="true">策</div>
           <span className="card-label">任务台状态</span>
           <strong>{status}</strong>
-          <p>{intent ? `当前意图：${intentLabels[String(intent.intent)] || String(intent.intent)}` : "输入一个历史学习任务，助手会先判断要使用哪种能力。"}</p>
+          <p>{intent ? `当前意图：${intentLabels[String(intent.intent)] || String(intent.intent)}` : "直接输入问题，助手会结合对话和学习上下文回答。"}</p>
+          <button type="button" className="learning-tool-action" onClick={() => void startNewConversation()} disabled={loading || !studentId}>新对话</button>
         </div>
       </section>
 
@@ -613,6 +706,12 @@ export default function LearningAssistantPage() {
         </aside>
 
         <section className="panel learning-dialog-panel" aria-label="学习助手对话">
+          {assistantSession?.source_feature === "auto_tutor" && (
+            <div style={{ margin: "0 0 10px", padding: "9px 12px", borderRadius: 10, background: "rgba(47,111,79,0.07)", display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <span>正在询问：AutoTutor · {assistantSession.context?.knowledge_point || "当前知识点"}</span>
+              <a href={assistantSession.context?.return_path || "/student/auto-tutor"}>返回辅导</a>
+            </div>
+          )}
           <div className="learning-message-list" ref={msgListRef}>
             {messages.map((item) => (
               <article className={`learning-message ${item.role}`} key={item.id}>
@@ -645,8 +744,8 @@ export default function LearningAssistantPage() {
             ))}
           </div>
           <form className="learning-input-bar" onSubmit={handleSubmit}>
-            <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="例如：鸦片战争为什么重要？ / 推荐一个适合对话的历史人物 / 来一局时间线游戏" />
-            <button type="submit" disabled={!assistantReady}>发送任务</button>
+            <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="问任何学习问题，例如：刚才为什么说辛亥革命没有改变社会性质？" />
+            <button type="submit" disabled={!assistantReady || !sessionReady}>发送</button>
           </form>
           {errorMessage && <p className="learning-error">{errorMessage}</p>}
         </section>

@@ -39,12 +39,17 @@ class LearningAssistantRequestData(TypedDict, total=False):
     confirmed_tool_name: str | None
     confirmation_token: str | None
     confirmation_decision: str | None
+    conversation_history: list[dict[str, Any]]
+    source_context: dict[str, Any]
+    source_feature: str | None
+    source_session_id: str | None
 
 
 def detect_learning_intent(req: LearningAssistantRequestData) -> dict[str, Any]:
     message = (req.get("message") or "").strip()
     compact = message.replace(" ", "")
     has_lesson = bool(req.get("book_id") and req.get("lesson_id"))
+    has_context = bool(req.get("conversation_history") or req.get("source_context"))
 
     if any(token in compact for token in ["演示高风险工具", "删除演示记忆", "删除demomemory", "确认删除记忆"]):
         return {"intent": "memory_delete_demo", "confidence": 0.96, "reason": "命中高风险工具确认演示关键词"}
@@ -60,6 +65,8 @@ def detect_learning_intent(req: LearningAssistantRequestData) -> dict[str, Any]:
         return {"intent": "textbook_qa", "confidence": 0.82, "reason": "请求包含教材和课文上下文"}
     if any(token in compact for token in ["历史", "战争", "朝代", "皇帝", "变法", "革命", "为什么", "影响", "意义"]):
         return {"intent": "history_search", "confidence": 0.76, "reason": "命中历史问答关键词"}
+    if has_context and any(token in compact for token in ["它", "这个", "刚才", "上面", "再简单", "换个说法", "没懂", "为什么"]):
+        return {"intent": "history_search", "confidence": 0.74, "reason": "结合多轮或课程上下文识别为历史追问"}
     return {"intent": "chat", "confidence": 0.55, "reason": "未命中特定工具意图"}
 
 
@@ -211,13 +218,31 @@ def _explain_topic(topic: str, sources: list[dict[str, Any]]) -> str:
         return ""
 
 
-def _generate_history_answer(message: str, sources: list[dict[str, Any]]) -> str:
+def _history_text(history: list[dict[str, Any]], *, limit: int = 6) -> str:
+    return "\n".join(f"{item.get('role')}: {str(item.get('content') or '')[:300]}" for item in history[-limit:] if item.get("role") in {"user", "assistant"})
+
+
+def _source_context_text(context: dict[str, Any]) -> str:
+    if not context:
+        return ""
+    teaching = context.get("teaching") or {}
+    return (
+        f"当前知识点：{context.get('knowledge_point') or ''}\n"
+        f"难度：{context.get('difficulty') or ''}\n"
+        f"当前讲解：{teaching.get('explanation') or ''}\n"
+        f"当前题干：{context.get('question') or ''}"
+    ).strip()
+
+
+def _generate_history_answer(message: str, sources: list[dict[str, Any]], history: list[dict[str, Any]] | None = None, source_context: dict[str, Any] | None = None) -> str:
     if not sources:
-        return _fallback_history_answer(sources)
+        return _generate_chat_answer(message, history or [], source_context or {})
     context = build_untrusted_context_block(sources[:4], title="史料")
+    conversation = _history_text(history or [])
+    course_context = _source_context_text(source_context or {})
     prompt = [
         {"role": "system", "content": "你是初中历史学习助手。请基于给定史料回答，语言清楚、适合学生复习；不要编造未在材料中出现的细节。"},
-        {"role": "user", "content": f"问题：{message}\n\n史料：\n{context}\n\n请用 2-4 句话回答，并点出一个可继续追问的方向。"},
+        {"role": "user", "content": f"课程上下文：\n{course_context}\n\n最近对话：\n{conversation}\n\n当前问题：{message}\n\n史料：\n{context}\n\n请用 2-4 句话回答，并点出一个可继续追问的方向。"},
     ]
     try:
         return llm_fast.invoke(prompt).content.strip()
@@ -225,7 +250,31 @@ def _generate_history_answer(message: str, sources: list[dict[str, Any]]) -> str
         return _fallback_history_answer(sources)
 
 
-def _final_for_intent(intent: LearningIntent, message: str, tool_results: list[dict[str, Any]]) -> tuple[str, list[str]]:
+def _generate_chat_answer(message: str, history: list[dict[str, Any]], source_context: dict[str, Any]) -> str:
+    conversation = _history_text(history)
+    course_context = _source_context_text(source_context)
+    prompt = [
+        {"role": "system", "content": (
+            "你是面向初中生的学习助手。直接回答当前学习问题，并结合最近对话解决“它、这个、刚才”等指代。"
+            "如果信息不足，要明确说不知道并建议学生把问题说具体；不要只介绍你能做什么。回答控制在2-5句。"
+        )},
+        {"role": "user", "content": f"可信课程上下文：\n{course_context}\n\n最近对话：\n{conversation}\n\n当前问题：{message}"},
+    ]
+    try:
+        response = llm_fast.invoke(prompt).content.strip()
+        if response:
+            return response
+    except Exception:
+        pass
+    topic = source_context.get("knowledge_point")
+    if topic:
+        return f"你问的是当前知识点「{topic}」。可以结合刚才的讲解继续理解：{(source_context.get('teaching') or {}).get('explanation') or '先抓住核心史实、原因和影响。'}"
+    if history:
+        return f"你是在继续追问刚才的内容。请把想进一步理解的人物、事件或观点说得更具体一些，我会接着解释。"
+    return f"关于“{message}”，请补充对应的历史人物、事件或教材章节，我会结合史料具体回答。"
+
+
+def _final_for_intent(intent: LearningIntent, message: str, tool_results: list[dict[str, Any]], *, history: list[dict[str, Any]] | None = None, source_context: dict[str, Any] | None = None) -> tuple[str, list[str]]:
     first = tool_results[0] if tool_results else None
     data = (first or {}).get("data") or {}
     if first and not first.get("ok"):
@@ -283,7 +332,7 @@ def _final_for_intent(intent: LearningIntent, message: str, tool_results: list[d
             return f"围绕《{lesson_title}》，可以先抓住这些要点：{highlights}", ["生成练习题", "总结本课", "推荐相关历史人物"]
         return f"我已读取《{lesson_title}》，你可以继续问这课的重点、影响或易错点。", ["生成练习题", "总结本课", "解释重点"]
     if intent == "history_search":
-        return _generate_history_answer(message, data.get("sources") or []), ["生成练习题", "推荐相关历史人物", "换一个角度解释"]
+        return _generate_history_answer(message, data.get("sources") or [], history, source_context), ["生成练习题", "换一个角度解释", "再简单一点"]
     if intent == "memory_delete_demo":
         if data.get("deleted"):
             return "已完成高风险工具确认演示：只删除了 demo 范围内的学习记忆，没有影响真实学生画像。", ["再演示一次高风险工具", "查看工具轨迹", "换成普通历史问答"]
@@ -294,7 +343,7 @@ def _final_for_intent(intent: LearningIntent, message: str, tool_results: list[d
             plan_text = "；".join(actions[:3])
             return f"根据你的学习记录，建议：{plan_text}", ["生成针对性练习题", "推荐相关历史人物", "查看薄弱知识点"]
         return "暂时没有足够的学习记录来制定复习计划，先做几道练习题或和历史人物聊聊吧。", ["来一道练习题", "推荐一个历史人物"]
-    return "我可以帮你查历史知识、生成练习题、推荐历史人物，或启动时间线游戏。", ["鸦片战争为什么重要？", "推荐一个历史人物", "来一局时间线游戏"]
+    return _generate_chat_answer(message, history or [], source_context or {}), ["换个简单的说法", "结合教材解释", "围绕这个知识点出一道题"]
 
 
 def _record_assistant_event(
@@ -372,7 +421,10 @@ def build_tool_call(intent: LearningIntent, req: LearningAssistantRequestData) -
     if intent == "textbook_qa" and req.get("book_id") and req.get("lesson_id"):
         return "get_textbook_lesson", {"book_id": req["book_id"], "lesson_id": req["lesson_id"]}
     if intent in {"history_search", "quiz_generation", "textbook_qa"}:
-        return "search_history_knowledge", {"query": message, "grade": grade, "topic": _infer_topic(message), "k": 4}
+        context_topic = (req.get("source_context") or {}).get("knowledge_point")
+        previous_user = next((str(item.get("content") or "") for item in reversed(req.get("conversation_history") or []) if item.get("role") == "user"), "")
+        query = " ".join(part for part in [str(context_topic or ""), previous_user, message] if part).strip()[:500]
+        return "search_history_knowledge", {"query": query or message, "grade": grade, "topic": context_topic or _infer_topic(message), "k": 4}
     return None, {}
 
 
@@ -383,13 +435,28 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
     receive_started = perf_counter()
     check_user_input(message)
     yield _runtime_step("receive_query", "Receive User Query", "request", "success", sequence=1, started_at=receive_started, metadata={"message_chars": len(message)})
+    history = req.get("conversation_history") or []
+    source_context = req.get("source_context") or {}
+    yield _runtime_step("load_context", "Load Conversation Context", "context", "success", sequence=2, metadata={"history_message_count": len(history), "source_feature": req.get("source_feature"), "source_session_id": req.get("source_session_id"), "knowledge_point": source_context.get("knowledge_point")})
+    _record_assistant_event(req, event_type="followup_asked" if history else "question_asked", intent="pending", topic=source_context.get("knowledge_point"), ok=True, metadata={"source_feature": req.get("source_feature")})
+    if req.get("source_feature") == "auto_tutor" and req.get("student_id"):
+        try_record_learning_event(LearningEvent(
+            student_id=req["student_id"],
+            session_id=req.get("source_session_id"),
+            feature="auto_tutor",
+            event_type="autotutor_question_asked",
+            grade=req.get("grade"),
+            topic=source_context.get("knowledge_point"),
+            success=True,
+            metadata={"assistant_session_id": req.get("session_id")},
+        ))
 
     intent_started = perf_counter()
     intent_payload = detect_learning_intent(req)
     intent = intent_payload["intent"]
     topic = _infer_topic(message) if intent not in {"quiz_generation", "character_recommendation", "timeline_game", "memory_delete_demo"} else None
     _record_assistant_event(req, event_type="intent_detected", intent=intent, topic=topic, ok=True, metadata={"reason": intent_payload.get("reason")})
-    yield _runtime_step("intent_detection", "Intent Detection", "intent", "success", sequence=2, started_at=intent_started, metadata=intent_payload)
+    yield _runtime_step("intent_detection", "Intent Detection", "intent", "success", sequence=3, started_at=intent_started, metadata=intent_payload)
     yield "intent", intent_payload
 
     tool_name, payload = build_tool_call(intent, req)
@@ -397,7 +464,7 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
     if tool_name:
         input_summary = {key: value for key, value in payload.items() if key not in {"content", "text"}}
         tool_selection_metadata = {"tool_name": tool_name, "input_summary": input_summary}
-        yield _runtime_step("tool_selection", "Tool Selection", "tool_selection", "success", sequence=3, metadata=tool_selection_metadata)
+        yield _runtime_step("tool_selection", "Tool Selection", "tool_selection", "success", sequence=4, metadata=tool_selection_metadata)
         yield "tool_start", {"tool_name": tool_name}
         tool_started = perf_counter()
         result = run_tool(tool_name, payload, context=_tool_context(req, tool_name))
@@ -427,7 +494,7 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
             "Tool Policy Check",
             "tool_governance",
             policy_status,
-            sequence=4,
+            sequence=5,
             started_at=tool_started,
             metadata=policy_metadata,
             error=runtime_error,
@@ -438,7 +505,7 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
             "Tool Execution",
             "tool_result",
             tool_status,
-            sequence=5,
+            sequence=6,
             started_at=tool_started,
             metadata={**tool_summary, "input_summary": input_summary, "error_code": error.get("code")},
             error=runtime_error,
@@ -446,20 +513,20 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
         yield "tool_result", tool_summary
 
     answer_started = perf_counter()
-    response, suggestions = _final_for_intent(intent, message, tool_results)
+    response, suggestions = _final_for_intent(intent, message, tool_results, history=history, source_context=source_context)
     answer_metadata = {
         "intent": intent,
         "used_tool_count": len(tool_results),
         **_llm_runtime_metadata(generation_mode="template_or_llm", response_chars=len(response)),
     }
-    yield _runtime_step("answer_synthesis", "Answer Synthesis", "llm_or_template", "success", sequence=6, started_at=answer_started, metadata=answer_metadata)
+    yield _runtime_step("answer_synthesis", "Answer Synthesis", "llm_or_template", "success", sequence=7, started_at=answer_started, metadata=answer_metadata)
 
     memory_started = perf_counter()
     suggestions, profile_context = _personalize_suggestions(req.get("student_id"), suggestions)
-    _record_assistant_event(req, event_type="completed", intent=intent, topic=topic, ok=True, metadata={"tool_count": len(tool_results)})
-    yield _runtime_step("memory_update", "Memory Update", "memory", "success", sequence=7, started_at=memory_started, metadata={"student_id": req.get("student_id"), "profile_context_loaded": bool(profile_context), "used_memory_count": len((profile_context or {}).get("used_memory") or []), "wrote_event": bool(req.get("student_id"))})
+    _record_assistant_event(req, event_type="answer_completed", intent=intent, topic=topic, ok=True, metadata={"tool_count": len(tool_results)})
+    yield _runtime_step("memory_update", "Persist Interaction", "memory", "success", sequence=8, started_at=memory_started, metadata={"student_id": req.get("student_id"), "session_id": req.get("session_id"), "profile_context_loaded": bool(profile_context), "used_memory_count": len((profile_context or {}).get("used_memory") or []), "wrote_event": bool(req.get("student_id"))})
     trace_id = current_trace_id()
     if response:
         yield "delta", {"text": response}
-    yield "final", {"response": response, "intent": intent, "tool_results": tool_results, "profile_context": profile_context, "trace_id": trace_id}
+    yield "final", {"session_id": req.get("session_id"), "response": response, "intent": intent, "tool_results": tool_results, "profile_context": profile_context, "context_usage": {"history_messages": len(history), "source_feature": req.get("source_feature"), "source_session_id": req.get("source_session_id")}, "trace_id": trace_id}
     yield "suggestions", {"suggestions": suggestions, "trace_id": trace_id}

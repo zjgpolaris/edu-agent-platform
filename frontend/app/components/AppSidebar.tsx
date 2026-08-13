@@ -29,11 +29,11 @@ type Badges = Record<string, number>;
 
 const studentNav: NavItem[] = [
   { label: "今日学习", href: "/student", LucideIcon: Home },
+  { label: "随问", href: "/student/assistant", LucideIcon: HelpCircle },
   { label: "自主辅导", href: "/student/auto-tutor", LucideIcon: Bot },
   {
     label: "学习资源", LucideIcon: BookOpen, children: [
       { label: "学习资料", href: "/student/materials", LucideIcon: Library },
-      { label: "学习助手", href: "/student/assistant", LucideIcon: HelpCircle },
     ],
   },
   {
@@ -319,12 +319,12 @@ type MobileNavItem = { href: string; LucideIcon: React.ElementType; label: strin
 
 const STUDENT_MOBILE_NAV: MobileNavItem[] = [
   { href: "/student", LucideIcon: Home, label: "首页" },
+  { href: "/student/assistant", LucideIcon: HelpCircle, label: "随问" },
   { href: "/student/auto-tutor", LucideIcon: Bot, label: "辅导" },
   { href: "/student/review", LucideIcon: RotateCcw, label: "复习", badgeKey: "pending_review" },
-  { href: "/student/assignments", LucideIcon: ClipboardList, label: "作业", badgeKey: "pending_assignments" },
 ];
 const STUDENT_MORE_NAV: MobileNavItem[] = [
-  { href: "/student/assistant", LucideIcon: HelpCircle, label: "学习助手" },
+  { href: "/student/assignments", LucideIcon: ClipboardList, label: "作业", badgeKey: "pending_assignments" },
   { href: "/student/materials", LucideIcon: Library, label: "学习资料" },
   { href: "/student/materials?tab=textbook", LucideIcon: BookOpen, label: "教材目录" },
   { href: "/student/history/chat", LucideIcon: MessageSquare, label: "历史对话" },

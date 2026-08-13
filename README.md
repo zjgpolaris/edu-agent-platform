@@ -59,7 +59,7 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 |------|------|------|
 | **自主辅导 AutoTutor** | `/student/auto-tutor` | 自主 plan→reflect→re_plan 闭环 |
 | 历史人物对话 | `/history-character` | RAG 取材 + 流式 SSE + 来源引用 |
-| 学习助手 | `/student/assistant` | 工具调用 + RAG + 确认治理 |
+| **随问 · 学习助手** | `/student/assistant` | 自由提问 + 多轮上下文 + 工具调用 + RAG + 确认治理 |
 | 今日复习 | `/student/review` | SM-2 间隔复习调度 |
 | 错题本 | `/student/weakpoints` | 薄弱点管理 |
 | 学习记忆 | `/student/memory` | Agent 写入的长期记忆 |
@@ -145,10 +145,14 @@ npm run test:rag-inspector            # RAG Inspector 检索调试 smoke
 npm run test:agent-ops                # AgentOps 成本/延迟/fallback 聚合 smoke
 npm run test:textbook-trace           # 教材问答 trace / rag_inspector 埋点 smoke
 npm run test:autotutor-recovery       # AutoTutor 会话恢复 smoke
+npm run test:autotutor-quality        # AutoTutor 教学内容 groundedness / 重教差异质量评测
+npm run test:assistant-multiturn      # 随问多轮上下文 / 会话隔离 smoke
+npm run test:autotutor-handoff        # AutoTutor 课中随问 handoff smoke
 npm run test:release-gate             # release gate / readiness summary smoke
 npm run release:gate                  # 发布前统一闸门：Python 语法检查 + 后端 smoke + 前端 build
 npm run release:gate:fast             # 快速关键路径发布闸门
 python3 eval/auto_tutor_trajectory_eval.py  # AutoTutor 轨迹评测（含退出票闭环）
+python3 eval/autotutor_teaching_quality_eval.py # AutoTutor 教学内容质量评测
 python3 eval/tutor_effectiveness_smoke.py   # AI 辅导效果/退出票证据聚合
 
 # 生产 RAG / readiness 验收：不属于默认 PR CI，需线上 API_BASE 与认证

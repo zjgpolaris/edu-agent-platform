@@ -28,7 +28,7 @@ from sqlalchemy import text
 
 from db.engine import get_connection
 from llm_config import llm_fast, llm_quality
-from security.prompt_injection import build_untrusted_context_block
+from security.prompt_injection import build_untrusted_context_block, evaluate_user_input
 from structured_output import invoke_structured
 from student_profile import LearningEvent, get_student_profile, try_record_learning_event
 from services.weakpoint_service import delete_weakpoint, get_weakpoints, record_correct_evidence, record_weakpoint
@@ -64,6 +64,7 @@ class LessonStep(BaseModel):
     status: Literal["pending", "active", "mastered", "struggling"] = "pending"
     attempts: int = 0
     replanned: bool = False
+    teaching: dict[str, Any] | None = None
     question: dict[str, Any] | None = None
     sources: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -135,6 +136,7 @@ class AutoTutorState(BaseModel):
     exit_ticket_result: ExitTicketResult | None = None
     evidence: EvidenceSummary | None = None
     summary: str | None = None
+    revision: int = 0
     created_at: float = 0.0
     updated_at: float = 0.0
     _sequence: int = 0  # 内部：runtime step 递增序号（Pydantic v2 私有属性，不进 model_dump）
@@ -147,6 +149,7 @@ class _SessionStore:
     def __init__(self, ttl_seconds: int = 3600) -> None:
         self._sessions: dict[str, AutoTutorState] = {}
         self._timestamps: dict[str, float] = {}
+        self._session_locks: dict[str, threading.RLock] = {}
         self._lock = threading.Lock()
         self._ttl = ttl_seconds
 
@@ -170,12 +173,18 @@ class _SessionStore:
                 self._timestamps[session_id] = time.time()
         return restored
 
+    def session_lock(self, session_id: str) -> threading.RLock:
+        """Serialize mutations for one session without blocking other sessions."""
+        with self._lock:
+            return self._session_locks.setdefault(session_id, threading.RLock())
+
     def _cleanup_locked(self) -> None:
         now = time.time()
         expired = [sid for sid, ts in self._timestamps.items() if now - ts > self._ttl]
         for sid in expired:
             self._sessions.pop(sid, None)
             self._timestamps.pop(sid, None)
+            self._session_locks.pop(sid, None)
 
 
 _store = _SessionStore()
@@ -441,8 +450,14 @@ def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], prof
 
 
 # --------------------------------------------------------------------------- #
-# act：取材 + 出题
+# act：取材 + 教学 + 出题检验
 # --------------------------------------------------------------------------- #
+class _Teaching(BaseModel):
+    explanation: str
+    key_points: list[str] = Field(default_factory=list)
+    example: str = ""
+
+
 class _Question(BaseModel):
     question: str
     options: list[str]
@@ -455,6 +470,52 @@ _DIFFICULTY_HINT = {
     "medium": "题目考查因果或意义，选项有一定迷惑性。",
     "hard": "题目考查比较、评价或综合分析。",
 }
+
+
+def _fallback_teaching(knowledge_point: str, strategy: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    snippets = [str(source.get("snippet") or "").strip() for source in sources[:2]]
+    # A fallback must not echo a retrieved prompt-injection payload directly to
+    # the student. Keep only source text that passes the same guardrail taxonomy.
+    snippets = [snippet for snippet in snippets if snippet and not evaluate_user_input(snippet).blocked]
+    factual_basis = snippets[0][:240] if snippets else f"先抓住「{knowledge_point}」的核心史实、原因与影响。"
+    explanation = f"{factual_basis} 本轮采用的讲法是：{strategy}"
+    return {
+        "explanation": explanation,
+        "key_points": [knowledge_point, "关键史实", "原因与影响"],
+        "example": strategy,
+    }
+
+
+def _generate_teaching(step: LessonStep, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    context = build_untrusted_context_block(sources[:3], title="史料") if sources else ""
+    prompt = [
+        {
+            "role": "system",
+            "content": (
+                "你是初中历史教师。先教学，再检验，不要直接出题。请根据史料和教学策略，"
+                "用学生能理解的语言讲清指定知识点。解释控制在3-5句，列出2-3个关键点，并给一个帮助理解的例子或类比。"
+                "只输出 JSON：{\"explanation\":\"\",\"key_points\":[\"\"],\"example\":\"\"}。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"知识点：{step.knowledge_point}\n难度：{step.difficulty}\n教学策略：{step.strategy}\n"
+                f"这是第 {step.attempts + 1} 次教学，{'需要换一种讲法' if step.replanned else '首次讲解'}。\n{context}"
+            ).strip(),
+        },
+    ]
+    try:
+        result = invoke_structured(llm_fast, prompt, model=_Teaching, fallback=None)
+    except Exception:
+        result = None
+    if not result or not result.explanation.strip():
+        return _fallback_teaching(step.knowledge_point, step.strategy, sources)
+    return {
+        "explanation": result.explanation.strip(),
+        "key_points": [point.strip() for point in result.key_points[:3] if point.strip()],
+        "example": result.example.strip(),
+    }
 
 
 def _fallback_question(knowledge_point: str) -> dict[str, Any]:
@@ -500,7 +561,7 @@ def _generate_question(knowledge_point: str, difficulty: Difficulty, sources: li
 
 
 def _act(state: AutoTutorState, step: LessonStep, ctx: ToolExecutionContext) -> None:
-    """对当前步骤取材（走工具治理）并出题。"""
+    """对当前步骤取材（走工具治理），先教学，再出题检验。"""
     step.status = "active"
 
     # 1) 取材 —— 通过工具注册表，带来审计 / 治理 / span
@@ -553,7 +614,27 @@ def _act(state: AutoTutorState, step: LessonStep, ctx: ToolExecutionContext) -> 
 
     step.sources = sources[:4]
 
-    # 2) 出题
+    # 2) 先教学：首次讲解或反思后的重新讲解都形成独立 trace。
+    teach_started = perf_counter()
+    teaching = _generate_teaching(step, sources)
+    step.teaching = teaching
+    _emit(
+        state,
+        "reteach" if step.replanned else "teach",
+        "Re-teach · 调整讲解" if step.replanned else "Teach · 知识讲解",
+        "reteach" if step.replanned else "teach",
+        started_at=teach_started,
+        metadata={
+            "knowledge_point": step.knowledge_point,
+            "difficulty": step.difficulty,
+            "strategy": step.strategy,
+            "attempt": step.attempts + 1,
+            "key_points": teaching.get("key_points") or [],
+            "result_summary": str(teaching.get("explanation") or "")[:80],
+        },
+    )
+
+    # 3) 出题检验
     q_started = perf_counter()
     question = _generate_question(step.knowledge_point, step.difficulty, sources)
     step.question = question
@@ -667,7 +748,12 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
                 later.difficulty = "medium"
                 changes.append(f"后续「{later.knowledge_point}」难度 hard→medium")
 
-    step.strategy = f"先补讲：{reflection.explanation}" if reflection.adjustment == "reteach" else step.strategy
+    if reflection.adjustment == "reteach":
+        step.strategy = f"先补讲：{reflection.explanation}"
+    elif reflection.adjustment == "change_example":
+        step.strategy = f"换一个生活化例子重新解释：{reflection.explanation}"
+    elif reflection.adjustment == "lower_difficulty":
+        step.strategy = f"降低认知负担，先讲最基础史实：{reflection.explanation}"
     if not changes:
         changes.append("保持难度，换一道同知识点的题重新检验")
 
@@ -937,6 +1023,7 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
             "knowledge_point": current.knowledge_point,
             "difficulty": current.difficulty,
             "strategy": current.strategy,
+            "teaching": current.teaching,
             "question": current.question.get("question"),
             "options": current.question.get("options"),
             "step_index": state.current_step_index,
@@ -949,6 +1036,7 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         "grade": state.grade,
         "status": state.status,
         "phase": state.phase,
+        "revision": state.revision,
         "lesson_plan": [
             {
                 "knowledge_point": s.knowledge_point,
@@ -1039,18 +1127,44 @@ def submit_answer(
     *,
     actor_id: str | None = None,
     actor_role: str | None = None,
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    # FastAPI runs this function in a threadpool. Serialize each session so two
+    # rapid clicks cannot judge the same question twice or write duplicate events.
+    with _store.session_lock(session_id):
+        return _submit_answer_locked(
+            session_id,
+            answer,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            expected_revision=expected_revision,
+        )
+
+
+def _submit_answer_locked(
+    session_id: str,
+    answer: str,
+    *,
+    actor_id: str | None = None,
+    actor_role: str | None = None,
+    expected_revision: int | None = None,
 ) -> dict[str, Any]:
     state = _store.get(session_id)
     if state is None:
         raise LookupError("autotutor session not found")
     if state.status == "completed":
         return _public_state(state)
+    if expected_revision is not None and expected_revision != state.revision:
+        result = _public_state(state)
+        result["stale_answer_ignored"] = True
+        return result
     set_trace_id(state.trace_id)
     ctx = _tool_context(state.student_id, actor_id, actor_role)
 
     if state.phase == "exit_ticket":
         is_correct, _correct_letter = _submit_exit_ticket_answer(state, answer)
         _finalize(state)
+        state.revision += 1
         state.updated_at = time.time()
         _store.save(state)
         result = _public_state(state)
@@ -1111,6 +1225,7 @@ def submit_answer(
             )
             _advance(state, ctx)
 
+    state.revision += 1
     state.updated_at = time.time()
     _store.save(state)
     result = _public_state(state)
@@ -1149,6 +1264,39 @@ def get_session(session_id: str) -> dict[str, Any]:
     if state is None:
         raise LookupError("autotutor session not found")
     return _public_state(state)
+
+
+def get_learning_assistant_context(session_id: str) -> dict[str, Any]:
+    """Return an allowlisted public teaching context; never expose answers."""
+    state = _store.get(session_id)
+    if state is None:
+        raise LookupError("autotutor session not found")
+    current = state.lesson_plan[state.current_step_index] if state.current_step_index < len(state.lesson_plan) else None
+    if state.phase == "exit_ticket" and state.exit_ticket:
+        return {
+            "student_id": state.student_id,
+            "autotutor_session_id": state.session_id,
+            "phase": state.phase,
+            "knowledge_point": state.exit_ticket.knowledge_point,
+            "difficulty": state.exit_ticket.difficulty,
+            "strategy": state.exit_ticket.strategy,
+            "teaching": None,
+            "question": state.exit_ticket.question.get("question"),
+            "return_path": "/student/auto-tutor",
+        }
+    if current is None:
+        raise LookupError("autotutor current step not found")
+    return {
+        "student_id": state.student_id,
+        "autotutor_session_id": state.session_id,
+        "phase": state.phase,
+        "knowledge_point": current.knowledge_point,
+        "difficulty": current.difficulty,
+        "strategy": current.strategy,
+        "teaching": current.teaching,
+        "question": (current.question or {}).get("question"),
+        "return_path": "/student/auto-tutor",
+    }
 
 
 def get_latest_session(student_id: str, *, include_completed: bool = False) -> dict[str, Any]:

@@ -12,7 +12,7 @@ type ModuleCard = {
 };
 
 const modules: ModuleCard[] = [
-  { href: "/student/assistant", icon: "问", title: "学习助手", desc: "把教材、资料和追问整理成一条可执行的学习线索。", cta: "开始探索", tags: ["学习路线", "知识点提问"], eyebrow: "问学", artifact: "策", tone: "jade", featured: true },
+  { href: "/student/assistant", icon: "问", title: "随问 · 学习助手", desc: "有问题就问，也可以接着追问刚才的内容。", cta: "开始提问", tags: ["自由提问", "多轮追问"], eyebrow: "问学", artifact: "策", tone: "jade", featured: true },
   { href: "/student/materials?tab=textbook", icon: "册", title: "教材同步", desc: "按章节阅读、理解与复盘，适合课前预习和课后查漏。", cta: "进入教材", tags: ["章节学习", "知识理解"], eyebrow: "读史", artifact: "卷", tone: "gold" },
   { href: "/student/materials", icon: "纸", title: "学习资料", desc: "上传 PDF 或截图，识别文本后生成摘要和随堂练习；或切换到教材目录。", cta: "上传资料", tags: ["OCR 校对", "练习生成"], eyebrow: "研材", artifact: "笺", tone: "ink" },
   { href: "/student/history/chat", icon: "人", title: "历史人物对话", desc: "与历史人物展开追问，在角色视角中理解人物与时代。", cta: "开始对话", tags: ["人物理解", "史实速览"], eyebrow: "入境", artifact: "像", tone: "cinnabar", featured: true },
