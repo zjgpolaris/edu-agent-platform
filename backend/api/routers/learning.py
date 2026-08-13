@@ -9,7 +9,7 @@ from security.audit_log import record_audit_event
 from security.rate_limit import check_rate_limit
 from tools.registry import list_tools
 from tracing import current_trace_id, trace_context
-from ._shared import sse_frame, enforce_guardrails, trace_meta
+from ._shared import sse_frame, enforce_guardrails, record_event_if_student, trace_meta
 
 router = APIRouter(tags=["learning"])
 
@@ -31,6 +31,10 @@ class LearningAssistantSessionCreateRequest(BaseModel):
     student_id: str = Field(min_length=1, max_length=128)
     source_feature: str = Field(default="standalone", pattern="^(standalone|auto_tutor|textbook)$")
     source_session_id: str | None = Field(default=None, max_length=128)
+
+
+class LearningAssistantFeedbackRequest(BaseModel):
+    feedback: str = Field(pattern="^(resolved|unresolved)$")
 
 
 class ToolConfirmationCancelRequest(BaseModel):
@@ -108,6 +112,46 @@ async def learning_assistant_get_latest_session(student_id: str, actor: Actor = 
         raise HTTPException(status_code=404, detail="暂无随问会话")
 
 
+@router.post("/api/learning/assistant/sessions/{session_id}/messages/{message_id}/feedback")
+async def learning_assistant_feedback(
+    session_id: str,
+    message_id: str,
+    req: LearningAssistantFeedbackRequest,
+    actor: Actor = Depends(require_auth),
+):
+    from services.learning_assistant_session_service import get_session, set_message_feedback
+    try:
+        session = await run_in_threadpool(get_session, session_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="随问会话不存在")
+    assert_student_access(actor, str(session["student_id"]))
+    try:
+        result = await run_in_threadpool(set_message_feedback, session_id, message_id, req.feedback)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="随问回答不存在")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if result["changed"]:
+        record_event_if_student(
+            str(session["student_id"]),
+            session_id=session_id,
+            feature="learning_assistant",
+            event_type="answer_feedback",
+            metadata={
+                "message_id": message_id,
+                "feedback": req.feedback,
+                "source_feature": session.get("source_feature"),
+            },
+        )
+    return {
+        **result,
+        "followup_prompt": (
+            "我仍没懂上一条回答。请用更简单的说法，配一个生活化例子，再分步骤解释一次。"
+            if req.feedback == "unresolved" else None
+        ),
+    }
+
+
 @router.post("/api/learning/assistant/tool-confirmation/cancel")
 async def learning_assistant_cancel_tool_confirmation(req: ToolConfirmationCancelRequest, actor: Actor = Depends(require_auth)):
     if req.student_id:
@@ -162,7 +206,8 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
             events = list(stream_learning_assistant_events(request_data))
             final = next((data for event, data in events if event == "final"), None)
             if session and final and final.get("response"):
-                await run_in_threadpool(append_message, req.session_id, "assistant", final["response"], intent=final.get("intent"), trace_id=trace_id, tool_results=final.get("tool_results") or [])
+                persisted = await run_in_threadpool(append_message, req.session_id, "assistant", final["response"], intent=final.get("intent"), trace_id=trace_id, tool_results=final.get("tool_results") or [])
+                final["message_id"] = persisted["message_id"]
             suggestions = next((data for event, data in events if event == "suggestions"), None)
             intent = next((data for event, data in events if event == "intent"), None)
             return {"trace_id": trace_id, "intent": intent, "final": final, "suggestions": suggestions, "events": [guardrail_step, *[{"event": event, "data": data} for event, data in events]]}
@@ -190,7 +235,8 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                         break
                     event, data = item
                     if event == "final" and session and data.get("response"):
-                        await run_in_threadpool(append_message, req.session_id, "assistant", data["response"], intent=data.get("intent"), trace_id=trace_id, tool_results=data.get("tool_results") or [])
+                        persisted = await run_in_threadpool(append_message, req.session_id, "assistant", data["response"], intent=data.get("intent"), trace_id=trace_id, tool_results=data.get("tool_results") or [])
+                        data = {**data, "message_id": persisted["message_id"]}
                     yield sse_frame(event, data)
                     await asyncio.sleep(0)
             except Exception as exc:

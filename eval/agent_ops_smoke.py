@@ -11,12 +11,25 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 os.environ["EDU_AGENT_DB_PATH"] = str(Path(tempfile.gettempdir()) / "edu-agent-agent-ops-smoke.sqlite3")
+try:
+    Path(os.environ["EDU_AGENT_DB_PATH"]).unlink()
+except FileNotFoundError:
+    pass
 
 from agent_ops import build_agent_ops_summary
+from student_profile import LearningEvent, try_record_learning_event
 from trace_store import create_trace_id, emit_trace_event, trace_context
 
 
 def main() -> None:
+    for feedback in ("resolved", "unresolved"):
+        assert try_record_learning_event(LearningEvent(
+            student_id="agent-ops-student",
+            session_id="la_agent_ops",
+            feature="learning_assistant",
+            event_type="answer_feedback",
+            metadata={"feedback": feedback},
+        ))
     trace_id = create_trace_id()
     with trace_context(trace_id):
         emit_trace_event(
@@ -63,6 +76,7 @@ def main() -> None:
     llm = production.get("llm") or {}
     rag = production.get("rag") or {}
     cost = production.get("cost") or {}
+    assistant_feedback = summary.get("learning_assistant") or {}
 
     assert latency.get("p95_ms") is not None
     assert latency.get("llm_p95_ms") == 320
@@ -72,6 +86,10 @@ def main() -> None:
     assert (rag.get("diagnosis") or {}).get("generation_uncited_sources", 0) >= 1
     assert (rag.get("failure_stage") or {}).get("generation", 0) >= 1
     assert cost.get("total_usd_estimated", 0) >= 0.000352
+    assert assistant_feedback.get("feedback_total") == 2
+    assert assistant_feedback.get("resolved") == 1
+    assert assistant_feedback.get("unresolved") == 1
+    assert assistant_feedback.get("resolution_rate") == 0.5
     print("agent_ops_smoke=PASS")
 
 

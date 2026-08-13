@@ -298,6 +298,14 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
     learning_success = sum(1 for event in learning_events if event.get("success") is True)
     learning_failure = sum(1 for event in learning_events if event.get("success") is False)
     learning_unknown = len(learning_events) - learning_success - learning_failure
+    assistant_feedback = [
+        str((event.get("metadata") or {}).get("feedback"))
+        for event in learning_events
+        if event.get("feature") == "learning_assistant" and event.get("event_type") == "answer_feedback"
+    ]
+    assistant_feedback_total = len(assistant_feedback)
+    assistant_resolved = assistant_feedback.count("resolved")
+    assistant_unresolved = assistant_feedback.count("unresolved")
     audit_success = sum(1 for event in audit_events if event.get("success") is True)
     audit_failure = len(audit_events) - audit_success
     total_tool_calls = sum(tool_counts.values())
@@ -344,6 +352,13 @@ def build_agent_ops_summary(limit: int = 100) -> dict[str, Any]:
             "by_feature": _top(learning_feature_counts),
             "by_event_type": _top(learning_type_counts),
             "recent": _compact_recent(learning_events, fields=["id", "student_id", "feature", "event_type", "success", "created_at"]),
+        },
+        "learning_assistant": {
+            "feedback_total": assistant_feedback_total,
+            "resolved": assistant_resolved,
+            "unresolved": assistant_unresolved,
+            "resolution_rate": _rate(assistant_resolved, assistant_feedback_total),
+            "unresolved_rate": _rate(assistant_unresolved, assistant_feedback_total),
         },
         "tools": {
             "total": total_tool_calls,

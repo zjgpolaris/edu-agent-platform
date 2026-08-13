@@ -26,12 +26,14 @@ type ProfileContext = {
 };
 type Message = {
   id: string;
+  persistedId?: string;
   role: "user" | "assistant";
   text: string;
   intent?: string;
   tools?: ToolResult[];
   suggestions?: string[];
   activeGame?: Record<string, unknown>;
+  feedback?: "resolved" | "unresolved";
 };
 type AssistantSession = {
   session_id: string;
@@ -41,7 +43,7 @@ type AssistantSession = {
   source_feature: "standalone" | "auto_tutor" | "textbook";
   source_session_id?: string | null;
   context?: { knowledge_point?: string; return_path?: string };
-  messages?: Array<{ message_id: string; role: "user" | "assistant" | "system_context"; content: string; intent?: string | null }>;
+  messages?: Array<{ message_id: string; role: "user" | "assistant" | "system_context"; content: string; intent?: string | null; metadata?: { feedback?: "resolved" | "unresolved" } }>;
 };
 type ToolSummary = Record<string, unknown> & { tool_name?: string; ok?: boolean | undefined };
 type RuntimeStepStatus = "running" | "success" | "failed" | "waiting_confirmation" | "confirmed" | "cancelled";
@@ -375,6 +377,7 @@ export default function LearningAssistantPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [assistantSession, setAssistantSession] = useState<AssistantSession | null>(null);
+  const [feedbackLoadingId, setFeedbackLoadingId] = useState("");
   const [sessionReady, setSessionReady] = useState(false);
   const msgListRef = useRef<HTMLDivElement>(null);
   const sourceInitializedRef = useRef("");
@@ -388,9 +391,11 @@ export default function LearningAssistantPage() {
     setAssistantSession(session);
     const restored = (session.messages || []).filter((item) => item.role !== "system_context").map((item) => ({
       id: item.message_id,
+      persistedId: item.role === "assistant" ? item.message_id : undefined,
       role: item.role as "user" | "assistant",
       text: item.content,
       intent: item.intent || undefined,
+      feedback: item.metadata?.feedback,
     }));
     if (restored.length) setMessages(restored);
   }, []);
@@ -549,7 +554,8 @@ export default function LearningAssistantPage() {
         const activeGame = tools.find((tool) => tool.tool_name === "start_timeline_game")?.data?.game;
         const nextProfileContext = data.profile_context && typeof data.profile_context === "object" ? data.profile_context as ProfileContext : null;
         setProfileContext(nextProfileContext);
-        updateAssistant(assistantId, (current) => ({ ...current, text: finalText || current.text, tools, activeGame: activeGame && typeof activeGame === "object" ? activeGame as Record<string, unknown> : undefined }));
+        const persistedId = typeof data.message_id === "string" ? data.message_id : undefined;
+        updateAssistant(assistantId, (current) => ({ ...current, persistedId, text: finalText || current.text, tools, activeGame: activeGame && typeof activeGame === "object" ? activeGame as Record<string, unknown> : undefined }));
         setStatus("已完成");
         return;
       }
@@ -626,6 +632,27 @@ export default function LearningAssistantPage() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void submit();
+  }
+
+  async function submitFeedback(item: Message, feedback: "resolved" | "unresolved") {
+    if (!assistantSession || !item.persistedId || item.feedback || feedbackLoadingId) return;
+    setFeedbackLoadingId(item.id);
+    setErrorMessage("");
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/learning/assistant/sessions/${assistantSession.session_id}/messages/${item.persistedId}/feedback`, {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify({ feedback }),
+      });
+      if (!response.ok) throw new Error(`提交反馈失败：${response.status}`);
+      const result = await response.json() as { followup_prompt?: string | null };
+      updateAssistant(item.id, (current) => ({ ...current, feedback }));
+      if (feedback === "unresolved" && result.followup_prompt) void submit(result.followup_prompt);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "提交反馈失败");
+    } finally {
+      setFeedbackLoadingId("");
+    }
   }
 
   async function confirmToolExecution() {
@@ -720,6 +747,18 @@ export default function LearningAssistantPage() {
                   {item.intent && <em>{intentLabels[item.intent] || item.intent}</em>}
                 </div>
                 <p>{item.text || "正在组织回答……"}</p>
+                {item.role === "assistant" && item.persistedId && item.text ? (
+                  <div className="learning-suggestion-row" aria-label="回答是否解决问题">
+                    {item.feedback ? (
+                      <span style={{ fontSize: 12, color: "var(--muted)" }}>{item.feedback === "resolved" ? "已反馈：解决了" : "已反馈：仍没懂，正在换种方式讲"}</span>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => void submitFeedback(item, "resolved")} disabled={loading || Boolean(feedbackLoadingId)}>解决了</button>
+                        <button type="button" onClick={() => void submitFeedback(item, "unresolved")} disabled={loading || Boolean(feedbackLoadingId)}>仍没懂</button>
+                      </>
+                    )}
+                  </div>
+                ) : null}
                 {item.tools?.filter((tool) => !(item.intent === "quiz_generation" && tool.tool_name === "search_history_knowledge")).map((tool) => (
                   <div className={`learning-tool-card ${tool.ok ? "ok" : "error"}`} key={`${item.id}-${tool.tool_name}`}>
                     <div><strong>{toolLabel(tool.tool_name)}</strong><span>{tool.ok ? "已完成" : tool.error?.message || "执行失败"}</span></div>

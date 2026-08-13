@@ -19,9 +19,15 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from fastapi import HTTPException
 from agents import learning_assistant as la
-from api.routers.learning import LearningAssistantRequest, learning_assistant_chat
+from api.routers.learning import (
+    LearningAssistantFeedbackRequest,
+    LearningAssistantRequest,
+    learning_assistant_chat,
+    learning_assistant_feedback,
+)
 from security.auth import Actor
 from services.learning_assistant_session_service import append_message, create_session, get_latest_session, list_messages
+from student_profile import list_learning_events
 from tools.base import ToolResult
 
 
@@ -29,7 +35,7 @@ def main() -> None:
     student_id = "multiturn-student"
     session = create_session(student_id)
     append_message(session["session_id"], "user", "鸦片战争为什么爆发？")
-    append_message(session["session_id"], "assistant", "英国为打开中国市场发动战争。", intent="history_search")
+    assistant_message = append_message(session["session_id"], "assistant", "英国为打开中国市场发动战争。", intent="history_search")
     history = list_messages(session["session_id"])
     assert len(history) == 2
     assert get_latest_session(student_id)["session_id"] == session["session_id"]
@@ -65,6 +71,53 @@ def main() -> None:
     assert "鸦片战争" in captured["payload"]["query"], captured
     assert "半殖民地" in final["response"], final
     assert final["context_usage"]["history_messages"] == 2
+
+    feedback = asyncio.run(learning_assistant_feedback(
+        session["session_id"],
+        assistant_message["message_id"],
+        LearningAssistantFeedbackRequest(feedback="unresolved"),
+        Actor(actor_id=student_id, role="student"),
+    ))
+    assert feedback["changed"] is True
+    assert "更简单" in feedback["followup_prompt"]
+    stored = next(item for item in list_messages(session["session_id"]) if item["message_id"] == assistant_message["message_id"])
+    assert stored["metadata"]["feedback"] == "unresolved"
+    repeated = asyncio.run(learning_assistant_feedback(
+        session["session_id"],
+        assistant_message["message_id"],
+        LearningAssistantFeedbackRequest(feedback="unresolved"),
+        Actor(actor_id=student_id, role="student"),
+    ))
+    assert repeated["changed"] is False
+    feedback_events = list_learning_events(student_id=student_id, feature="learning_assistant", event_type="answer_feedback")
+    assert len(feedback_events) == 1
+    assert feedback_events[0]["metadata"]["feedback"] == "unresolved"
+
+    original_stream = la.stream_learning_assistant_events
+    la.stream_learning_assistant_events = lambda request: iter([
+        ("final", {"response": "换成生活中的例子：市场就像一扇被强行推开的门。", "intent": "chat", "tool_results": []}),
+    ])
+    try:
+        api_result = asyncio.run(learning_assistant_chat(
+            LearningAssistantRequest(session_id=session["session_id"], message="换个例子", stream=False),
+            Actor(actor_id=student_id, role="student"),
+        ))
+    finally:
+        la.stream_learning_assistant_events = original_stream
+    persisted_id = api_result["final"].get("message_id")
+    assert persisted_id and any(item["message_id"] == persisted_id for item in list_messages(session["session_id"])), api_result
+
+    try:
+        asyncio.run(learning_assistant_feedback(
+            session["session_id"],
+            assistant_message["message_id"],
+            LearningAssistantFeedbackRequest(feedback="resolved"),
+            Actor(actor_id="other-student", role="student"),
+        ))
+    except HTTPException as exc:
+        assert exc.status_code == 403
+    else:
+        raise AssertionError("cross-student feedback was not rejected")
 
     request = LearningAssistantRequest(session_id=session["session_id"], student_id=None, message="继续解释", stream=False)
     try:

@@ -201,3 +201,35 @@ def append_message(
             "session_id": session_id,
         })
     return list_messages(session_id, limit=1)[0]
+
+
+def set_message_feedback(session_id: str, message_id: str, feedback: str) -> dict[str, Any]:
+    """Persist one immutable feedback choice on an assistant answer."""
+    if feedback not in {"resolved", "unresolved"}:
+        raise ValueError("invalid learning assistant feedback")
+    ensure_tables()
+    with get_connection() as conn:
+        row = conn.execute(text("""SELECT * FROM assistant_messages
+            WHERE session_id=:session_id AND message_id=:message_id"""), {
+            "session_id": session_id,
+            "message_id": message_id,
+        }).mappings().first()
+        if not row:
+            raise LookupError("learning assistant message not found")
+        if row["role"] != "assistant":
+            raise ValueError("feedback is only supported for assistant messages")
+        metadata = _loads(row.get("metadata_json"), {})
+        existing = metadata.get("feedback")
+        if existing:
+            if existing != feedback:
+                raise ValueError("learning assistant feedback already recorded")
+            return {"message_id": message_id, "session_id": session_id, "feedback": existing, "changed": False}
+        metadata["feedback"] = feedback
+        metadata["feedback_at"] = now_iso()
+        conn.execute(text("""UPDATE assistant_messages SET metadata_json=:metadata_json
+            WHERE session_id=:session_id AND message_id=:message_id"""), {
+            "metadata_json": json.dumps(metadata, ensure_ascii=False),
+            "session_id": session_id,
+            "message_id": message_id,
+        })
+    return {"message_id": message_id, "session_id": session_id, "feedback": feedback, "changed": True}

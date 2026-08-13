@@ -66,6 +66,7 @@ type AgentOpsSummary = {
   };
   audit?: { total: number; failure: number; success_rate?: number; by_action?: Record<string, number> };
   learning?: { total: number; failure: number; success_rate?: number; by_feature?: Record<string, number> };
+  learning_assistant?: { feedback_total?: number; resolved?: number; unresolved?: number; resolution_rate?: number; unresolved_rate?: number };
   tools?: { total?: number; failure?: number; success_rate?: number; by_tool_name?: Record<string, number>; by_failure?: Record<string, number> };
   production?: {
     trace_window?: number;
@@ -893,6 +894,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
   const llm = production?.llm;
   const rag = production?.rag;
   const cost = production?.cost;
+  const assistantFeedback = summary?.learning_assistant;
   return (
     <div style={{
       border: "1px solid var(--border)", borderRadius: "var(--radius-sm)",
@@ -911,6 +913,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="Trace 覆盖率" value={trace ? `${coverage}%` : "--"} hint={coverageHint} />
             <OpsCard label="Audit Events" value={String(summary?.audit?.total ?? "--")} hint={`${summary?.audit?.failure ?? 0} failed · ${Math.round((summary?.audit?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="Learning Events" value={String(summary?.learning?.total ?? "--")} hint={`${summary?.learning?.failure ?? 0} failed · ${Math.round((summary?.learning?.success_rate ?? 0) * 100)}% ok`} />
+            <OpsCard label="随问解决率" value={assistantFeedback?.feedback_total ? `${Math.round((assistantFeedback.resolution_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.resolved ?? 0} 解决 · ${assistantFeedback?.unresolved ?? 0} 仍没懂`} />
             <OpsCard label="Tool Calls" value={String(summary?.tools?.total ?? "--")} hint={`${summary?.tools?.failure ?? 0} failed · ${Math.round((summary?.tools?.success_rate ?? 0) * 100)}% ok`} />
             <OpsCard label="Trace IDs" value={String(trace?.unique_trace_ids ?? "--")} hint="recent window" />
             <OpsCard label="p95 latency" value={latency?.p95_ms != null ? `${Math.round(latency.p95_ms)}ms` : "--"} hint={`${latency?.sample_count ?? 0} trace steps`} />

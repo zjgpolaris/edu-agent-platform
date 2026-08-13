@@ -465,7 +465,7 @@ AgentOps 新增建议指标：
 | `learning_assistant` | `question_asked` | 学生提出问题 |
 | `learning_assistant` | `answer_completed` | 回答完成 |
 | `learning_assistant` | `followup_asked` | 同一会话中的追问 |
-| `learning_assistant` | `answer_feedback` | 解决了 / 仍没懂（P1） |
+| `learning_assistant` | `answer_feedback` | 解决了 / 仍没懂 |
 | `auto_tutor` | `autotutor_question_asked` | 从课程跳转随问 |
 
 这些事件不能直接计为 `mastered`。只有 AutoTutor 判题、退出票或现有掌握度规则可以改变掌握证据。
@@ -617,5 +617,7 @@ npm run build --prefix frontend
 - 随问不改变 AutoTutor revision、attempts、phase 或 current question。
 - 新增多轮、owner 隔离、恢复、handoff、答案防泄露与状态不变性测试，并接入 QUICK / CORE。
 - 增加 `question_asked`、`followup_asked`、`answer_completed`、`autotutor_question_asked` learning events。
+- 增加“解决了 / 仍没懂”回答反馈；“仍没懂”会在同一会话触发更简单、带例子的重讲。
+- 回答反馈持久化到消息 metadata，并写入 `answer_feedback` learning event；AgentOps 展示随问解决率。
 
-P1 中的页面内抽屉、会话列表管理和回答反馈属于后续增强项，不属于 v1.27 P0 完成红线。
+P1 中的页面内抽屉和会话列表管理仍属于后续增强项，不属于 v1.27 P0 完成红线。
