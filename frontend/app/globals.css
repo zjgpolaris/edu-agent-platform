@@ -4726,6 +4726,12 @@ textarea {
   background: rgba(255, 235, 222, 0.48);
 }
 
+.learning-tool-card.partial,
+.learning-tool-card.empty {
+  border-color: rgba(156, 112, 38, 0.28);
+  background: rgba(250, 242, 218, 0.52);
+}
+
 .learning-tool-card > div:first-child {
   display: flex;
   justify-content: space-between;

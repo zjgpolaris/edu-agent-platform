@@ -123,6 +123,15 @@ def main() -> None:
     assert direct_person_route.tasks[0].intent.value == "history_search", direct_person_route
     assert direct_person_route.tasks[0].topic == "苏轼", direct_person_route
 
+    for question, expected_topic in {
+        "分析下官渡之战": "官渡之战",
+        "分析一下官渡之战的意义": "官渡之战",
+    }.items():
+        analysis_route = deterministic_route({"message": question})
+        assert analysis_route.tasks[0].intent.value == "history_search", analysis_route
+        assert analysis_route.tasks[0].topic == expected_topic, analysis_route
+        assert analysis_route.needs_clarification is False, analysis_route
+
     normalized_topics = {
         "赤壁之战的影响是什么": "赤壁之战",
         "商鞅变法的主要原因有哪些": "商鞅变法",

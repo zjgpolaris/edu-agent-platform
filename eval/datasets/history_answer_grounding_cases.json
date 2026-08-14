@@ -1,0 +1,482 @@
+[
+  {
+    "id": "grounding-长平之战-1",
+    "entity": "长平之战",
+    "aspect": "背景",
+    "claim": "长平之战的背景可由当前教材材料直接确认。",
+    "supporting_text": "长平之战的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-长平之战-2",
+    "entity": "长平之战",
+    "aspect": "原因",
+    "claim": "长平之战的原因可由当前教材材料直接确认。",
+    "supporting_text": "长平之战的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-长平之战-3",
+    "entity": "长平之战",
+    "aspect": "经过",
+    "claim": "长平之战的经过可由当前教材材料直接确认。",
+    "supporting_text": "长平之战的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-长平之战-4",
+    "entity": "长平之战",
+    "aspect": "结果",
+    "claim": "长平之战的结果可由当前教材材料直接确认。",
+    "supporting_text": "长平之战的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-长平之战-5",
+    "entity": "长平之战",
+    "aspect": "影响",
+    "claim": "长平之战的影响可由当前教材材料直接确认。",
+    "supporting_text": "长平之战的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-长平之战-6",
+    "entity": "长平之战",
+    "aspect": "意义",
+    "claim": "长平之战的意义可由当前教材材料直接确认。",
+    "supporting_text": "长平之战的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-赤壁之战-1",
+    "entity": "赤壁之战",
+    "aspect": "背景",
+    "claim": "赤壁之战的背景可由当前教材材料直接确认。",
+    "supporting_text": "赤壁之战的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-赤壁之战-2",
+    "entity": "赤壁之战",
+    "aspect": "原因",
+    "claim": "赤壁之战的原因可由当前教材材料直接确认。",
+    "supporting_text": "赤壁之战的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-赤壁之战-3",
+    "entity": "赤壁之战",
+    "aspect": "经过",
+    "claim": "赤壁之战的经过可由当前教材材料直接确认。",
+    "supporting_text": "赤壁之战的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-赤壁之战-4",
+    "entity": "赤壁之战",
+    "aspect": "结果",
+    "claim": "赤壁之战的结果可由当前教材材料直接确认。",
+    "supporting_text": "赤壁之战的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-赤壁之战-5",
+    "entity": "赤壁之战",
+    "aspect": "影响",
+    "claim": "赤壁之战的影响可由当前教材材料直接确认。",
+    "supporting_text": "赤壁之战的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-赤壁之战-6",
+    "entity": "赤壁之战",
+    "aspect": "意义",
+    "claim": "赤壁之战的意义可由当前教材材料直接确认。",
+    "supporting_text": "赤壁之战的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-鸦片战争-1",
+    "entity": "鸦片战争",
+    "aspect": "背景",
+    "claim": "鸦片战争的背景可由当前教材材料直接确认。",
+    "supporting_text": "鸦片战争的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-鸦片战争-2",
+    "entity": "鸦片战争",
+    "aspect": "原因",
+    "claim": "鸦片战争的原因可由当前教材材料直接确认。",
+    "supporting_text": "鸦片战争的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-鸦片战争-3",
+    "entity": "鸦片战争",
+    "aspect": "经过",
+    "claim": "鸦片战争的经过可由当前教材材料直接确认。",
+    "supporting_text": "鸦片战争的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-鸦片战争-4",
+    "entity": "鸦片战争",
+    "aspect": "结果",
+    "claim": "鸦片战争的结果可由当前教材材料直接确认。",
+    "supporting_text": "鸦片战争的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-鸦片战争-5",
+    "entity": "鸦片战争",
+    "aspect": "影响",
+    "claim": "鸦片战争的影响可由当前教材材料直接确认。",
+    "supporting_text": "鸦片战争的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-鸦片战争-6",
+    "entity": "鸦片战争",
+    "aspect": "意义",
+    "claim": "鸦片战争的意义可由当前教材材料直接确认。",
+    "supporting_text": "鸦片战争的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-洋务运动-1",
+    "entity": "洋务运动",
+    "aspect": "背景",
+    "claim": "洋务运动的背景可由当前教材材料直接确认。",
+    "supporting_text": "洋务运动的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-洋务运动-2",
+    "entity": "洋务运动",
+    "aspect": "原因",
+    "claim": "洋务运动的原因可由当前教材材料直接确认。",
+    "supporting_text": "洋务运动的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-洋务运动-3",
+    "entity": "洋务运动",
+    "aspect": "经过",
+    "claim": "洋务运动的经过可由当前教材材料直接确认。",
+    "supporting_text": "洋务运动的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-洋务运动-4",
+    "entity": "洋务运动",
+    "aspect": "结果",
+    "claim": "洋务运动的结果可由当前教材材料直接确认。",
+    "supporting_text": "洋务运动的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-洋务运动-5",
+    "entity": "洋务运动",
+    "aspect": "影响",
+    "claim": "洋务运动的影响可由当前教材材料直接确认。",
+    "supporting_text": "洋务运动的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-洋务运动-6",
+    "entity": "洋务运动",
+    "aspect": "意义",
+    "claim": "洋务运动的意义可由当前教材材料直接确认。",
+    "supporting_text": "洋务运动的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-商鞅变法-1",
+    "entity": "商鞅变法",
+    "aspect": "背景",
+    "claim": "商鞅变法的背景可由当前教材材料直接确认。",
+    "supporting_text": "商鞅变法的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-商鞅变法-2",
+    "entity": "商鞅变法",
+    "aspect": "原因",
+    "claim": "商鞅变法的原因可由当前教材材料直接确认。",
+    "supporting_text": "商鞅变法的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-商鞅变法-3",
+    "entity": "商鞅变法",
+    "aspect": "经过",
+    "claim": "商鞅变法的经过可由当前教材材料直接确认。",
+    "supporting_text": "商鞅变法的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-商鞅变法-4",
+    "entity": "商鞅变法",
+    "aspect": "结果",
+    "claim": "商鞅变法的结果可由当前教材材料直接确认。",
+    "supporting_text": "商鞅变法的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-商鞅变法-5",
+    "entity": "商鞅变法",
+    "aspect": "影响",
+    "claim": "商鞅变法的影响可由当前教材材料直接确认。",
+    "supporting_text": "商鞅变法的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-商鞅变法-6",
+    "entity": "商鞅变法",
+    "aspect": "意义",
+    "claim": "商鞅变法的意义可由当前教材材料直接确认。",
+    "supporting_text": "商鞅变法的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-苏轼-1",
+    "entity": "苏轼",
+    "aspect": "背景",
+    "claim": "苏轼的背景可由当前教材材料直接确认。",
+    "supporting_text": "苏轼的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-苏轼-2",
+    "entity": "苏轼",
+    "aspect": "原因",
+    "claim": "苏轼的原因可由当前教材材料直接确认。",
+    "supporting_text": "苏轼的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-苏轼-3",
+    "entity": "苏轼",
+    "aspect": "经过",
+    "claim": "苏轼的经过可由当前教材材料直接确认。",
+    "supporting_text": "苏轼的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-苏轼-4",
+    "entity": "苏轼",
+    "aspect": "结果",
+    "claim": "苏轼的结果可由当前教材材料直接确认。",
+    "supporting_text": "苏轼的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-苏轼-5",
+    "entity": "苏轼",
+    "aspect": "影响",
+    "claim": "苏轼的影响可由当前教材材料直接确认。",
+    "supporting_text": "苏轼的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-苏轼-6",
+    "entity": "苏轼",
+    "aspect": "意义",
+    "claim": "苏轼的意义可由当前教材材料直接确认。",
+    "supporting_text": "苏轼的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-辛弃疾-1",
+    "entity": "辛弃疾",
+    "aspect": "背景",
+    "claim": "辛弃疾的背景可由当前教材材料直接确认。",
+    "supporting_text": "辛弃疾的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-辛弃疾-2",
+    "entity": "辛弃疾",
+    "aspect": "原因",
+    "claim": "辛弃疾的原因可由当前教材材料直接确认。",
+    "supporting_text": "辛弃疾的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-辛弃疾-3",
+    "entity": "辛弃疾",
+    "aspect": "经过",
+    "claim": "辛弃疾的经过可由当前教材材料直接确认。",
+    "supporting_text": "辛弃疾的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-辛弃疾-4",
+    "entity": "辛弃疾",
+    "aspect": "结果",
+    "claim": "辛弃疾的结果可由当前教材材料直接确认。",
+    "supporting_text": "辛弃疾的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-辛弃疾-5",
+    "entity": "辛弃疾",
+    "aspect": "影响",
+    "claim": "辛弃疾的影响可由当前教材材料直接确认。",
+    "supporting_text": "辛弃疾的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-辛弃疾-6",
+    "entity": "辛弃疾",
+    "aspect": "意义",
+    "claim": "辛弃疾的意义可由当前教材材料直接确认。",
+    "supporting_text": "辛弃疾的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-贞观之治-1",
+    "entity": "贞观之治",
+    "aspect": "背景",
+    "claim": "贞观之治的背景可由当前教材材料直接确认。",
+    "supporting_text": "贞观之治的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-贞观之治-2",
+    "entity": "贞观之治",
+    "aspect": "原因",
+    "claim": "贞观之治的原因可由当前教材材料直接确认。",
+    "supporting_text": "贞观之治的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-贞观之治-3",
+    "entity": "贞观之治",
+    "aspect": "经过",
+    "claim": "贞观之治的经过可由当前教材材料直接确认。",
+    "supporting_text": "贞观之治的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-贞观之治-4",
+    "entity": "贞观之治",
+    "aspect": "结果",
+    "claim": "贞观之治的结果可由当前教材材料直接确认。",
+    "supporting_text": "贞观之治的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-贞观之治-5",
+    "entity": "贞观之治",
+    "aspect": "影响",
+    "claim": "贞观之治的影响可由当前教材材料直接确认。",
+    "supporting_text": "贞观之治的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-贞观之治-6",
+    "entity": "贞观之治",
+    "aspect": "意义",
+    "claim": "贞观之治的意义可由当前教材材料直接确认。",
+    "supporting_text": "贞观之治的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-张骞出使西域-1",
+    "entity": "张骞出使西域",
+    "aspect": "背景",
+    "claim": "张骞出使西域的背景可由当前教材材料直接确认。",
+    "supporting_text": "张骞出使西域的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-张骞出使西域-2",
+    "entity": "张骞出使西域",
+    "aspect": "原因",
+    "claim": "张骞出使西域的原因可由当前教材材料直接确认。",
+    "supporting_text": "张骞出使西域的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-张骞出使西域-3",
+    "entity": "张骞出使西域",
+    "aspect": "经过",
+    "claim": "张骞出使西域的经过可由当前教材材料直接确认。",
+    "supporting_text": "张骞出使西域的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-张骞出使西域-4",
+    "entity": "张骞出使西域",
+    "aspect": "结果",
+    "claim": "张骞出使西域的结果可由当前教材材料直接确认。",
+    "supporting_text": "张骞出使西域的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-张骞出使西域-5",
+    "entity": "张骞出使西域",
+    "aspect": "影响",
+    "claim": "张骞出使西域的影响可由当前教材材料直接确认。",
+    "supporting_text": "张骞出使西域的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-张骞出使西域-6",
+    "entity": "张骞出使西域",
+    "aspect": "意义",
+    "claim": "张骞出使西域的意义可由当前教材材料直接确认。",
+    "supporting_text": "张骞出使西域的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-虎门销烟-1",
+    "entity": "虎门销烟",
+    "aspect": "背景",
+    "claim": "虎门销烟的背景可由当前教材材料直接确认。",
+    "supporting_text": "虎门销烟的背景可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-虎门销烟-2",
+    "entity": "虎门销烟",
+    "aspect": "原因",
+    "claim": "虎门销烟的原因可由当前教材材料直接确认。",
+    "supporting_text": "虎门销烟的原因可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-虎门销烟-3",
+    "entity": "虎门销烟",
+    "aspect": "经过",
+    "claim": "虎门销烟的经过可由当前教材材料直接确认。",
+    "supporting_text": "虎门销烟的经过可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-虎门销烟-4",
+    "entity": "虎门销烟",
+    "aspect": "结果",
+    "claim": "虎门销烟的结果可由当前教材材料直接确认。",
+    "supporting_text": "虎门销烟的结果可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-虎门销烟-5",
+    "entity": "虎门销烟",
+    "aspect": "影响",
+    "claim": "虎门销烟的影响可由当前教材材料直接确认。",
+    "supporting_text": "虎门销烟的影响可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  },
+  {
+    "id": "grounding-虎门销烟-6",
+    "entity": "虎门销烟",
+    "aspect": "意义",
+    "claim": "虎门销烟的意义可由当前教材材料直接确认。",
+    "supporting_text": "虎门销烟的意义可由当前教材材料直接确认。",
+    "review_status": "contract_seed_pending_teacher_review"
+  }
+]

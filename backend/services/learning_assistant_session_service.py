@@ -11,11 +11,25 @@ from db.engine import get_connection
 from student_profile import now_iso
 
 MAX_CONTEXT_MESSAGES = 12
-_SAFE_TOOL_METADATA = {"risk_level", "side_effect", "required_role", "source_count", "duration_ms", "degraded"}
+_SAFE_TOOL_METADATA = {
+    "risk_level", "side_effect", "required_role", "source_count", "duration_ms", "degraded",
+    "answer_bearing_source_count", "retrieval_status", "topic", "entity", "aspect", "fusion",
+    "rerank_status", "query_confidence",
+}
 _SAFE_SOURCE_TEXT_LIMITS = {
+    "source_id": 96,
+    "parent_source_id": 96,
     "topic": 120,
+    "entity": 120,
+    "entity_id": 96,
+    "aspect": 40,
+    "claim": 500,
     "snippet": 500,
     "source": 180,
+    "source_title": 180,
+    "source_tier": 40,
+    "document_type": 40,
+    "corpus_version": 80,
     "grade": 40,
     "unit": 120,
     "lesson": 160,
@@ -101,10 +115,18 @@ def _safe_tool_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
                 if isinstance(source.get("score"), (int, float)):
                     persisted["score"] = round(float(source["score"]), 3)
+                if isinstance(source.get("rank"), int):
+                    persisted["rank"] = source["rank"]
+                if isinstance(source.get("answer_bearing"), bool):
+                    persisted["answer_bearing"] = source["answer_bearing"]
                 if persisted.get("topic") or persisted.get("snippet"):
                     persisted_sources.append(persisted)
             if persisted_sources:
-                summary["data"] = {"sources": persisted_sources}
+                summary["data"] = {
+                    "sources": persisted_sources,
+                    "retrieval_status": data.get("retrieval_status"),
+                    "evidence_sufficiency": data.get("evidence_sufficiency"),
+                }
         if isinstance(data.get("recommendations"), list):
             summary["recommendation_count"] = len(data["recommendations"])
         if isinstance(data.get("quiz"), dict):

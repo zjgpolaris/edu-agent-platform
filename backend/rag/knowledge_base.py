@@ -27,6 +27,7 @@ MetadataValue: TypeAlias = str | int | float | bool
 MetadataFilter: TypeAlias = dict[str, MetadataValue | list[MetadataValue]]
 MetadataHints: TypeAlias = dict[str, str | list[str]]
 SearchMode: TypeAlias = Literal["vector", "keyword", "hybrid"]
+FusionMode: TypeAlias = Literal["weighted", "rrf"]
 
 
 class ScoredDocument(TypedDict, total=False):
@@ -40,6 +41,8 @@ class ScoredDocument(TypedDict, total=False):
     retrieval_score: float
     rerank_score: float | None
     final_score: float
+    rrf_score: float
+    channel_ranks: dict[str, int]
 
 _EMBED_MODEL: "OpenAICompatibleEmbeddings | None" = None
 
@@ -870,13 +873,33 @@ def rerank_documents(
     return [{**item, "rank": index + 1} for index, item in enumerate(ordered)]
 
 
+def apply_cross_encoder_rerank_with_diagnostics(
+    query: str,
+    scored_docs: list[ScoredDocument],
+    top_k: int = 5,
+    *,
+    context: dict[str, Any] | None = None,
+) -> tuple[list[ScoredDocument], dict[str, Any]]:
+    """Apply the optional cross encoder and always expose its runtime state."""
+    try:
+        from rag.rerank import rerank_with_diagnostics
+        return rerank_with_diagnostics(query, scored_docs, top_k=top_k, context=context)
+    except Exception as exc:
+        return scored_docs[:top_k], {
+            "status": "failed",
+            "model": os.getenv("RERANK_MODEL_PATH") or None,
+            "candidate_count": len(scored_docs),
+            "output_count": min(len(scored_docs), top_k),
+            "duration_ms": 0.0,
+            "reason_code": "rerank_import_failed",
+            "error": str(exc)[:240],
+        }
+
+
 def apply_cross_encoder_rerank(query: str, scored_docs: list[ScoredDocument], top_k: int = 5) -> list[ScoredDocument]:
     """Apply cross-encoder reranking if available."""
-    try:
-        from rag.rerank import rerank
-        return rerank(query, scored_docs, top_k=top_k)
-    except Exception:
-        return scored_docs[:top_k]
+    results, _ = apply_cross_encoder_rerank_with_diagnostics(query, scored_docs, top_k=top_k)
+    return results
 
 
 def _rag_preview(scored_docs: list[ScoredDocument]) -> list[dict[str, object]]:
@@ -963,6 +986,125 @@ def build_rag_inspector(
     }
 
 
+def reciprocal_rank_fusion(
+    channels: dict[str, list[Document]],
+    *,
+    weights: dict[str, float] | None = None,
+    rank_constant: int = 60,
+    limit: int = 20,
+) -> list[ScoredDocument]:
+    """Fuse independent ranked lists without comparing their raw scores."""
+    weights = weights or {}
+    fused: dict[tuple[str, str, str, str], ScoredDocument] = {}
+    modes: dict[tuple[str, str, str, str], set[str]] = {}
+    for channel, docs in channels.items():
+        weight = float(weights.get(channel, 1.0))
+        for rank, doc in enumerate(docs, start=1):
+            key = _doc_key(doc)
+            contribution = weight / (max(rank_constant, 1) + rank)
+            if key not in fused:
+                fused[key] = {
+                    "document": doc,
+                    "score": 0.0,
+                    "source_mode": channel,
+                    "rank": 0,
+                    "vector_rank": rank if channel == "vector" else None,
+                    "vector_rank_score": 0.0,
+                    "keyword_score": 0.0,
+                    "retrieval_score": 0.0,
+                    "rerank_score": None,
+                    "final_score": 0.0,
+                    "rrf_score": 0.0,
+                    "channel_ranks": {},
+                }
+                modes[key] = set()
+            item = fused[key]
+            item["rrf_score"] = float(item.get("rrf_score", 0.0)) + contribution
+            item["channel_ranks"] = {**item.get("channel_ranks", {}), channel: rank}
+            if channel == "vector":
+                item["vector_rank"] = rank
+            modes[key].add(channel)
+
+    ordered = sorted(fused.items(), key=lambda pair: float(pair[1].get("rrf_score", 0.0)), reverse=True)[:limit]
+    results: list[ScoredDocument] = []
+    for index, (key, item) in enumerate(ordered, start=1):
+        score = float(item.get("rrf_score", 0.0))
+        channel_modes = modes.get(key, set())
+        results.append({
+            **item,
+            "rank": index,
+            "score": score,
+            "retrieval_score": score,
+            "final_score": score,
+            "source_mode": "hybrid" if len(channel_modes) > 1 else next(iter(channel_modes), "rrf"),
+        })
+    return results
+
+
+def _safe_retrieval_channel(name: str, loader) -> tuple[list[Document], dict[str, Any]]:
+    started = time.perf_counter()
+    try:
+        docs = list(loader())
+        return docs, {"status": "ok", "candidate_count": len(docs), "duration_ms": round((time.perf_counter() - started) * 1000, 2)}
+    except Exception as exc:
+        return [], {
+            "status": "failed",
+            "candidate_count": 0,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            "reason_code": f"{name}_channel_failed",
+            "error": str(exc)[:240],
+        }
+
+
+def _search_with_rrf_impl(
+    collection: str,
+    query: str,
+    *,
+    entity: str | None,
+    k: int,
+    metadata_filter: MetadataFilter | None,
+    metadata_hints: MetadataHints | None,
+    fetch_k: int,
+) -> tuple[list[ScoredDocument], dict[str, Any]]:
+    candidate_limit = max(fetch_k, k, 20)
+    entity_docs: list[Document] = []
+    channel_diagnostics: dict[str, Any] = {}
+    if entity:
+        entity_hints: MetadataHints = {**(metadata_hints or {}), "topic": [entity], "entities": [entity], "event": [entity]}
+        entity_docs, channel_diagnostics["entity"] = _safe_retrieval_channel(
+            "entity",
+            lambda: keyword_search(
+                collection,
+                entity,
+                k=min(candidate_limit, 20),
+                metadata_filter=metadata_filter,
+                metadata_hints=entity_hints,
+                fetch_k=max(candidate_limit * 8, 120),
+            ),
+        )
+    else:
+        channel_diagnostics["entity"] = {"status": "skipped", "candidate_count": 0, "duration_ms": 0.0, "reason_code": "entity_not_resolved"}
+
+    bm25_docs, channel_diagnostics["bm25"] = _safe_retrieval_channel(
+        "bm25",
+        lambda: bm25_search(collection, query, k=min(candidate_limit, 30), metadata_filter=metadata_filter),
+    )
+    vector_docs, channel_diagnostics["vector"] = _safe_retrieval_channel(
+        "vector",
+        lambda: vector_search(collection, query, k=min(candidate_limit, 30), metadata_filter=metadata_filter, fetch_k=max(candidate_limit, 30)),
+    )
+    channels = {"entity": entity_docs, "bm25": bm25_docs, "vector": vector_docs}
+    weights = {"entity": 1.4 if entity else 0.0, "bm25": 1.0 if entity else 1.1, "vector": 1.0}
+    results = reciprocal_rank_fusion(channels, weights=weights, limit=candidate_limit)
+    return results, {
+        "fusion": "rrf",
+        "rank_constant": 60,
+        "channel_weights": weights,
+        "channels": channel_diagnostics,
+        "candidate_count": len(results),
+    }
+
+
 def _search_with_scores_impl(
     collection: str,
     query: str,
@@ -1045,7 +1187,40 @@ def search_with_scores(
     mode: SearchMode = "hybrid",
     metadata_hints: MetadataHints | None = None,
     fetch_k: int = 20,
+    fusion: FusionMode = "weighted",
+    entity: str | None = None,
+    aspect: str | None = None,
+    rerank_enabled: bool = True,
 ) -> list[ScoredDocument]:
+    results, _ = search_with_scores_and_diagnostics(
+        collection,
+        query,
+        k=k,
+        metadata_filter=metadata_filter,
+        mode=mode,
+        metadata_hints=metadata_hints,
+        fetch_k=fetch_k,
+        fusion=fusion,
+        entity=entity,
+        aspect=aspect,
+        rerank_enabled=rerank_enabled,
+    )
+    return results
+
+
+def search_with_scores_and_diagnostics(
+    collection: str,
+    query: str,
+    k: int = 5,
+    metadata_filter: MetadataFilter | None = None,
+    mode: SearchMode = "hybrid",
+    metadata_hints: MetadataHints | None = None,
+    fetch_k: int = 20,
+    fusion: FusionMode = "weighted",
+    entity: str | None = None,
+    aspect: str | None = None,
+    rerank_enabled: bool = True,
+) -> tuple[list[ScoredDocument], dict[str, Any]]:
     metadata = {
         "collection": collection,
         "query": truncate_text(query, max_chars=500),
@@ -1054,20 +1229,56 @@ def search_with_scores(
         "metadata_filter": metadata_filter,
         "metadata_hints": metadata_hints,
         "fetch_k": fetch_k,
+        "fusion": fusion,
+        "entity": entity,
+        "aspect": aspect,
+        "rerank_enabled": rerank_enabled,
     }
     span = start_span(name="rag.search", input_data=truncate_text(query, max_chars=500), metadata=metadata)
     try:
-        results = _search_with_scores_impl(
-            collection,
-            query,
-            k=k,
-            metadata_filter=metadata_filter,
-            mode=mode,
-            metadata_hints=metadata_hints,
-            fetch_k=fetch_k,
-        )
-        # Apply cross-encoder reranking if available
-        results = apply_cross_encoder_rerank(query, results, top_k=k)
+        if fusion == "rrf" and mode == "hybrid":
+            candidates, retrieval_diagnostics = _search_with_rrf_impl(
+                collection,
+                query,
+                entity=entity,
+                k=k,
+                metadata_filter=metadata_filter,
+                metadata_hints=metadata_hints,
+                fetch_k=fetch_k,
+            )
+        else:
+            candidates = _search_with_scores_impl(
+                collection,
+                query,
+                k=max(k, min(fetch_k, 20)),
+                metadata_filter=metadata_filter,
+                mode=mode,
+                metadata_hints=metadata_hints,
+                fetch_k=fetch_k,
+            )
+            retrieval_diagnostics = {"fusion": "weighted", "candidate_count": len(candidates)}
+        if rerank_enabled:
+            results, rerank_diagnostics = apply_cross_encoder_rerank_with_diagnostics(
+                query,
+                candidates,
+                top_k=k,
+                context={"entity": entity, "aspect": aspect},
+            )
+        else:
+            results = candidates[:k]
+            rerank_diagnostics = {
+                "status": "skipped",
+                "model": None,
+                "candidate_count": len(candidates),
+                "output_count": len(results),
+                "duration_ms": 0.0,
+                "reason_code": "feature_disabled",
+            }
+        diagnostics = {
+            **retrieval_diagnostics,
+            "reranker": rerank_diagnostics,
+            "result_count": len(results),
+        }
         end_span(
             span,
             output=_rag_preview(results),
@@ -1076,9 +1287,11 @@ def search_with_scores(
                 "source_count": len(results),
                 "top_score": round(float(results[0].get("final_score", results[0].get("score", 0))), 3) if results else 0,
                 "top_mode": results[0]["source_mode"] if results else "",
+                "fusion": fusion,
+                "rerank_status": rerank_diagnostics.get("status"),
             },
         )
-        return results
+        return results, diagnostics
     except Exception as exc:
         end_span(span, metadata={**metadata, "source_count": 0}, level="ERROR", status_message=str(exc))
         raise

@@ -32,7 +32,7 @@ TRAJECTORY_CASES = [
         "grade": "八年级上册",
         "expected_tool": "search_history_knowledge",
         "expected_intent": "history_search",
-        "expected_input": {"query": "鸦片战争的导火索是什么？", "grade": "八年级上册", "k": 4},
+        "expected_input": {"query": "鸦片战争的导火索是什么？", "grade": "八年级上册", "k": 6},
     },
     {
         "name": "quiz_generation_with_lesson_selects_generate_quiz",
@@ -197,7 +197,16 @@ def evaluate_composition_runtime() -> tuple[int, int, list[dict]]:
 
     def fake_tool(name, payload, context=None):
         assert name == "search_history_knowledge"
-        return ToolResult(tool_name=name, ok=True, data={"sources": [{"topic": payload.get("topic") or "历史事件", "snippet": "可信史料说明了该事件的背景、经过与影响。", "source": "trajectory_eval"}]}, metadata={"source_count": 1, "query": payload.get("query")})
+        return ToolResult(
+            tool_name=name,
+            ok=True,
+            data={
+                "sources": [{"topic": payload.get("topic") or "历史事件", "snippet": "可信史料说明了该事件的背景、经过与影响。", "source": "trajectory_eval"}],
+                "retrieval_status": "sufficient",
+                "history_query": payload.get("history_query") or {},
+            },
+            metadata={"source_count": 1, "retrieval_status": "sufficient", "query": payload.get("query")},
+        )
 
     os.environ["EDU_AGENT_ASSISTANT_PLANNER_ENABLED"] = "true"
     la.run_tool = fake_tool
@@ -248,13 +257,19 @@ def evaluate_repair_and_rollback() -> tuple[int, int, list[dict]]:
         def repair_tool(name, payload, context=None):
             nonlocal calls
             calls += 1
-            sources = [] if calls == 1 else [{"topic": "洋务运动", "snippet": "洋务派创办近代工业，主张自强求富。"}]
-            return ToolResult(tool_name=name, ok=True, data={"sources": sources}, metadata={"source_count": len(sources), "query": payload.get("query")})
+            sources = [] if calls == 1 else [{"topic": "洋务运动", "snippet": "洋务派创办近代工业，主张自强求富，推动中国近代化。"}]
+            retrieval_status = "none" if calls == 1 else "sufficient"
+            return ToolResult(
+                tool_name=name,
+                ok=True,
+                data={"sources": sources, "retrieval_status": retrieval_status, "history_query": payload.get("history_query") or {}},
+                metadata={"source_count": len(sources), "retrieval_status": retrieval_status, "query": payload.get("query")},
+            )
 
         os.environ["EDU_AGENT_ASSISTANT_PLANNER_ENABLED"] = "true"
         la.run_tool = repair_tool
         la.llm_fast.invoke = lambda messages: _Response()
-        repair_events = list(la.stream_learning_assistant_events({"message": "解释洋务运动的影响", "student_id": "repair-eval", "actor_role": "student"}))
+        repair_events = list(la.stream_learning_assistant_events({"message": "先解释洋务运动的影响，再出3道选择题", "student_id": "repair-eval", "actor_role": "student"}))
         repair_final = next((data for event, data in repair_events if event == "final"), {})
         repairs = [data for event, data in repair_events if event == "repair_attempt"]
         final_search_results = [item for item in repair_final.get("tool_results") or [] if item.get("tool_name") == "search_history_knowledge"]
@@ -267,8 +282,12 @@ def evaluate_repair_and_rollback() -> tuple[int, int, list[dict]]:
         la.run_tool = lambda name, payload, context=None: ToolResult(
             tool_name=name,
             ok=True,
-            data={"sources": [{"topic": "洋务运动", "snippet": "洋务运动推动近代化。"}]},
-            metadata={"source_count": 1, "query": payload.get("query")},
+            data={
+                "sources": [{"topic": "洋务运动", "snippet": "洋务运动推动近代化。"}],
+                "retrieval_status": "sufficient",
+                "history_query": payload.get("history_query") or {},
+            },
+            metadata={"source_count": 1, "retrieval_status": "sufficient", "query": payload.get("query")},
         )
         rollback_events = list(la.stream_learning_assistant_events({"message": "先解释洋务运动，再出3道选择题", "student_id": "rollback-eval", "actor_role": "student"}))
         rollback_final = next((data for event, data in rollback_events if event == "final"), {})

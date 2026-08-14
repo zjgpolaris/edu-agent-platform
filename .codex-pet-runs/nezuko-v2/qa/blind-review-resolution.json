@@ -1,0 +1,8 @@
+{
+  "decision": "accept",
+  "severity": "minor",
+  "reviewed_by": "parent",
+  "failed_checks": ["horizontal-1 ambiguous for 337.5 and 022.5", "vertical-7 opposite majority for 292.5 and 247.5"],
+  "evidence": "Independent labeled normal-size review confirms the intended quadrants and clockwise order. All four cardinal hard gates pass, the loop has no visible reversal, clipping, broken attachment, identity change, or conspicuous snap, and continuity warnings are metric-only.",
+  "accepted_warnings": ["022.5 horizontal cue subtle", "247.5 vertical cue subtle", "292.5 vertical cue subtle", "337.5 horizontal cue subtle", "157.5 to 180 continuity metric outlier without visible snap"]
+}

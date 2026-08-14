@@ -1,0 +1,282 @@
+[
+  {
+    "id": "no-answer-长平之战-1",
+    "query": "请根据教材说明长平之战的精确伤亡名单",
+    "expected_entity": "长平之战",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-长平之战-2",
+    "query": "请根据教材说明长平之战的所有参战者姓名",
+    "expected_entity": "长平之战",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-长平之战-3",
+    "query": "请根据教材说明长平之战的教材未记载的私人谈话",
+    "expected_entity": "长平之战",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-长平之战-4",
+    "query": "请根据教材说明长平之战的逐日行军路线",
+    "expected_entity": "长平之战",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-赤壁之战-1",
+    "query": "请根据教材说明赤壁之战的精确伤亡名单",
+    "expected_entity": "赤壁之战",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-赤壁之战-2",
+    "query": "请根据教材说明赤壁之战的所有参战者姓名",
+    "expected_entity": "赤壁之战",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-赤壁之战-3",
+    "query": "请根据教材说明赤壁之战的教材未记载的私人谈话",
+    "expected_entity": "赤壁之战",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-赤壁之战-4",
+    "query": "请根据教材说明赤壁之战的逐日行军路线",
+    "expected_entity": "赤壁之战",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-鸦片战争-1",
+    "query": "请根据教材说明鸦片战争的精确伤亡名单",
+    "expected_entity": "鸦片战争",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-鸦片战争-2",
+    "query": "请根据教材说明鸦片战争的所有参战者姓名",
+    "expected_entity": "鸦片战争",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-鸦片战争-3",
+    "query": "请根据教材说明鸦片战争的教材未记载的私人谈话",
+    "expected_entity": "鸦片战争",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-鸦片战争-4",
+    "query": "请根据教材说明鸦片战争的逐日行军路线",
+    "expected_entity": "鸦片战争",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-洋务运动-1",
+    "query": "请根据教材说明洋务运动的精确伤亡名单",
+    "expected_entity": "洋务运动",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-洋务运动-2",
+    "query": "请根据教材说明洋务运动的所有参战者姓名",
+    "expected_entity": "洋务运动",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-洋务运动-3",
+    "query": "请根据教材说明洋务运动的教材未记载的私人谈话",
+    "expected_entity": "洋务运动",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-洋务运动-4",
+    "query": "请根据教材说明洋务运动的逐日行军路线",
+    "expected_entity": "洋务运动",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-商鞅变法-1",
+    "query": "请根据教材说明商鞅变法的精确伤亡名单",
+    "expected_entity": "商鞅变法",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-商鞅变法-2",
+    "query": "请根据教材说明商鞅变法的所有参战者姓名",
+    "expected_entity": "商鞅变法",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-商鞅变法-3",
+    "query": "请根据教材说明商鞅变法的教材未记载的私人谈话",
+    "expected_entity": "商鞅变法",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-商鞅变法-4",
+    "query": "请根据教材说明商鞅变法的逐日行军路线",
+    "expected_entity": "商鞅变法",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-苏轼-1",
+    "query": "请根据教材说明苏轼的精确伤亡名单",
+    "expected_entity": "苏轼",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-苏轼-2",
+    "query": "请根据教材说明苏轼的所有参战者姓名",
+    "expected_entity": "苏轼",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-苏轼-3",
+    "query": "请根据教材说明苏轼的教材未记载的私人谈话",
+    "expected_entity": "苏轼",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-苏轼-4",
+    "query": "请根据教材说明苏轼的逐日行军路线",
+    "expected_entity": "苏轼",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-辛弃疾-1",
+    "query": "请根据教材说明辛弃疾的精确伤亡名单",
+    "expected_entity": "辛弃疾",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-辛弃疾-2",
+    "query": "请根据教材说明辛弃疾的所有参战者姓名",
+    "expected_entity": "辛弃疾",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-辛弃疾-3",
+    "query": "请根据教材说明辛弃疾的教材未记载的私人谈话",
+    "expected_entity": "辛弃疾",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-辛弃疾-4",
+    "query": "请根据教材说明辛弃疾的逐日行军路线",
+    "expected_entity": "辛弃疾",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-贞观之治-1",
+    "query": "请根据教材说明贞观之治的精确伤亡名单",
+    "expected_entity": "贞观之治",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-贞观之治-2",
+    "query": "请根据教材说明贞观之治的所有参战者姓名",
+    "expected_entity": "贞观之治",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-贞观之治-3",
+    "query": "请根据教材说明贞观之治的教材未记载的私人谈话",
+    "expected_entity": "贞观之治",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-贞观之治-4",
+    "query": "请根据教材说明贞观之治的逐日行军路线",
+    "expected_entity": "贞观之治",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-张骞出使西域-1",
+    "query": "请根据教材说明张骞出使西域的精确伤亡名单",
+    "expected_entity": "张骞出使西域",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-张骞出使西域-2",
+    "query": "请根据教材说明张骞出使西域的所有参战者姓名",
+    "expected_entity": "张骞出使西域",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-张骞出使西域-3",
+    "query": "请根据教材说明张骞出使西域的教材未记载的私人谈话",
+    "expected_entity": "张骞出使西域",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-张骞出使西域-4",
+    "query": "请根据教材说明张骞出使西域的逐日行军路线",
+    "expected_entity": "张骞出使西域",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-虎门销烟-1",
+    "query": "请根据教材说明虎门销烟的精确伤亡名单",
+    "expected_entity": "虎门销烟",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-虎门销烟-2",
+    "query": "请根据教材说明虎门销烟的所有参战者姓名",
+    "expected_entity": "虎门销烟",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-虎门销烟-3",
+    "query": "请根据教材说明虎门销烟的教材未记载的私人谈话",
+    "expected_entity": "虎门销烟",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "no-answer-虎门销烟-4",
+    "query": "请根据教材说明虎门销烟的逐日行军路线",
+    "expected_entity": "虎门销烟",
+    "expected_retrieval_status": "none_or_partial",
+    "review_status": "seed_pending_teacher_review"
+  }
+]

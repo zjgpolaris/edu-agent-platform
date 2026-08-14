@@ -59,6 +59,10 @@ def _criteria_failure(step: PlanStep, result: dict[str, Any]) -> str | None:
             return "tool_result_not_ok"
         if criterion == "source_count_gte_1" and not (data.get("sources") or []):
             return "no_sources"
+        if criterion == "retrieval_completed" and data.get("retrieval_status") not in {"sufficient", "partial", "none"}:
+            return "retrieval_status_missing"
+        if criterion == "retrieval_sufficient" and data.get("retrieval_status") != "sufficient":
+            return "retrieval_evidence_insufficient"
         if criterion == "lesson_present" and not data.get("lesson"):
             return "lesson_missing"
         if criterion == "question_count_matches":
@@ -130,7 +134,7 @@ def stream_task_plan(
                     break
                 failure = _criteria_failure(step, payload)
                 retryable_read_failure = step.operation in {"search_history_knowledge", "get_textbook_lesson"} and (
-                    failure == "no_sources" or error.get("code") == "tool_failed"
+                    failure in {"no_sources", "retrieval_evidence_insufficient"} or error.get("code") == "tool_failed"
                 )
                 if retryable_read_failure:
                     retry_payload = dict(step.input)

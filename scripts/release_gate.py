@@ -32,11 +32,24 @@ PY_COMPILE_TARGETS = [
     "backend/agents/learning_assistant_rollout.py",
     "backend/agents/learning_assistant_planner.py",
     "backend/agents/learning_assistant_runtime.py",
+    "backend/rag/history_query.py",
+    "backend/rag/history_documents.py",
+    "backend/rag/rerank.py",
+    "backend/tools/history_search.py",
     "backend/services/teacher_today_queue.py",
+    "scripts/build_history_entity_catalog.py",
+    "scripts/build_history_documents.py",
+    "scripts/validate_history_corpus.py",
+    "scripts/build_pgvector_index.py",
     "eval/run_core_evals.py",
     "eval/intent_accuracy_eval.py",
     "eval/trajectory_eval.py",
     "eval/answer_groundedness_eval.py",
+    "eval/history_query_eval.py",
+    "eval/history_retrieval_contract_smoke.py",
+    "eval/history_no_answer_eval.py",
+    "eval/history_answer_grounding_eval.py",
+    "eval/history_retrieval_quality_eval.py",
     "eval/eval_run_evidence_smoke.py",
     "eval/agent_ops_scope_smoke.py",
     "eval/learning_assistant_rollout_smoke.py",
@@ -49,6 +62,10 @@ PY_COMPILE_TARGETS = [
 
 FAST_SUITES = [
     "answer_groundedness_eval",
+    "history_query_eval",
+    "history_retrieval_contract_smoke",
+    "history_no_answer_eval",
+    "history_answer_grounding_eval",
     "eval_run_evidence_smoke",
     "agent_ops_smoke",
     "agent_ops_scope_smoke",
@@ -101,8 +118,16 @@ def run_frontend_build() -> None:
 
 def run_production_rag() -> None:
     run(
-        [sys.executable, "eval/run_core_evals.py", "--suite", "production_rag_health_smoke", "--no-report"],
-        env={"PRODUCTION_SMOKE_STRICT": "1"},
+        [
+            sys.executable,
+            "eval/run_core_evals.py",
+            "--suite",
+            "production_rag_health_smoke",
+            "--suite",
+            "history_retrieval_quality_eval",
+            "--no-report",
+        ],
+        env={"PRODUCTION_SMOKE_STRICT": "1", "HISTORY_RETRIEVAL_PRODUCTION_EVAL": "1"},
     )
 
 

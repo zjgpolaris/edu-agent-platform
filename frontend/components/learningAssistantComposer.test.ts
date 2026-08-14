@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assistantCompletionLabel, buildTextbookRequestFields, dedupeAssistantTools, shouldSubmitComposerKey, updateAssistantPlanStep } from "./learningAssistantComposer";
+import { assistantCompletionLabel, assistantToolStatus, buildTextbookRequestFields, dedupeAssistantTools, shouldSubmitComposerKey, updateAssistantPlanStep } from "./learningAssistantComposer";
 
 describe("learning assistant composer", () => {
   it("keeps textbook fields optional for a direct question", () => {
@@ -51,5 +51,23 @@ describe("learning assistant composer", () => {
       tools[2],
       tools[1],
     ]);
+  });
+
+  it("distinguishes retrieval completion from evidence sufficiency", () => {
+    expect(assistantToolStatus({
+      tool_name: "search_history_knowledge",
+      ok: true,
+      data: { retrieval_status: "sufficient" },
+    })).toEqual({ state: "ok", label: "已找到依据" });
+    expect(assistantToolStatus({
+      tool_name: "search_history_knowledge",
+      ok: true,
+      metadata: { retrieval_status: "partial" },
+    })).toEqual({ state: "partial", label: "仅找到部分依据" });
+    expect(assistantToolStatus({
+      tool_name: "search_history_knowledge",
+      ok: true,
+      data: { retrieval_status: "none" },
+    })).toEqual({ state: "empty", label: "未找到足够依据" });
   });
 });

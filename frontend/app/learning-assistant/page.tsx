@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { Select, type SelectOption } from "./Select";
 import { TraceTimeline } from "@/components/TraceTimeline";
-import { assistantCompletionLabel, buildTextbookRequestFields, dedupeAssistantTools, shouldSubmitComposerKey, updateAssistantPlanStep, type AssistantPlanStep } from "@/components/learningAssistantComposer";
+import { assistantCompletionLabel, assistantToolStatus, buildTextbookRequestFields, dedupeAssistantTools, shouldSubmitComposerKey, updateAssistantPlanStep, type AssistantPlanStep } from "@/components/learningAssistantComposer";
 
 type Textbook = { id: string; grade: string; book: string; status: string };
 type TocLesson = { id: string; title: string };
@@ -349,7 +349,7 @@ function renderToolPreview(tool: ToolResult) {
   const quiz = data.quiz as { questions?: QuizQuestion[] } | undefined;
   const recommendations = data.recommendations as { name: string; reason?: string; suggested_question?: string }[] | undefined;
   const game = data.game as { round_id?: string; title?: string; round_title?: string; topic?: string; difficulty?: string; events?: { id: string; title: string; period?: string }[] } | undefined;
-  const sources = data.sources as { topic?: string; snippet?: string; score?: number; source_mode?: string }[] | undefined;
+  const sources = data.sources as { topic?: string; snippet?: string; score?: number; source_mode?: string; source_tier?: string; source_title?: string; lesson?: string; page?: string | number }[] | undefined;
   const lesson = data.lesson as { lesson_title?: string; items?: { id: string; topic: string; text: string }[] } | undefined;
 
   if (quiz?.questions?.length) {
@@ -369,7 +369,12 @@ function renderToolPreview(tool: ToolResult) {
     );
   }
   if (sources?.length) {
-    return <div className="learning-tool-list">{sources.slice(0, 3).map((source, index) => <p key={`${source.topic}-${index}`}><strong>{source.topic || "史料"}</strong>：{source.snippet}</p>)}</div>;
+    return <div className="learning-tool-list">{sources.slice(0, 3).map((source, index) => {
+      const sourceNote = source.source_tier === "L3_CURATED_REFERENCE"
+        ? "补充资料"
+        : [source.lesson, source.page ? "第" + source.page + "页" : ""].filter(Boolean).join(" · ");
+      return <p key={(source.topic || "source") + "-" + index}><strong>{source.topic || "史料"}</strong>：{source.snippet}{sourceNote ? <small>（{sourceNote}）</small> : null}</p>;
+    })}</div>;
   }
   if (tool.tool_name === "search_history_knowledge") {
     const sourceCount = Number((tool as ToolResult & { source_count?: number }).source_count || tool.metadata?.source_count || 0);
@@ -938,7 +943,18 @@ function LearningAssistantContent() {
             sourceModes: Array.from(new Set(sources.map((source) => source.source_mode).filter((value): value is string => Boolean(value)))),
           });
         }
-        setStatus(data.ok === false ? "工具返回了可处理错误" : "工具执行完成");
+        const toolData = tool.data && typeof tool.data === "object" ? tool.data as Record<string, unknown> : {};
+        const toolMetadata = tool.metadata && typeof tool.metadata === "object" ? tool.metadata as Record<string, unknown> : {};
+        const retrievalStatus = toolData.retrieval_status || toolMetadata.retrieval_status;
+        setStatus(data.ok === false
+          ? "工具返回了可处理错误"
+          : retrievalStatus === "sufficient"
+            ? "已找到可回答问题的依据"
+            : retrievalStatus === "partial"
+              ? "只找到部分相关依据"
+              : retrievalStatus === "none"
+                ? "未找到足够依据"
+                : "工具执行完成");
         return;
       }
       if (event === "delta") {
@@ -1274,12 +1290,15 @@ function LearningAssistantContent() {
               ) : null}
               <p>{item.text || "正在组织回答……"}</p>
               {item.role === "assistant" && item.completionStatus === "partial" ? <p className="learning-partial-notice">部分任务未完成，已保留可验证的结果。</p> : null}
-              {dedupeAssistantTools(item.tools || []).filter((tool) => !(item.intent === "quiz_generation" && tool.tool_name === "search_history_knowledge")).map((tool) => (
-                <div className={`learning-tool-card ${tool.ok ? "ok" : "error"}`} key={`${item.id}-${tool.tool_name}`}>
-                  <div><strong>{toolLabel(tool.tool_name)}</strong><span>{tool.ok ? "已完成" : tool.error?.message || "执行失败"}</span></div>
-                  {renderToolPreview(tool)}
-                </div>
-              ))}
+              {dedupeAssistantTools(item.tools || []).filter((tool) => !(item.intent === "quiz_generation" && tool.tool_name === "search_history_knowledge")).map((tool) => {
+                const presentation = assistantToolStatus(tool);
+                return (
+                  <div className={"learning-tool-card " + presentation.state} key={item.id + "-" + tool.tool_name}>
+                    <div><strong>{toolLabel(tool.tool_name)}</strong><span>{presentation.label}</span></div>
+                    {renderToolPreview(tool)}
+                  </div>
+                );
+              })}
               {item.role === "assistant" && item.persistedId && item.text ? (
                 <div className="learning-suggestion-row learning-feedback-row" aria-label="回答是否解决问题">
                   {item.feedback ? (

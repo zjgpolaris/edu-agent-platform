@@ -11,6 +11,7 @@ from agents.answer_verifier import canonical_source_id, citation_supports_claim,
 from agents.learning_assistant_router import IntentName, RoutingDecision, deterministic_route, legacy_intent_payload, route_learning_request
 from agents.learning_assistant_runtime import stream_task_plan
 from llm_config import llm_fast
+from rag.history_query import aspect_query_label
 from utils.cost_estimator import estimate_cost_from_chars
 from security.prompt_injection import build_untrusted_context_block, check_user_input
 from tracing import current_trace_id, set_trace_id
@@ -125,8 +126,20 @@ def _tool_summary(result: Any) -> dict[str, Any]:
     if "sources" in data:
         sources = data.get("sources") or []
         summary["source_count"] = len(sources)
-        summary["data"] = {"sources": sources[:4]}
-        result_summary = f"返回 {len(sources)} 条史料片段"
+        retrieval_status = str(data.get("retrieval_status") or metadata.get("retrieval_status") or "")
+        summary["data"] = {
+            "sources": sources[:4],
+            "retrieval_status": retrieval_status or None,
+            "evidence_sufficiency": data.get("evidence_sufficiency"),
+        }
+        if retrieval_status == "sufficient":
+            result_summary = f"找到 {len(sources)} 条依据"
+        elif retrieval_status == "partial":
+            result_summary = "找到部分相关依据"
+        elif retrieval_status == "none":
+            result_summary = "未找到足够依据"
+        else:
+            result_summary = f"返回 {len(sources)} 条史料片段"
     if "recommendations" in data:
         count = len(data.get("recommendations") or [])
         summary["recommendation_count"] = count
@@ -168,7 +181,7 @@ def _llm_runtime_metadata(*, generation_mode: str, response_chars: int) -> dict[
 
 
 def _source_fact(source: dict[str, Any], focus_topic: str | None) -> str:
-    raw = str(source.get("snippet") or source.get("content") or "")
+    raw = str(source.get("snippet") or source.get("claim") or source.get("content") or "")
     cleaned = re.sub(r"\s+", "", raw).replace("[truncated40chars]", "")
     sentences = [part.strip(" ，。！？；") for part in re.split(r"[。！？；]", cleaned) if part.strip(" ，。！？；")]
     if focus_topic:
@@ -192,12 +205,18 @@ def _fallback_history_answer(
     sources: list[dict[str, Any]],
     focus_topic: str | None = None,
     question: str = "",
+    retrieval_status: str = "sufficient",
+    aspect: str = "fact",
 ) -> str:
     if not sources:
-        return "我暂时没有检索到足够的史料依据。你可以换一个更具体的历史事件、人物或时期来问。"
+        topic_text = f"“{focus_topic}”" if focus_topic else "这个问题"
+        return f"当前教材知识库没有检索到足够依据来回答{topic_text}。你可以补充教材课次，或换一个更具体的历史事件、人物或时期来问。"
     topic = focus_topic or sources[0].get("topic") or "这个问题"
     source_facts = [(source, _source_fact(source, focus_topic)) for source in sources[:4]]
     source_facts = [(source, fact) for source, fact in source_facts if fact]
+    answer_bearing_facts = [(source, fact) for source, fact in source_facts if source.get("answer_bearing") is True]
+    if answer_bearing_facts:
+        source_facts = answer_bearing_facts
     aspects = [aspect for aspect in _ANSWER_ASPECTS if aspect in question]
     focused_facts = [(source, fact) for source, fact in source_facts if any(aspect in fact for aspect in aspects)]
     if focused_facts:
@@ -205,7 +224,12 @@ def _fallback_history_answer(
     facts = list(dict.fromkeys(fact for _, fact in source_facts))[:3]
     labels = list(dict.fromkeys(label for source, _ in source_facts if (label := _source_label(source))))[:2]
     fact_text = "；".join(facts)
-    answer = f"根据当前教材中能检索到的内容，关于{topic}可以确认：{fact_text}。"
+    only_curated = all(source.get("source_tier") == "L3_CURATED_REFERENCE" for source, _ in source_facts)
+    prefix = "补充资料显示" if only_curated else "根据当前教材中能检索到的内容"
+    answer = f"{prefix}，关于{topic}可以确认：{fact_text}。"
+    if retrieval_status == "partial":
+        aspect_text = aspect_query_label(aspect) or "当前问题"
+        answer += f"但现有材料没有直接、完整地回答“{aspect_text}”，因此这里只能作为相关依据，不能当作完整结论。"
     if labels:
         answer += f"依据：{'；'.join(labels)}。"
     return answer
@@ -316,14 +340,19 @@ def _generate_history_answer(
     history: list[dict[str, Any]] | None = None,
     source_context: dict[str, Any] | None = None,
     focus_topic: str | None = None,
+    retrieval_status: str = "sufficient",
+    aspect: str = "fact",
 ) -> tuple[str, str]:
     if not sources:
-        return _fallback_history_answer([], focus_topic, message), "fallback"
-    context = build_untrusted_context_block(sources[:4], title="史料")
+        return _fallback_history_answer([], focus_topic, message, retrieval_status, aspect), "fallback"
+    if retrieval_status != "sufficient":
+        return _fallback_history_answer(sources, focus_topic, message, retrieval_status, aspect), "fallback"
+    answer_sources = [source for source in sources if source.get("answer_bearing") is True] or sources
+    context = build_untrusted_context_block(answer_sources[:4], title="史料")
     conversation = _history_text(history or [])
     course_context = _source_context_text(source_context or {})
     prompt = [
-        {"role": "system", "content": "你是初中历史学习助手。请基于给定史料直接回答问题，语言清楚、适合学生复习；只使用与当前主题相关的材料，不要编造未在材料中出现的细节。回答人物问题时，先说明人物本人的贡献；后人继承其思想或风格只能表述为影响，不能写成人物本人的行为。"},
+        {"role": "system", "content": "你是初中历史学习助手。请基于给定史料直接回答问题，语言清楚、适合学生复习；只使用与当前主题相关的材料，不要编造未在材料中出现的细节。必须优先且主要回答当前问题要求的维度，例如原因、经过、结果、影响或意义；除非理解结论必不可少，不要补写其他维度的背景和过程。回答人物问题时，先说明人物本人的贡献；后人继承其思想或风格只能表述为影响，不能写成人物本人的行为。"},
         {"role": "user", "content": f"课程上下文：\n{course_context}\n\n最近对话：\n{conversation}\n\n当前主题：{focus_topic or ''}\n当前问题：{message}\n\n史料：\n{context}\n\n请用 2-3 句话直接回答，不要复述整段史料，并在末尾简要注明教材课次或页码。"},
     ]
     try:
@@ -332,7 +361,7 @@ def _generate_history_answer(
             return response, "llm"
     except Exception:
         pass
-    return _fallback_history_answer(sources, focus_topic, message), "fallback"
+    return _fallback_history_answer(sources, focus_topic, message, retrieval_status, aspect), "fallback"
 
 
 def _generate_chat_answer(message: str, history: list[dict[str, Any]], source_context: dict[str, Any]) -> tuple[str, str]:
@@ -584,9 +613,29 @@ def _run_generation_operation(
     message = str(step.input.get("message") or req.get("message") or "").strip()
     if operation == "answer_from_sources":
         sources = _dependency_data(outputs, "sources") or []
-        response, mode = _generate_history_answer(message, sources, history, source_context, str(step.input.get("topic") or "").strip() or None)
-        evidence_claims = [_evidence_claim(operation, f"{step.step_id}_answer", response, sources[:4])]
-        return {"ok": bool(response), "response": response, "data": {"sources": sources[:4]}, "evidence_claims": evidence_claims, "generation_mode": mode, "result_summary": "已生成基于史料的解释"}
+        retrieval_status = str(_dependency_data(outputs, "retrieval_status") or "none")
+        history_query = _dependency_data(outputs, "history_query") or {}
+        aspect = str(history_query.get("aspect") or "fact") if isinstance(history_query, dict) else "fact"
+        focus_topic = str((history_query.get("entity") if isinstance(history_query, dict) else None) or step.input.get("topic") or "").strip() or None
+        answer_sources = [source for source in sources if source.get("answer_bearing") is True] or sources
+        response, mode = _generate_history_answer(
+            message,
+            answer_sources,
+            history,
+            source_context,
+            focus_topic,
+            retrieval_status,
+            aspect,
+        )
+        evidence_claims = [] if retrieval_status == "none" else [_evidence_claim(operation, f"{step.step_id}_answer", response, answer_sources[:4])]
+        return {
+            "ok": bool(response),
+            "response": response,
+            "data": {"sources": answer_sources[:4], "retrieval_status": retrieval_status, "history_query": history_query},
+            "evidence_claims": evidence_claims,
+            "generation_mode": mode,
+            "result_summary": "已生成基于史料的解释" if retrieval_status == "sufficient" else "已按证据边界生成受限回答",
+        }
     if operation == "answer_from_lesson":
         lesson = _dependency_data(outputs, "lesson") or {}
         title = str(lesson.get("lesson_title") or lesson.get("title") or "本课")
@@ -823,12 +872,22 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
     for tool_result in execution.get("tool_results") or []:
         tool_name = str(tool_result.get("tool_name") or "")
         data = tool_result.get("data") or {}
+        tool_metadata = tool_result.get("metadata") or {}
         metadata: dict[str, Any] = {}
         if "recommendations" in data:
             metadata["characters"] = [item.get("name") for item in data.get("recommendations") or [] if item.get("name")]
         error = tool_result.get("error") or {}
         if error:
             metadata["error_code"] = error.get("code")
+        if tool_name == "search_history_knowledge":
+            metadata.update({
+                key: tool_metadata.get(key)
+                for key in (
+                    "retrieval_status", "source_count", "answer_bearing_source_count", "entity", "aspect",
+                    "fusion", "rerank_status", "query_confidence",
+                )
+                if tool_metadata.get(key) is not None
+            })
         _record_assistant_event(req, event_type="tool_result", intent=intent, topic=topic, tool_name=tool_name, ok=tool_result.get("ok"), metadata=metadata)
 
     answer_started = perf_counter()
@@ -843,7 +902,12 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
             completion_status = "partial"
         execution["completion_status"] = completion_status
         execution["partial_reason"] = verification.reason_codes[0] if verification.reason_codes else "evidence_verification_failed"
-        if response and completion_status == "partial":
+        retrieval_statuses = [
+            str((item.get("data") or {}).get("retrieval_status"))
+            for item in execution.get("tool_results") or []
+            if isinstance(item, dict) and (item.get("data") or {}).get("retrieval_status")
+        ]
+        if response and completion_status == "partial" and not any(status in {"partial", "none"} for status in retrieval_statuses):
             response += "\n\n这部分回答缺少足够的可核验来源，因此暂按部分完成处理。"
     verification_passed = verification.status in {"verified", "not_required"} and bool(response) and completion_status != "failed"
     yield "verification_result", {"trace_id": current_trace_id(), **verification_payload}

@@ -57,6 +57,10 @@ OPTIONAL_SKIP_SUITES = {
 CORE_SUITES = [
     "eval_run_evidence_smoke",
     "answer_groundedness_eval",
+    "history_query_eval",
+    "history_retrieval_contract_smoke",
+    "history_no_answer_eval",
+    "history_answer_grounding_eval",
     "history_character_eval",
     "rag_retrieval_eval",
     "rag_groundedness_eval",
@@ -94,6 +98,10 @@ CORE_SUITES = [
 QUICK_SUITES = [
     "eval_run_evidence_smoke",
     "answer_groundedness_eval",
+    "history_query_eval",
+    "history_retrieval_contract_smoke",
+    "history_no_answer_eval",
+    "history_answer_grounding_eval",
     # Offline-first: these run without LLM/embed and always produce metrics
     "agent_ops_smoke",
     "agent_ops_scope_smoke",
@@ -126,6 +134,10 @@ QUICK_SUITES = [
 SMOKE_SUITES = [
     "eval_run_evidence_smoke",
     "answer_groundedness_eval",
+    "history_query_eval",
+    "history_retrieval_contract_smoke",
+    "history_no_answer_eval",
+    "history_answer_grounding_eval",
     "agent_ops_smoke",
     "agent_ops_scope_smoke",
     "autotutor_session_recovery_smoke",
@@ -177,6 +189,11 @@ SMOKE_SUITES = [
 SUITE_FILES = {
     "eval_run_evidence_smoke": EVAL_DIR / "eval_run_evidence_smoke.py",
     "answer_groundedness_eval": EVAL_DIR / "answer_groundedness_eval.py",
+    "history_query_eval": EVAL_DIR / "history_query_eval.py",
+    "history_retrieval_contract_smoke": EVAL_DIR / "history_retrieval_contract_smoke.py",
+    "history_no_answer_eval": EVAL_DIR / "history_no_answer_eval.py",
+    "history_answer_grounding_eval": EVAL_DIR / "history_answer_grounding_eval.py",
+    "history_retrieval_quality_eval": EVAL_DIR / "history_retrieval_quality_eval.py",
     "agent_ops_smoke": EVAL_DIR / "agent_ops_smoke.py",
     "agent_ops_scope_smoke": EVAL_DIR / "agent_ops_scope_smoke.py",
     "autotutor_session_recovery_smoke": EVAL_DIR / "autotutor_session_recovery_smoke.py",
@@ -262,6 +279,36 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     "answer_groundedness_eval": {
         "label": "回答证据化完成评测",
         "category": "agent",
+        "kind": "quality",
+        "priority": "p0",
+    },
+    "history_query_eval": {
+        "label": "历史查询实体与维度评测",
+        "category": "rag",
+        "kind": "quality",
+        "priority": "p0",
+    },
+    "history_retrieval_contract_smoke": {
+        "label": "历史 RRF 与证据充分性 Smoke",
+        "category": "rag",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "history_no_answer_eval": {
+        "label": "历史问答无依据拒答评测",
+        "category": "rag",
+        "kind": "quality",
+        "priority": "p0",
+    },
+    "history_answer_grounding_eval": {
+        "label": "历史问答证据门控评测",
+        "category": "rag",
+        "kind": "quality",
+        "priority": "p0",
+    },
+    "history_retrieval_quality_eval": {
+        "label": "历史检索真实依赖质量评测",
+        "category": "rag",
         "kind": "quality",
         "priority": "p0",
     },

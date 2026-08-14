@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from agents.learning_assistant_router import IntentName, RoutedTask, RoutingDecision, env_enabled
+from rag.history_query import parse_history_query
 
 
 PlanStepStatus = Literal["pending", "running", "waiting_confirmation", "completed", "failed", "cancelled"]
@@ -80,6 +81,7 @@ def _search_payload(task: RoutedTask, req: dict[str, Any]) -> dict[str, Any]:
         "",
     )
     context_topic = (req.get("source_context") or {}).get("knowledge_point")
+    context_lesson = ((req.get("source_context") or {}).get("textbook") or {}).get("lesson_title")
     topic = task.topic or context_topic
     query_parts: list[str] = []
     if topic and str(topic) not in message:
@@ -88,7 +90,21 @@ def _search_payload(task: RoutedTask, req: dict[str, Any]) -> dict[str, Any]:
         query_parts.append(previous_user)
     query_parts.append(message)
     query = " ".join(part for part in query_parts if part).strip()[:500]
-    return {"query": query or message, "grade": req.get("grade"), "topic": topic, "k": 4}
+    history_query = parse_history_query(
+        query or message,
+        topic=str(topic or "") or None,
+        grade=req.get("grade"),
+        lesson=context_lesson,
+        context_entity=str(context_topic or task.topic or "") or None,
+    )
+    return {
+        "query": query or message,
+        "history_query": history_query.model_dump(mode="json"),
+        "grade": req.get("grade"),
+        "lesson": context_lesson,
+        "topic": topic,
+        "k": 6,
+    }
 
 
 def _tool_step(step_id: str, title: str, operation: str, payload: dict[str, Any], *, depends_on: list[str] | None = None, criteria: list[str] | None = None) -> PlanStep:
@@ -124,7 +140,7 @@ def _single_task_steps(task: RoutedTask, req: dict[str, Any]) -> list[PlanStep]:
     intent = task.intent
     if intent == IntentName.history_search:
         return [
-            _tool_step("step_1", "查找可信史料", "search_history_knowledge", _search_payload(task, req), criteria=["tool_result_ok", "source_count_gte_1"]),
+            _tool_step("step_1", "查找可信史料", "search_history_knowledge", _search_payload(task, req), criteria=["tool_result_ok", "retrieval_completed"]),
             _generation_step("step_2", "生成史料解释", "answer_from_sources", {"message": message, "topic": task.topic}, depends_on=["step_1"]),
         ]
     if intent == IntentName.textbook_qa:
@@ -135,7 +151,7 @@ def _single_task_steps(task: RoutedTask, req: dict[str, Any]) -> list[PlanStep]:
             ]
         if task.topic:
             return [
-                _tool_step("step_1", "查找相关课程史料", "search_history_knowledge", _search_payload(task, req), criteria=["tool_result_ok", "source_count_gte_1"]),
+                _tool_step("step_1", "查找相关课程史料", "search_history_knowledge", _search_payload(task, req), criteria=["tool_result_ok", "retrieval_completed"]),
                 _generation_step("step_2", "生成课程回答", "answer_from_sources", {"message": message, "topic": task.topic}, depends_on=["step_1"]),
             ]
         return [_generation_step("step_1", "澄清教材范围", "chat_answer", {"message": message})]
@@ -145,7 +161,7 @@ def _single_task_steps(task: RoutedTask, req: dict[str, Any]) -> list[PlanStep]:
             question_types = ["single_choice"] if task.question_type == "choice" else ["short_answer"] if task.question_type == "short_answer" else ["single_choice", "short_answer"]
             return [_tool_step("step_1", "生成教材练习", "generate_quiz", {"book_id": req["book_id"], "lesson_id": req["lesson_id"], "count": count, "question_types": question_types}, criteria=["tool_result_ok", "question_count_matches"])]
         return [
-            _tool_step("step_1", "查找出题依据", "search_history_knowledge", _search_payload(task, req), criteria=["tool_result_ok", "source_count_gte_1"]),
+            _tool_step("step_1", "查找出题依据", "search_history_knowledge", _search_payload(task, req), criteria=["tool_result_ok", "retrieval_sufficient"]),
             _generation_step("step_2", f"生成 {count} 道练习", "quiz_from_sources", {"message": message, "topic": task.topic, "count": count, "question_type": task.question_type or "mixed"}, depends_on=["step_1"], criteria=["question_count_matches"]),
         ]
     if intent == IntentName.review_plan:
@@ -178,7 +194,7 @@ def _composition_steps(tasks: list[RoutedTask], req: dict[str, Any]) -> list[Pla
             _generation_step("step_3", f"生成 {count} 道练习", "quiz_from_lesson", {"message": message, "topic": quiz_task.topic, "count": count, "question_type": quiz_task.question_type or "choice"}, depends_on=["step_1", "step_2"], criteria=["question_count_matches"]),
         ]
     return [
-        _tool_step("step_1", "查找可信史料", "search_history_knowledge", _search_payload(explain_task, req), criteria=["tool_result_ok", "source_count_gte_1"]),
+        _tool_step("step_1", "查找可信史料", "search_history_knowledge", _search_payload(explain_task, req), criteria=["tool_result_ok", "retrieval_sufficient"]),
         _generation_step("step_2", "生成简明解释", "answer_from_sources", {"message": message, "topic": explain_task.topic}, depends_on=["step_1"]),
         _generation_step("step_3", f"生成 {count} 道练习", "quiz_from_sources", {"message": message, "topic": quiz_task.topic, "count": count, "question_type": quiz_task.question_type or "choice"}, depends_on=["step_1", "step_2"], criteria=["question_count_matches"]),
     ]

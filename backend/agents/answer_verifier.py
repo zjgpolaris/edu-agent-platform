@@ -258,6 +258,14 @@ def verify_answer_evidence(*, intents: list[str], execution: dict[str, Any]) -> 
     required = any(intent in REQUIRED_EVIDENCE_INTENTS for intent in intents)
     trusted_sources = _collect_trusted_sources(execution)
     source_ids = list(trusted_sources)
+    retrieval_statuses = [
+        str((result.get("data") or {}).get("retrieval_status"))
+        for result in execution.get("tool_results") or []
+        if isinstance(result, dict)
+        and result.get("tool_name") == "search_history_knowledge"
+        and (result.get("data") or {}).get("retrieval_status")
+    ]
+    retrieval_completion_allowed = not retrieval_statuses or all(status == "sufficient" for status in retrieval_statuses)
 
     if not required:
         return EvidenceVerification(
@@ -330,6 +338,8 @@ def verify_answer_evidence(*, intents: list[str], execution: dict[str, Any]) -> 
         reason_codes.append("evidence_unsupported_critical_claim")
     if conflicts:
         reason_codes.append("evidence_source_conflict")
+    if retrieval_statuses and not retrieval_completion_allowed:
+        reason_codes.append(f"evidence_retrieval_{retrieval_statuses[0]}")
 
     completion_allowed = (
         bool(source_ids)
@@ -340,6 +350,7 @@ def verify_answer_evidence(*, intents: list[str], execution: dict[str, Any]) -> 
         and citation_precision >= 0.95
         and unsupported_critical_rate <= 0.03
         and not conflicts
+        and retrieval_completion_allowed
     )
     if completion_allowed:
         status: Literal["verified", "partial", "failed"] = "verified"

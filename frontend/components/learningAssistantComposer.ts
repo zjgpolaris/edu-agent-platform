@@ -57,3 +57,19 @@ export function dedupeAssistantTools<T extends { tool_name: string }>(tools: rea
   }
   return result;
 }
+
+export function assistantToolStatus(tool: {
+  tool_name: string;
+  ok?: boolean;
+  data?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  error?: { message?: string } | null;
+}) {
+  if (tool.ok === false) return { state: "error", label: tool.error?.message || "执行失败" };
+  if (tool.tool_name !== "search_history_knowledge") return { state: "ok", label: "已完成" };
+  const status = tool.data?.retrieval_status || tool.metadata?.retrieval_status;
+  if (status === "sufficient") return { state: "ok", label: "已找到依据" };
+  if (status === "partial") return { state: "partial", label: "仅找到部分依据" };
+  if (status === "none") return { state: "empty", label: "未找到足够依据" };
+  return { state: "ok", label: "检索已完成" };
+}

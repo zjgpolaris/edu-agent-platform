@@ -1,0 +1,962 @@
+[
+  {
+    "id": "event-长平之战-1",
+    "query": "长平之战是什么",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-2",
+    "query": "长平之战发生的背景是什么",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-3",
+    "query": "长平之战的主要原因是什么",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-4",
+    "query": "简述长平之战的经过",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-5",
+    "query": "长平之战的结果是什么",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-6",
+    "query": "长平之战有什么影响",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-7",
+    "query": "长平之战有什么历史意义",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-8",
+    "query": "如何评价长平之战",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-9",
+    "query": "介绍一下长平之战",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-10",
+    "query": "为什么会发生长平之战",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-11",
+    "query": "长平之战带来了什么变化",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-长平之战-12",
+    "query": "长平之战为什么重要",
+    "expected_entity": "长平之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-1",
+    "query": "赤壁之战是什么",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-2",
+    "query": "赤壁之战发生的背景是什么",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-3",
+    "query": "赤壁之战的主要原因是什么",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-4",
+    "query": "简述赤壁之战的经过",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-5",
+    "query": "赤壁之战的结果是什么",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-6",
+    "query": "赤壁之战有什么影响",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-7",
+    "query": "赤壁之战有什么历史意义",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-8",
+    "query": "如何评价赤壁之战",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-9",
+    "query": "介绍一下赤壁之战",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-10",
+    "query": "为什么会发生赤壁之战",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-11",
+    "query": "赤壁之战带来了什么变化",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-赤壁之战-12",
+    "query": "赤壁之战为什么重要",
+    "expected_entity": "赤壁之战",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-1",
+    "query": "鸦片战争是什么",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-2",
+    "query": "鸦片战争发生的背景是什么",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-3",
+    "query": "鸦片战争的主要原因是什么",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-4",
+    "query": "简述鸦片战争的经过",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-5",
+    "query": "鸦片战争的结果是什么",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-6",
+    "query": "鸦片战争有什么影响",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-7",
+    "query": "鸦片战争有什么历史意义",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-8",
+    "query": "如何评价鸦片战争",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-9",
+    "query": "介绍一下鸦片战争",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-10",
+    "query": "为什么会发生鸦片战争",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-11",
+    "query": "鸦片战争带来了什么变化",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-鸦片战争-12",
+    "query": "鸦片战争为什么重要",
+    "expected_entity": "鸦片战争",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-1",
+    "query": "洋务运动是什么",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-2",
+    "query": "洋务运动发生的背景是什么",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-3",
+    "query": "洋务运动的主要原因是什么",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-4",
+    "query": "简述洋务运动的经过",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-5",
+    "query": "洋务运动的结果是什么",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-6",
+    "query": "洋务运动有什么影响",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-7",
+    "query": "洋务运动有什么历史意义",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-8",
+    "query": "如何评价洋务运动",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-9",
+    "query": "介绍一下洋务运动",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-10",
+    "query": "为什么会发生洋务运动",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-11",
+    "query": "洋务运动带来了什么变化",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-洋务运动-12",
+    "query": "洋务运动为什么重要",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-1",
+    "query": "商鞅变法是什么",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-2",
+    "query": "商鞅变法发生的背景是什么",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-3",
+    "query": "商鞅变法的主要原因是什么",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-4",
+    "query": "简述商鞅变法的经过",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-5",
+    "query": "商鞅变法的结果是什么",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-6",
+    "query": "商鞅变法有什么影响",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-7",
+    "query": "商鞅变法有什么历史意义",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-8",
+    "query": "如何评价商鞅变法",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-9",
+    "query": "介绍一下商鞅变法",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-10",
+    "query": "为什么会发生商鞅变法",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-11",
+    "query": "商鞅变法带来了什么变化",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-商鞅变法-12",
+    "query": "商鞅变法为什么重要",
+    "expected_entity": "商鞅变法",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-1",
+    "query": "苏轼是什么",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-2",
+    "query": "苏轼发生的背景是什么",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-3",
+    "query": "苏轼的主要原因是什么",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-4",
+    "query": "简述苏轼的经过",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-5",
+    "query": "苏轼的结果是什么",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-6",
+    "query": "苏轼有什么影响",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-7",
+    "query": "苏轼有什么历史意义",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-8",
+    "query": "如何评价苏轼",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-9",
+    "query": "介绍一下苏轼",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-10",
+    "query": "为什么会发生苏轼",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-11",
+    "query": "苏轼带来了什么变化",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-苏轼-12",
+    "query": "苏轼为什么重要",
+    "expected_entity": "苏轼",
+    "expected_entity_type": "person",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-1",
+    "query": "辛弃疾是什么",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-2",
+    "query": "辛弃疾发生的背景是什么",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-3",
+    "query": "辛弃疾的主要原因是什么",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-4",
+    "query": "简述辛弃疾的经过",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-5",
+    "query": "辛弃疾的结果是什么",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-6",
+    "query": "辛弃疾有什么影响",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-7",
+    "query": "辛弃疾有什么历史意义",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-8",
+    "query": "如何评价辛弃疾",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-9",
+    "query": "介绍一下辛弃疾",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-10",
+    "query": "为什么会发生辛弃疾",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-11",
+    "query": "辛弃疾带来了什么变化",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "person-辛弃疾-12",
+    "query": "辛弃疾为什么重要",
+    "expected_entity": "辛弃疾",
+    "expected_entity_type": "person",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-1",
+    "query": "贞观之治是什么",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-2",
+    "query": "贞观之治发生的背景是什么",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-3",
+    "query": "贞观之治的主要原因是什么",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-4",
+    "query": "简述贞观之治的经过",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-5",
+    "query": "贞观之治的结果是什么",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-6",
+    "query": "贞观之治有什么影响",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-7",
+    "query": "贞观之治有什么历史意义",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-8",
+    "query": "如何评价贞观之治",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-9",
+    "query": "介绍一下贞观之治",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-10",
+    "query": "为什么会发生贞观之治",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-11",
+    "query": "贞观之治带来了什么变化",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-贞观之治-12",
+    "query": "贞观之治为什么重要",
+    "expected_entity": "贞观之治",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-1",
+    "query": "张骞出使西域是什么",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-2",
+    "query": "张骞出使西域发生的背景是什么",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-3",
+    "query": "张骞出使西域的主要原因是什么",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-4",
+    "query": "简述张骞出使西域的经过",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-5",
+    "query": "张骞出使西域的结果是什么",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-6",
+    "query": "张骞出使西域有什么影响",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-7",
+    "query": "张骞出使西域有什么历史意义",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-8",
+    "query": "如何评价张骞出使西域",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-9",
+    "query": "介绍一下张骞出使西域",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-10",
+    "query": "为什么会发生张骞出使西域",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-11",
+    "query": "张骞出使西域带来了什么变化",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-张骞出使西域-12",
+    "query": "张骞出使西域为什么重要",
+    "expected_entity": "张骞出使西域",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-1",
+    "query": "虎门销烟是什么",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-2",
+    "query": "虎门销烟发生的背景是什么",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "background",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-3",
+    "query": "虎门销烟的主要原因是什么",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-4",
+    "query": "简述虎门销烟的经过",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "process",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-5",
+    "query": "虎门销烟的结果是什么",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "result",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-6",
+    "query": "虎门销烟有什么影响",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-7",
+    "query": "虎门销烟有什么历史意义",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-8",
+    "query": "如何评价虎门销烟",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "evaluation",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-9",
+    "query": "介绍一下虎门销烟",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "definition",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-10",
+    "query": "为什么会发生虎门销烟",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "cause",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-11",
+    "query": "虎门销烟带来了什么变化",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "impact",
+    "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "event-虎门销烟-12",
+    "query": "虎门销烟为什么重要",
+    "expected_entity": "虎门销烟",
+    "expected_entity_type": "event",
+    "expected_aspect": "significance",
+    "review_status": "seed_pending_teacher_review"
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "spriteVersionNumber": 2,
+  "run_dir": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2",
+  "spritesheet": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/final/spritesheet-extended.webp",
+  "validation": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/final/validation-extended.json",
+  "chroma_despill": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/qa/chroma-despill-extended.json",
+  "contact_sheet": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/qa/contact-sheet-extended.png",
+  "direction_sheet": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/qa/look-directions.png",
+  "direction_semantics": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/qa/direction-semantics.json",
+  "blind_direction_validation": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/qa/direction-blind-validation.json",
+  "blind_review_resolution": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/qa/blind-review-resolution.json",
+  "continuity": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/qa/look-continuity.json",
+  "review": "/Users/cengjiguang/Desktop/work/edu-agent-platform/.codex-pet-runs/nezuko-v2/qa/review.json",
+  "package": "/Users/cengjiguang/.codex/pets/nezuko"
+}
