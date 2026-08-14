@@ -652,6 +652,8 @@ def keyword_score(query: str, doc: Document, metadata_hints: MetadataHints | Non
         for key, expected in metadata_hints.items():
             values = expected if isinstance(expected, list) else [expected]
             actual = _normalize_compact(str(metadata.get(key, "")))
+            if not actual:
+                continue
             for value in values:
                 hint = _normalize_compact(str(value))
                 if hint and (hint in actual or actual in hint):

@@ -42,3 +42,18 @@ export function assistantCompletionLabel(status?: string) {
   if (status === "failed") return "任务未完成";
   return "已完成";
 }
+
+export function dedupeAssistantTools<T extends { tool_name: string }>(tools: readonly T[]): T[] {
+  const result: T[] = [];
+  const indexByName = new Map<string, number>();
+  for (const tool of tools) {
+    const existingIndex = indexByName.get(tool.tool_name);
+    if (existingIndex === undefined) {
+      indexByName.set(tool.tool_name, result.length);
+      result.push(tool);
+    } else {
+      result[existingIndex] = tool;
+    }
+  }
+  return result;
+}

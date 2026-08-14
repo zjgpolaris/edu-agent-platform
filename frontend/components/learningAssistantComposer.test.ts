@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assistantCompletionLabel, buildTextbookRequestFields, shouldSubmitComposerKey, updateAssistantPlanStep } from "./learningAssistantComposer";
+import { assistantCompletionLabel, buildTextbookRequestFields, dedupeAssistantTools, shouldSubmitComposerKey, updateAssistantPlanStep } from "./learningAssistantComposer";
 
 describe("learning assistant composer", () => {
   it("keeps textbook fields optional for a direct question", () => {
@@ -39,5 +39,17 @@ describe("learning assistant composer", () => {
     expect(assistantCompletionLabel("partial")).toBe("已完成部分学习任务");
     expect(assistantCompletionLabel("needs_clarification")).toBe("等待补充信息");
     expect(assistantCompletionLabel("completed")).toBe("已完成");
+  });
+
+  it("keeps only the latest result for duplicate tool cards", () => {
+    const tools = [
+      { tool_name: "search_history_knowledge", attempt: 1, data: { sources: [] } },
+      { tool_name: "recommend_character", attempt: 1 },
+      { tool_name: "search_history_knowledge", attempt: 2, data: { sources: [{ topic: "赤壁之战" }] } },
+    ];
+    expect(dedupeAssistantTools(tools)).toEqual([
+      tools[2],
+      tools[1],
+    ]);
   });
 });

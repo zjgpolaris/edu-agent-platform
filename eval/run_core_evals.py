@@ -47,6 +47,12 @@ EXTERNAL_QUOTA_ERROR_MARKERS = (
     "insufficient_quota",
     "quota exceeded",
 )
+OPTIONAL_SKIP_SUITES = {
+    # This is an integration smoke for real LLM + RAG availability. In local
+    # and CI smoke gates without credentials it should report the gap without
+    # failing the deterministic release gate.
+    "history_character_smoke",
+}
 
 CORE_SUITES = [
     "eval_run_evidence_smoke",
@@ -1168,6 +1174,12 @@ def build_json_summary(
 ) -> dict[str, Any]:
     failed_suites = [result.name for result in results if not result.ok]
     skipped_suites = [result.name for result in results if result.status == "skipped" or result.skipped_cases_count > 0]
+    allowed_skipped_suites = [
+        result.name
+        for result in results
+        if result.status == "skipped" and result.name in OPTIONAL_SKIP_SUITES
+    ]
+    blocking_skipped_suites = [name for name in skipped_suites if name not in allowed_skipped_suites]
     required_by_profile = {"core": CORE_SUITES, "quick": QUICK_SUITES, "smoke": SMOKE_SUITES}
     expected_suites = required_by_profile.get(profile, [result.name for result in results])
     result_names = {result.name for result in results}
@@ -1208,7 +1220,7 @@ def build_json_summary(
     run_id = eval_run_id or new_eval_run_id()
     clean_revision = revision.get("dirty") is False
     commit_matches = bool(revision.get("commit_sha"))
-    base_ok = not failed_suites and not skipped_suites and not not_run_suites
+    base_ok = not failed_suites and not blocking_skipped_suites and not not_run_suites
     result_by_name = {result.name: result for result in results}
     offline_core_passed = all(
         name in result_by_name and result_by_name[name].status == "passed"
@@ -1312,6 +1324,8 @@ def build_json_summary(
         "quality_failed_suites": quality_failed_suites,
         "infra_failed_suites": infra_failed_suites,
         "skipped_suites": skipped_suites,
+        "allowed_skipped_suites": allowed_skipped_suites,
+        "blocking_skipped_suites": blocking_skipped_suites,
         "not_run_suites": not_run_suites,
         "required_suites": list(expected_suites),
         "passed": passed_suites,

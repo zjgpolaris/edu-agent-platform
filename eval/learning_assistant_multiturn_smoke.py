@@ -46,10 +46,37 @@ def main() -> None:
     student_id = "multiturn-student"
     session = create_session(student_id)
     append_message(session["session_id"], "user", "鸦片战争为什么爆发？")
-    assistant_message = append_message(session["session_id"], "assistant", "英国为打开中国市场发动战争。", intent="history_search")
+    assistant_message = append_message(
+        session["session_id"],
+        "assistant",
+        "英国为打开中国市场发动战争。",
+        intent="history_search",
+        tool_results=[{
+            "tool_name": "search_history_knowledge",
+            "ok": True,
+            "data": {"sources": [{
+                "topic": "鸦片战争",
+                "snippet": "战后中国社会性质发生变化。",
+                "source": "《中国历史八年级上册》",
+                "lesson": "第1课 鸦片战争",
+                "page": 7,
+                "score": 12.34567,
+                "unsafe_internal": "must-not-persist",
+            }]},
+            "metadata": {"source_count": 1, "query": "must-not-persist"},
+        }],
+    )
     history = list_messages(session["session_id"])
     assert len(history) == 2
+    persisted_tool = assistant_message["tool_results"][0]
+    persisted_source = persisted_tool["data"]["sources"][0]
+    assert persisted_source["topic"] == "鸦片战争", persisted_tool
+    assert persisted_source["snippet"] == "战后中国社会性质发生变化。", persisted_tool
+    assert persisted_source["page"] == "7" and persisted_source["score"] == 12.346, persisted_tool
+    assert "unsafe_internal" not in persisted_source and "query" not in persisted_tool["metadata"], persisted_tool
     assert get_latest_session(student_id)["session_id"] == session["session_id"]
+    restored_tool = get_latest_session(student_id)["messages"][-1]["tool_results"][0]
+    assert restored_tool["data"]["sources"][0]["topic"] == "鸦片战争", restored_tool
 
     captured: dict = {}
     original_tool = la.run_tool
@@ -82,6 +109,31 @@ def main() -> None:
     assert "鸦片战争" in captured["payload"]["query"], captured
     assert "半殖民地" in final["response"], final
     assert final["context_usage"]["history_messages"] == 2
+
+    su_shi_history = [{"role": "user", "content": "苏轼做了什么"}]
+    su_shi_route = deterministic_route({"message": "结合教材解释", "conversation_history": su_shi_history})
+    assert su_shi_route.tasks[0].intent.value == "history_search", su_shi_route
+    assert su_shi_route.tasks[0].topic == "苏轼", su_shi_route
+    assert su_shi_route.needs_clarification is False
+    su_shi_plan = build_task_plan(su_shi_route, {"message": "结合教材解释", "conversation_history": su_shi_history}, enable_composition=False)
+    assert su_shi_plan.steps[0].operation == "search_history_knowledge", su_shi_plan
+    assert "苏轼" in su_shi_plan.steps[0].input["query"], su_shi_plan
+
+    direct_person_route = deterministic_route({"message": "苏轼做了什么"})
+    assert direct_person_route.tasks[0].intent.value == "history_search", direct_person_route
+    assert direct_person_route.tasks[0].topic == "苏轼", direct_person_route
+
+    normalized_topics = {
+        "赤壁之战的影响是什么": "赤壁之战",
+        "商鞅变法的主要原因有哪些": "商鞅变法",
+        "洋务运动失败原因": "洋务运动",
+        "鸦片战争的导火索是什么？": "鸦片战争",
+    }
+    for question, expected_topic in normalized_topics.items():
+        normalized_route = deterministic_route({"message": question})
+        assert normalized_route.tasks[0].intent.value == "history_search", normalized_route
+        assert normalized_route.tasks[0].topic == expected_topic, normalized_route
+        assert all(expected_topic in item for item in la._suggestions_for_route(normalized_route)), normalized_route
 
     clarification_history = [{
         "role": "assistant",

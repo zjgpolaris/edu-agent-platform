@@ -167,13 +167,48 @@ def _llm_runtime_metadata(*, generation_mode: str, response_chars: int) -> dict[
     }
 
 
-def _fallback_history_answer(sources: list[dict[str, Any]]) -> str:
+def _source_fact(source: dict[str, Any], focus_topic: str | None) -> str:
+    raw = str(source.get("snippet") or source.get("content") or "")
+    cleaned = re.sub(r"\s+", "", raw).replace("[truncated40chars]", "")
+    sentences = [part.strip(" ，。！？；") for part in re.split(r"[。！？；]", cleaned) if part.strip(" ，。！？；")]
+    if focus_topic:
+        focused = [sentence for sentence in sentences if focus_topic in sentence]
+        if focused:
+            return focused[0][:160]
+    return (sentences[0] if sentences else cleaned)[:160]
+
+
+def _source_label(source: dict[str, Any]) -> str:
+    parts = [str(source.get("source") or "").strip(), str(source.get("lesson") or "").strip()]
+    if source.get("page") not in (None, ""):
+        parts.append(f"第{source['page']}页")
+    return "，".join(part for part in parts if part)
+
+
+_ANSWER_ASPECTS = ("原因", "背景", "经过", "结果", "影响", "意义", "作用", "特点", "贡献", "目的", "内容", "措施", "导火索")
+
+
+def _fallback_history_answer(
+    sources: list[dict[str, Any]],
+    focus_topic: str | None = None,
+    question: str = "",
+) -> str:
     if not sources:
         return "我暂时没有检索到足够的史料依据。你可以换一个更具体的历史事件、人物或时期来问。"
-    first = sources[0]
-    topic = first.get("topic") or "这个问题"
-    snippet = first.get("snippet") or first.get("content") or ""
-    return f"可以先从“{topic}”理解：{snippet}"
+    topic = focus_topic or sources[0].get("topic") or "这个问题"
+    source_facts = [(source, _source_fact(source, focus_topic)) for source in sources[:4]]
+    source_facts = [(source, fact) for source, fact in source_facts if fact]
+    aspects = [aspect for aspect in _ANSWER_ASPECTS if aspect in question]
+    focused_facts = [(source, fact) for source, fact in source_facts if any(aspect in fact for aspect in aspects)]
+    if focused_facts:
+        source_facts = focused_facts
+    facts = list(dict.fromkeys(fact for _, fact in source_facts))[:3]
+    labels = list(dict.fromkeys(label for source, _ in source_facts if (label := _source_label(source))))[:2]
+    fact_text = "；".join(facts)
+    answer = f"根据当前教材中能检索到的内容，关于{topic}可以确认：{fact_text}。"
+    if labels:
+        answer += f"依据：{'；'.join(labels)}。"
+    return answer
 
 
 def _fallback_quiz_from_sources(message: str, sources: list[dict[str, Any]], count: int = 3, question_type: str = "mixed") -> list[dict[str, Any]]:
@@ -275,15 +310,21 @@ def _source_context_text(context: dict[str, Any]) -> str:
     ).strip()
 
 
-def _generate_history_answer(message: str, sources: list[dict[str, Any]], history: list[dict[str, Any]] | None = None, source_context: dict[str, Any] | None = None) -> tuple[str, str]:
+def _generate_history_answer(
+    message: str,
+    sources: list[dict[str, Any]],
+    history: list[dict[str, Any]] | None = None,
+    source_context: dict[str, Any] | None = None,
+    focus_topic: str | None = None,
+) -> tuple[str, str]:
     if not sources:
-        return _generate_chat_answer(message, history or [], source_context or {})
+        return _fallback_history_answer([], focus_topic, message), "fallback"
     context = build_untrusted_context_block(sources[:4], title="史料")
     conversation = _history_text(history or [])
     course_context = _source_context_text(source_context or {})
     prompt = [
-        {"role": "system", "content": "你是初中历史学习助手。请基于给定史料回答，语言清楚、适合学生复习；不要编造未在材料中出现的细节。"},
-        {"role": "user", "content": f"课程上下文：\n{course_context}\n\n最近对话：\n{conversation}\n\n当前问题：{message}\n\n史料：\n{context}\n\n请用 2-4 句话回答，并点出一个可继续追问的方向。"},
+        {"role": "system", "content": "你是初中历史学习助手。请基于给定史料直接回答问题，语言清楚、适合学生复习；只使用与当前主题相关的材料，不要编造未在材料中出现的细节。回答人物问题时，先说明人物本人的贡献；后人继承其思想或风格只能表述为影响，不能写成人物本人的行为。"},
+        {"role": "user", "content": f"课程上下文：\n{course_context}\n\n最近对话：\n{conversation}\n\n当前主题：{focus_topic or ''}\n当前问题：{message}\n\n史料：\n{context}\n\n请用 2-3 句话直接回答，不要复述整段史料，并在末尾简要注明教材课次或页码。"},
     ]
     try:
         response = llm_fast.invoke(prompt).content.strip()
@@ -291,7 +332,7 @@ def _generate_history_answer(message: str, sources: list[dict[str, Any]], histor
             return response, "llm"
     except Exception:
         pass
-    return _fallback_history_answer(sources), "fallback"
+    return _fallback_history_answer(sources, focus_topic, message), "fallback"
 
 
 def _generate_chat_answer(message: str, history: list[dict[str, Any]], source_context: dict[str, Any]) -> tuple[str, str]:
@@ -424,7 +465,12 @@ def _record_assistant_event(
     )
 
 
-def _personalize_suggestions(student_id: str | None, suggestions: list[str]) -> tuple[list[str], dict[str, Any] | None]:
+def _personalize_suggestions(
+    student_id: str | None,
+    suggestions: list[str],
+    *,
+    include_review_actions: bool = True,
+) -> tuple[list[str], dict[str, Any] | None]:
     if not student_id:
         return suggestions, None
     try:
@@ -433,9 +479,10 @@ def _personalize_suggestions(student_id: str | None, suggestions: list[str]) -> 
     except Exception:
         return suggestions, None
     personalized = list(suggestions)
-    for action in plan.get("recommended_actions") or []:
-        if action not in personalized:
-            personalized.insert(0, action)
+    if include_review_actions:
+        for action in plan.get("recommended_actions") or []:
+            if action not in personalized:
+                personalized.insert(0, action)
     used_memory = get_used_memory_entries(student_id, limit=6)
     if not used_memory:
         if profile.weak_topics:
@@ -537,7 +584,7 @@ def _run_generation_operation(
     message = str(step.input.get("message") or req.get("message") or "").strip()
     if operation == "answer_from_sources":
         sources = _dependency_data(outputs, "sources") or []
-        response, mode = _generate_history_answer(message, sources, history, source_context)
+        response, mode = _generate_history_answer(message, sources, history, source_context, str(step.input.get("topic") or "").strip() or None)
         evidence_claims = [_evidence_claim(operation, f"{step.step_id}_answer", response, sources[:4])]
         return {"ok": bool(response), "response": response, "data": {"sources": sources[:4]}, "evidence_claims": evidence_claims, "generation_mode": mode, "result_summary": "已生成基于史料的解释"}
     if operation == "answer_from_lesson":
@@ -599,7 +646,8 @@ def _suggestions_for_route(route: RoutingDecision) -> list[str]:
         return ["再来 3 道选择题", "解释第 1 题", "换成简答题"]
     primary = route.tasks[0].intent
     if primary == IntentName.history_search:
-        return ["生成练习题", "换一个角度解释", "再简单一点"]
+        topic = route.tasks[0].topic or "这个知识点"
+        return [f"用一句话总结{topic}", f"解释{topic}的原因和影响", f"围绕{topic}生成3道练习题"]
     if primary == IntentName.textbook_qa:
         return ["生成练习题", "总结本课", "解释重点"]
     if primary == IntentName.review_plan:
@@ -826,7 +874,12 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
     yield _runtime_step("answer_synthesis", "Answer Synthesis", "llm" if generation_mode == "llm" else "generation", "success", sequence=7, started_at=answer_started, metadata=answer_metadata)
 
     memory_started = perf_counter()
-    suggestions, profile_context = _personalize_suggestions(req.get("student_id"), suggestions)
+    keep_current_topic = route.tasks[0].intent in {IntentName.history_search, IntentName.textbook_qa}
+    suggestions, profile_context = _personalize_suggestions(
+        req.get("student_id"),
+        suggestions,
+        include_review_actions=not keep_current_topic,
+    )
     _record_assistant_event(req, event_type="answer_completed", intent=intent, topic=topic, ok=completion_status in {"completed", "partial", "waiting_confirmation"}, metadata={"tool_count": int(execution.get("used_tool_count") or 0), "generation_mode": generation_mode, "fallback_used": generation_mode == "fallback", "history_messages": len(history), "source_feature": req.get("source_feature"), "routing_mode": route.mode, "task_count": len(route.tasks), "completion_status": completion_status, "completed_steps": execution.get("completed_steps"), "total_steps": execution.get("total_steps"), "partial_reason": execution.get("partial_reason"), "clarification_resolved": route.reason_code == "pending_clarification_resolved", "rollout": rollout_payload, "verification_status": verification.status, "verification_source_count": verification.source_count, "unsupported_claim_count": verification.unsupported_claim_count})
     yield _runtime_step("memory_update", "Persist Interaction", "memory", "success", sequence=8, started_at=memory_started, metadata={"student_id": req.get("student_id"), "session_id": req.get("session_id"), "profile_context_loaded": bool(profile_context), "used_memory_count": len((profile_context or {}).get("used_memory") or []), "wrote_event": bool(req.get("student_id"))})
     trace_id = current_trace_id()

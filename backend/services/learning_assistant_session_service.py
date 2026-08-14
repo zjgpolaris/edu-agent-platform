@@ -12,6 +12,17 @@ from student_profile import now_iso
 
 MAX_CONTEXT_MESSAGES = 12
 _SAFE_TOOL_METADATA = {"risk_level", "side_effect", "required_role", "source_count", "duration_ms", "degraded"}
+_SAFE_SOURCE_TEXT_LIMITS = {
+    "topic": 120,
+    "snippet": 500,
+    "source": 180,
+    "grade": 40,
+    "unit": 120,
+    "lesson": 160,
+    "page": 40,
+    "type": 40,
+    "source_mode": 40,
+}
 
 
 def ensure_tables() -> None:
@@ -77,7 +88,23 @@ def _safe_tool_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "metadata": {key: metadata.get(key) for key in _SAFE_TOOL_METADATA if metadata.get(key) is not None},
         }
         if isinstance(data.get("sources"), list):
-            summary["source_count"] = len(data["sources"])
+            raw_sources = data["sources"]
+            summary["source_count"] = len(raw_sources)
+            persisted_sources: list[dict[str, Any]] = []
+            for source in raw_sources[:4]:
+                if not isinstance(source, dict):
+                    continue
+                persisted = {
+                    key: str(source.get(key) or "")[:limit]
+                    for key, limit in _SAFE_SOURCE_TEXT_LIMITS.items()
+                    if source.get(key) not in (None, "")
+                }
+                if isinstance(source.get("score"), (int, float)):
+                    persisted["score"] = round(float(source["score"]), 3)
+                if persisted.get("topic") or persisted.get("snippet"):
+                    persisted_sources.append(persisted)
+            if persisted_sources:
+                summary["data"] = {"sources": persisted_sources}
         if isinstance(data.get("recommendations"), list):
             summary["recommendation_count"] = len(data["recommendations"])
         if isinstance(data.get("quiz"), dict):

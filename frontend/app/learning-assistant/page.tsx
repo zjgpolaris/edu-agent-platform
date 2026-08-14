@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { Select, type SelectOption } from "./Select";
 import { TraceTimeline } from "@/components/TraceTimeline";
-import { assistantCompletionLabel, buildTextbookRequestFields, shouldSubmitComposerKey, updateAssistantPlanStep, type AssistantPlanStep } from "@/components/learningAssistantComposer";
+import { assistantCompletionLabel, buildTextbookRequestFields, dedupeAssistantTools, shouldSubmitComposerKey, updateAssistantPlanStep, type AssistantPlanStep } from "@/components/learningAssistantComposer";
 
 type Textbook = { id: string; grade: string; book: string; status: string };
 type TocLesson = { id: string; title: string };
@@ -370,6 +370,12 @@ function renderToolPreview(tool: ToolResult) {
   }
   if (sources?.length) {
     return <div className="learning-tool-list">{sources.slice(0, 3).map((source, index) => <p key={`${source.topic}-${index}`}><strong>{source.topic || "史料"}</strong>：{source.snippet}</p>)}</div>;
+  }
+  if (tool.tool_name === "search_history_knowledge") {
+    const sourceCount = Number((tool as ToolResult & { source_count?: number }).source_count || tool.metadata?.source_count || 0);
+    if (sourceCount > 0) {
+      return <div className="learning-tool-list"><p>已检索 {sourceCount} 条史料；这条历史记录未保存片段详情，可重新生成查看。</p></div>;
+    }
   }
   if (lesson) {
     return <div className="learning-tool-list"><p><strong>{lesson.lesson_title}</strong></p>{lesson.items?.slice(0, 3).map((item) => <p key={item.id}>{item.topic}：{item.text}</p>)}</div>;
@@ -1268,7 +1274,7 @@ function LearningAssistantContent() {
               ) : null}
               <p>{item.text || "正在组织回答……"}</p>
               {item.role === "assistant" && item.completionStatus === "partial" ? <p className="learning-partial-notice">部分任务未完成，已保留可验证的结果。</p> : null}
-              {item.tools?.filter((tool) => !(item.intent === "quiz_generation" && tool.tool_name === "search_history_knowledge")).map((tool) => (
+              {dedupeAssistantTools(item.tools || []).filter((tool) => !(item.intent === "quiz_generation" && tool.tool_name === "search_history_knowledge")).map((tool) => (
                 <div className={`learning-tool-card ${tool.ok ? "ok" : "error"}`} key={`${item.id}-${tool.tool_name}`}>
                   <div><strong>{toolLabel(tool.tool_name)}</strong><span>{tool.ok ? "已完成" : tool.error?.message || "执行失败"}</span></div>
                   {renderToolPreview(tool)}

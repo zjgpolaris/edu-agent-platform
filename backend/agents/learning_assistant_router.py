@@ -61,13 +61,14 @@ _REVIEW_TERMS = ("复习计划", "复习建议", "制定复习", "学习计划",
 _CHARACTER_TERMS = ("推荐人物", "和谁聊", "历史人物", "人物推荐", "推荐一个人", "推荐一位", "谁适合讲")
 _GAME_TERMS = ("时间线", "时间巨轮", "时间排序", "历史排序", "来一局", "玩一局", "闯关游戏")
 _TEXTBOOK_REFERENCES = ("这节课", "这一课", "本课", "课文", "教材")
+_TEXTBOOK_CONTEXT_ACTIONS = ("结合教材", "结合课文", "按教材", "用教材", "教材解释", "课文解释")
 _FOLLOWUP_TERMS = ("它", "这个", "刚才", "上面", "再简单", "换个说法", "没懂", "还是不懂", "那它")
 _HISTORY_MARKERS = (
     "历史", "战争", "朝代", "皇帝", "变法", "革命", "运动", "起义", "条约", "制度", "改革",
     "王朝", "秦始皇", "汉武帝", "唐太宗", "鸦片", "洋务", "辛亥", "五四", "甲午", "抗日",
     "三国", "秦朝", "汉朝", "唐朝", "宋朝", "元朝", "明朝", "清朝", "安史", "近代史", "古代史",
 )
-_EXPLAIN_TERMS = ("解释", "讲讲", "讲一下", "说明", "说说", "简单的话", "简单解释", "怎么发生", "怎么起来", "为什么", "影响", "意义")
+_EXPLAIN_TERMS = ("解释", "讲讲", "讲一下", "说明", "说说", "简单的话", "简单解释", "怎么发生", "怎么起来", "为什么", "影响", "意义", "做了什么")
 _COMPOSITION_TERMS = ("先", "再", "然后", "接着", "并且", "顺便", "之后")
 _CHAT_TERMS = ("你好", "谢谢", "再见", "天气", "几点", "你是谁")
 
@@ -149,6 +150,35 @@ def _topic_from_history(history: list[dict[str, Any]]) -> str | None:
             for marker in _HISTORY_MARKERS:
                 if marker in content and len(marker) >= 2:
                     return marker
+            if preferred_role == "user":
+                topic = _extract_short_learning_topic(content)
+                if topic:
+                    return topic
+    return None
+
+
+def _extract_short_learning_topic(text: str) -> str | None:
+    compact = _compact(text)
+    if not compact or _contains_any(compact, _CHAT_TERMS) or "能做什么" in compact:
+        return None
+    cleaned = re.sub(r"(请|帮我|能不能|可以|直接|结合教材|结合课文|教材|课文|历史|一下|吗|呢|吧)", "", text)
+    cleaned = cleaned.strip(" ，。！？,.!?")
+    cleaned = re.sub(
+        r"(?:(?:失败|成功)的?)?(?:的)?(?:主要)?(?:原因|背景|经过|结果|影响|意义|作用|特点|贡献|目的|内容|措施|导火索)(?:是什么|有哪些|如何|怎么样|有多大)?$",
+        "",
+        cleaned,
+    )
+    cleaned = re.sub(r"为什么(?:会)?(?:爆发|发生|失败|成功|结束|重要)?$", "", cleaned)
+    for suffix in ("做了什么", "是什么", "为什么", "有什么影响", "有什么意义", "怎么评价", "怎么理解", "介绍一下", "讲讲", "解释"):
+        cleaned = cleaned.replace(suffix, " ")
+    candidates = [
+        item.strip(" ，。！？,.!?、的")
+        for item in re.split(r"[，。！？,.!?、\s]+", cleaned)
+        if item.strip(" ，。！？,.!?、的")
+    ]
+    for candidate in candidates:
+        if 2 <= len(candidate) <= 12 and re.fullmatch(r"[\u4e00-\u9fff]+", candidate):
+            return candidate[:120]
     return None
 
 
@@ -165,13 +195,16 @@ def _extract_topic(message: str, req: dict[str, Any]) -> str | None:
             candidate = candidate.strip(" ，。！？,.!?的")
             if 1 < len(candidate) <= 40:
                 return candidate[:120]
+    normalized_topic = _extract_short_learning_topic(message)
+    if normalized_topic and _contains_any(_compact(message), _HISTORY_MARKERS):
+        return normalized_topic
     for marker in sorted(_HISTORY_MARKERS, key=len, reverse=True):
         if marker in message and marker not in {"历史", "战争", "运动", "革命", "朝代", "皇帝", "制度", "改革", "王朝", "古代史", "近代史"}:
             match = re.search(rf"([\u4e00-\u9fff]{{0,8}}{re.escape(marker)})", message)
             return (match.group(1) if match else marker)[-20:]
     if _contains_any(_compact(message), _FOLLOWUP_TERMS):
         return _trusted_topic(req) or _topic_from_history(req.get("conversation_history") or [])
-    return _trusted_topic(req)
+    return _trusted_topic(req) or _extract_short_learning_topic(message)
 
 
 def _task(
@@ -280,9 +313,14 @@ def deterministic_route(req: dict[str, Any]) -> RoutingDecision:
         )
 
     textbook_reference = _contains_any(compact, _TEXTBOOK_REFERENCES)
+    textbook_context_action = _contains_any(compact, _TEXTBOOK_CONTEXT_ACTIONS)
+    if textbook_context_action and not topic:
+        topic = _topic_from_history(history)
     if has_lesson:
         return RoutingDecision(mode="rule", tasks=[_task("task_1", IntentName.textbook_qa, topic=topic, req=req)], confidence=0.94, reason_code="trusted_textbook_context")
-    if textbook_reference and not topic:
+    if textbook_context_action and topic:
+        return RoutingDecision(mode="rule", tasks=[_task("task_1", IntentName.history_search, topic=topic, req=req)], confidence=0.88, reason_code="textbook_reference_with_history_topic")
+    if textbook_reference and not _trusted_topic(req):
         return RoutingDecision(
             mode="clarification",
             tasks=[_task("task_1", IntentName.textbook_qa, req=req)],

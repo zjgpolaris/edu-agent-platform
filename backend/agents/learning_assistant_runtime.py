@@ -92,6 +92,7 @@ def stream_task_plan(
     tool_results: list[dict[str, Any]] = []
     generation_results: list[dict[str, Any]] = []
     completed_steps = 0
+    used_tool_count = 0
     completion_status = "completed"
     partial_reason: str | None = None
     failed_step: str | None = None
@@ -113,6 +114,7 @@ def stream_task_plan(
                     raise ValueError(f"tool operation is not allowed: {step.operation}")
                 yield "tool_start", {"tool_name": step.operation, "step_id": step.step_id}
                 raw = run_tool(step.operation, step.input)
+                used_tool_count += 1
                 payload = raw.model_dump() if hasattr(raw, "model_dump") else dict(raw)
                 tool_results.append(payload)
                 summary = summarize_tool(raw)
@@ -152,8 +154,9 @@ def stream_task_plan(
                     )
                     yield "repair_attempt", repair_payload
                     retried_raw = run_tool(step.operation, retry_payload)
+                    used_tool_count += 1
                     retried_payload = retried_raw.model_dump() if hasattr(retried_raw, "model_dump") else dict(retried_raw)
-                    tool_results.append(retried_payload)
+                    tool_results[-1] = retried_payload
                     retried_summary = summarize_tool(retried_raw)
                     retried_summary["step_id"] = step.step_id
                     retried_summary["repair_attempt"] = 1
@@ -235,5 +238,5 @@ def stream_task_plan(
         "tool_results": tool_results,
         "generation_results": generation_results,
         "outputs": outputs,
-        "used_tool_count": len(tool_results),
+        "used_tool_count": used_tool_count,
     }

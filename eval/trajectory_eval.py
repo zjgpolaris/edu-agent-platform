@@ -257,7 +257,8 @@ def evaluate_repair_and_rollback() -> tuple[int, int, list[dict]]:
         repair_events = list(la.stream_learning_assistant_events({"message": "解释洋务运动的影响", "student_id": "repair-eval", "actor_role": "student"}))
         repair_final = next((data for event, data in repair_events if event == "final"), {})
         repairs = [data for event, data in repair_events if event == "repair_attempt"]
-        if calls == 2 and len(repairs) == 1 and repair_final.get("completion_status") == "completed":
+        final_search_results = [item for item in repair_final.get("tool_results") or [] if item.get("tool_name") == "search_history_knowledge"]
+        if calls == 2 and len(repairs) == 1 and len(final_search_results) == 1 and repair_final.get("completion_status") == "completed":
             passed += 1
         else:
             failures.append({"id": "single_controlled_repair", "calls": calls, "repairs": repairs, "final": repair_final})
