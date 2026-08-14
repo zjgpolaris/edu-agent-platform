@@ -854,6 +854,7 @@ def parse_output(stdout: str, stderr: str) -> tuple[int, int, int, dict[str, dic
     skipped = 0
     metrics: dict[str, dict[str, int | float]] = {}
     failed_cases: list[FailedCase] = []
+    plain_failed_cases: list[FailedCase] = []
     skipped_cases: list[str] = []
 
     for line in stdout.splitlines():
@@ -862,6 +863,11 @@ def parse_output(stdout: str, stderr: str) -> tuple[int, int, int, dict[str, dic
             passed += 1
         elif stripped.startswith("FAIL "):
             failed += 1
+            label, separator, reason = stripped.removeprefix("FAIL ").partition(":")
+            plain_failed_cases.append({
+                "name": label.strip() or "unnamed_failure",
+                "reason": reason.strip() if separator else "case failed",
+            })
         elif stripped.startswith("SKIP "):
             skipped += 1
             skipped_cases.append(stripped.removeprefix("SKIP ").strip())
@@ -896,6 +902,8 @@ def parse_output(stdout: str, stderr: str) -> tuple[int, int, int, dict[str, dic
     failed_match = FAILED_CASES_RE.search(combined)
     if failed_match and not failed_cases:
         failed_cases = [normalize_failed_case(item.strip()) for item in failed_match.group(1).split(",") if item.strip()]
+    if plain_failed_cases and not failed_cases:
+        failed_cases = plain_failed_cases
 
     total = passed + failed + skipped
     if total == 0 and metrics:

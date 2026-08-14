@@ -2,6 +2,7 @@
 import json
 import os
 import re
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -14,6 +15,21 @@ from rag.knowledge_base import check_rag_health
 from ._shared import trace_meta
 
 router = APIRouter(tags=["debug"])
+
+
+def latest_eval_report_path() -> Path:
+    configured = os.getenv("EDU_AGENT_EVAL_REPORT_PATH")
+    if configured:
+        return Path(configured).expanduser()
+
+    source_path = Path(__file__).resolve()
+    repository_report = source_path.parents[3] / "eval" / "reports" / "latest.json"
+    if repository_report.exists():
+        return repository_report
+
+    # The backend container flattens backend/ into /app, so keep that layout
+    # available for deployments that mount an eval report beside the API.
+    return source_path.parents[2] / "eval" / "reports" / "latest.json"
 
 
 class TraceResponse(BaseModel):
@@ -70,10 +86,9 @@ async def api_ready(collection: str = "history", require_rag: bool = False, requ
     except Exception as exc:
         checks["rag"] = {"ok": False, "error_type": exc.__class__.__name__, "reason": str(exc)[:300], "deep": False}
 
-    import os as _os
-    eval_path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))), "eval", "reports", "latest.json")
+    eval_path = latest_eval_report_path()
     try:
-        with open(eval_path, "r", encoding="utf-8") as fh:
+        with eval_path.open("r", encoding="utf-8") as fh:
             latest = json.load(fh)
         checks["latest_eval"] = {"ok": bool(latest.get("ok")), "generated_at": latest.get("generated_at"), "summary": latest.get("summary"), "failed_suites": latest.get("failed_suites", [])}
     except FileNotFoundError:

@@ -108,6 +108,16 @@ def main() -> None:
         assert "private-key-value" not in private_serialized
         assert private_output["stdout"] == "[REDACTED_PRIVATE_EVAL_OUTPUT]"
 
+        parsed = runner.parse_output(
+            "OK ready_endpoint_shape\nFAIL eval_report_quality_contract: assertion failed\n",
+            "",
+        )
+        assert parsed[0:3] == (1, 1, 2)
+        assert parsed[4] == [{
+            "name": "eval_report_quality_contract",
+            "reason": "assertion failed",
+        }]
+
         credentials_missing = runner.build_json_summary(
             [_skipped_result()],
             include_output=False,

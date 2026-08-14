@@ -7,10 +7,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 _DB = Path(tempfile.gettempdir()) / "edu-agent-readiness-smoke.sqlite3"
@@ -24,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
 from api.main import app  # noqa: E402
+from api.routers import debug as debug_router  # noqa: E402
 from api.routers.debug import api_ready  # noqa: E402
 from api.routers.eval_ops import eval_latest, eval_run, load_eval_runner  # noqa: E402
 
@@ -37,11 +40,30 @@ def run_case(name: str, fn) -> bool:
         return True
     except Exception as exc:
         print(f"FAIL {name}: {exc}")
+        print("FAILED_CASE_DETAIL=" + json.dumps({
+            "name": name,
+            "reason": f"{exc.__class__.__name__}: {exc}",
+        }, ensure_ascii=False))
         return False
 
 
 async def ready_endpoint_shape() -> None:
-    payload = await api_ready()
+    rag_calls: list[tuple[str, bool]] = []
+
+    def fake_rag_health(collection: str, *, deep: bool = False) -> dict:
+        rag_calls.append((collection, deep))
+        return {
+            "ok": True,
+            "status": "ok",
+            "collection": collection,
+            "checks": {},
+            "config": {"embedding": {"api_key_configured": False}},
+        }
+
+    with patch.object(debug_router, "check_rag_health", fake_rag_health):
+        payload = await api_ready()
+
+    assert rag_calls == [("history", False)], rag_calls
     assert "ok" in payload, payload
     assert payload["service"] == "edu-agent-backend", payload
     assert payload["mode"] == "readiness-shallow", payload
@@ -54,6 +76,7 @@ async def ready_endpoint_shape() -> None:
     assert "external_dependencies" in payload["checks"], payload
     assert payload["checks"]["llm_config"]["mode"] == "shallow", payload
     assert payload["checks"]["rag"].get("deep") is False, payload
+    assert payload["checks"]["latest_eval"].get("missing") is not True, payload
     assert payload["checks"]["external_dependencies"]["mode"] == "config-only", payload
 
 
@@ -90,16 +113,21 @@ def eval_report_quality_contract() -> None:
         metrics={},
         failed_cases=[],
     )
-    offline = runner.build_json_summary([result], include_output=False, profile="custom")
-    assert offline["ok"] is True, offline
-    assert offline["llm_execution"]["status"] == "not_observed", offline
-    real_model = runner.build_json_summary([result], include_output=False, profile="custom", require_real_llm=True)
-    assert real_model["ok"] is False, real_model
-    assert real_model["llm_execution"]["status"] == "not_run", real_model
-    stale = runner.report_runtime_status({
-        "generated_at": "2020-01-01T00:00:00+00:00",
-        "source_revision": {"commit_sha": "outdated"},
-    })
+    revision = {"commit_sha": "current", "short_sha": "current", "dirty": False}
+    with (
+        patch.object(runner, "collect_agent_ops_snapshot", return_value={"status": "ok"}),
+        patch.object(runner, "source_revision", return_value=revision),
+    ):
+        offline = runner.build_json_summary([result], include_output=False, profile="custom")
+        assert offline["ok"] is True, offline
+        assert offline["llm_execution"]["status"] == "not_observed", offline
+        real_model = runner.build_json_summary([result], include_output=False, profile="custom", require_real_llm=True)
+        assert real_model["ok"] is False, real_model
+        assert real_model["llm_execution"]["status"] == "not_run", real_model
+        stale = runner.report_runtime_status({
+            "generated_at": "2020-01-01T00:00:00+00:00",
+            "source_revision": {"commit_sha": "outdated"},
+        })
     assert stale["status"] == "stale", stale
     assert "older_than_7_days" in stale["reasons"], stale
 
