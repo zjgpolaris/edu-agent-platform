@@ -192,6 +192,34 @@ PYTHONPATH=backend python3 eval/run_core_evals.py --require-real-llm
 
 Eval 报告会记录 commit SHA、suite profile、真实 LLM 调用状态和生成时间；`/eval` 会对 commit 不一致或超过 7 天的报告标记 `STALE`，并分别展示 skipped / not-run / infra-failed / quality-failed。
 
+### 真实证据、稳定灰度与发布封印（v1.30）
+
+v1.30 将运行、评测和 demo 事件在查询层分域，AgentOps 只用指定时间窗内的 runtime 样本判断 readiness；确认、权限拒绝等预期控制结果不再算作系统故障。语义路由和组合 Planner 使用稳定哈希桶独立灰度，支持 shadow、万分比流量、版本化 salt、高风险规则直达和 kill switch。
+
+历史检索、教材问答与出题在 final 前执行确定性证据核验。回答必须能映射到标准化 source ID；缺少来源或映射时会降级为 partial/failed，并通过 `verification_start`、`verification_result` 和 final 的 `verification_summary` 对前端公开。
+
+评测报告使用 schema v3，每次运行生成唯一 `eval_run_id`，真实 LLM 调用只接受当前 suite 输出的 run-scoped 计数，历史 AgentOps 调用不能为本次发布盖章。日常离线评测的 seal 明确为 `not_applicable`；dirty revision、缺少盲测、fallback-only 或无真实模型证据都会使强制 release seal 失败。
+
+```bash
+# 日常离线回归
+PYTHONPATH=backend python3 eval/run_core_evals.py --quick --profile offline
+
+# 私有盲测：路径必须在仓库之外，报告只输出聚合指标
+EDU_AGENT_BLIND_EVAL_PATH=/secure/path/blind.jsonl \
+PYTHONPATH=backend python3 eval/run_core_evals.py --profile blind --require-clean-revision
+
+# 当前 run 的真实语义路由证据
+PYTHONPATH=backend python3 eval/run_core_evals.py \
+  --profile real_llm --require-real-llm --require-clean-revision
+
+# 研究用途的外部真实学生 OOD 安全证据（原始数据必须位于仓库之外）
+# 当前适配 Eedi Question-Anchored-Tutoring-Dialogues-2k CSV；仅输出聚合指标，
+# 不能替代中文 in-domain blind 或真实 LLM 证据。
+EDU_AGENT_EXTERNAL_OOD_PATH=/secure/path/eedi-test.csv \
+PYTHONPATH=backend python3 eval/run_core_evals.py \
+  --suite learning_assistant_external_ood_eval --profile production_canary
+```
+
 ### MCP Server
 
 EduAgent 提供一个轻量 stdio MCP server，用于展示标准 Agent 工具协议适配。它只暴露现有 Tool Registry 中的 4 个工具，并继续复用 `run_tool()` 的 schema 校验、角色策略、确认元数据、审计与 trace：

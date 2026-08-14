@@ -1,28 +1,68 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "failed_case_schema_version": 1,
-  "generated_at": "2026-08-13T09:30:21.469093+00:00",
+  "generated_at": "2026-08-14T05:57:39.754180+00:00",
   "evaluation_profile": "core",
+  "eval_run": {
+    "run_id": "eval_20260814T055620Z_d669f20ce9a8",
+    "profile": "offline",
+    "suite_profile": "core",
+    "started_at": "2026-08-14T05:56:20.891545+00:00",
+    "finished_at": "2026-08-14T05:57:39.754180+00:00",
+    "dataset_versions": {
+      "learning_assistant_cases": "sha256:6ebd6333b2e140c2"
+    },
+    "source_revision": {
+      "commit_sha": "060c166dbc890c02f74423309f6779728c7d4be9",
+      "short_sha": "060c166dbc89",
+      "dirty": true
+    },
+    "environment_fingerprint": "sha256:f1225e92efb5c3fea246"
+  },
   "source_revision": {
-    "commit_sha": "d8928296fa7f7cab3d4ded0b58c03d5520ea40d7",
-    "short_sha": "d8928296fa7f",
+    "commit_sha": "060c166dbc890c02f74423309f6779728c7d4be9",
+    "short_sha": "060c166dbc89",
     "dirty": true
+  },
+  "provenance": {
+    "report_commit_sha": "060c166dbc890c02f74423309f6779728c7d4be9",
+    "commit_matches_current_head": true,
+    "provider": "unknown",
+    "model": "unknown",
+    "dataset_versions": {
+      "learning_assistant_cases": "sha256:6ebd6333b2e140c2"
+    }
   },
   "report_freshness": {
     "status": "fresh",
-    "generated_at": "2026-08-13T09:30:21.469093+00:00",
+    "generated_at": "2026-08-14T05:57:39.754180+00:00",
     "stale_after_hours": 168
   },
   "llm_execution": {
     "status": "not_observed",
     "required": false,
     "calls": 0,
+    "run_scoped_calls": 0,
+    "fallback_calls": 0,
+    "models": {},
+    "provider": "unknown",
+    "p95_ms": null,
     "note": "本次报告未检测到真实 LLM 执行证据；离线 profile 不把 fallback 等同于真实模型质量"
+  },
+  "release_seal": {
+    "status": "not_applicable",
+    "reasons": [],
+    "commit_matches": true,
+    "clean_revision": false,
+    "real_llm_observed": false,
+    "required_profiles_passed": [
+      "offline"
+    ]
   },
   "ok": true,
   "summary": {
-    "total": 453,
-    "passed": 453,
+    "total": 462,
+    "passed": 462,
     "failed": 0,
     "skipped": 0,
     "pass_rate": 1.0
@@ -34,21 +74,21 @@
     "tool_schema_validity": 1.0,
     "guardrail_pass_rate": 1.0,
     "format_validity": 1.0,
-    "avg_latency_ms": 166.4
+    "avg_latency_ms": 170.4
   },
   "category_summary": {
+    "ops": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
     "agent": {
-      "passed": 10,
+      "passed": 12,
       "failed": 0,
       "skipped": 0
     },
     "rag": {
       "passed": 4,
-      "failed": 0,
-      "skipped": 0
-    },
-    "ops": {
-      "passed": 3,
       "failed": 0,
       "skipped": 0
     },
@@ -88,25 +128,29 @@
       "skipped": 0
     }
   },
-  "total_suites": 31,
-  "passed_suites": 31,
+  "total_suites": 35,
+  "passed_suites": 35,
   "failed_suites": [],
   "quality_failed_suites": [],
   "infra_failed_suites": [],
   "skipped_suites": [],
   "not_run_suites": [],
   "required_suites": [
+    "eval_run_evidence_smoke",
+    "answer_groundedness_eval",
     "history_character_eval",
     "rag_retrieval_eval",
     "rag_groundedness_eval",
     "textbook_qa_eval",
     "game_generation_eval",
     "agent_ops_smoke",
+    "agent_ops_scope_smoke",
     "readiness_smoke",
     "autotutor_session_recovery_smoke",
     "learning_assistant_multiturn_smoke",
     "autotutor_question_handoff_smoke",
     "learning_assistant_smoke",
+    "learning_assistant_rollout_smoke",
     "intent_accuracy_eval",
     "material_rag_smoke",
     "release_gate_smoke",
@@ -128,172 +172,274 @@
     "mcp_client_smoke",
     "agent_job_smoke"
   ],
-  "passed": 31,
-  "total": 31,
-  "passed_cases": 453,
-  "total_cases": 453,
-  "duration_sec": 75.378,
+  "passed": 35,
+  "total": 35,
+  "passed_cases": 462,
+  "total_cases": 462,
+  "duration_sec": 78.727,
   "agent_ops": {
-    "schema_version": 1,
-    "generated_at": "2026-08-13T09:30:21.468988+00:00",
+    "schema_version": 2,
+    "generated_at": "2026-08-14T05:57:39.753890+00:00",
     "window": {
-      "limit": 100
+      "limit": 100,
+      "scope": "eval",
+      "window_hours": 24,
+      "since": "2026-08-13T05:57:39.730895+00:00"
     },
     "data_scope": {
-      "active": "runtime",
+      "active": "eval",
       "audit": {
-        "eval": 49,
-        "runtime": 51
+        "runtime": 432,
+        "eval": 367,
+        "demo": 0
       },
       "learning": {
-        "eval": 100
-      }
+        "runtime": 1282,
+        "eval": 1018,
+        "demo": 0
+      },
+      "counts_are_window_samples": true
     },
-    "status": "partial_trace_coverage",
+    "status": "ok",
     "readiness": {
-      "status": "fail",
+      "status": "not_applicable",
+      "sample_sufficient": true,
+      "runtime_event_count": 1385,
+      "minimum_runtime_events": 100,
+      "window_hours": 24,
+      "unexpected_failure_count": 15,
       "reasons": [
-        "trace_coverage_below_50_percent",
-        "audit_failures_present"
+        "readiness_is_runtime_only"
       ]
     },
     "trace_correlation": {
-      "audit_total": 51,
-      "audit_with_trace": 24,
-      "learning_total": 0,
-      "learning_with_trace": 0,
-      "coverage_rate": 0.471,
-      "unique_trace_ids": 22
+      "audit_total": 100,
+      "audit_with_trace": 26,
+      "learning_total": 100,
+      "learning_with_trace": 89,
+      "coverage_rate": 0.575,
+      "unique_trace_ids": 34
     },
     "audit": {
-      "total": 51,
-      "success": 44,
+      "total": 100,
+      "success": 91,
       "failure": 7,
-      "success_rate": 0.863,
+      "unexpected_failure": 7,
+      "expected_control": 2,
+      "user_denied": 0,
+      "degraded": 0,
+      "effective_total": 98,
+      "success_rate": 0.929,
       "by_action": {
-        "tool.allowed": 33,
-        "history_character.rag_retrieve": 6,
-        "tool.failed": 5,
-        "learning_assistant.chat": 2,
-        "student_profile.read": 2,
+        "tool.allowed": 81,
+        "history_character.rag_retrieve": 9,
+        "tool.failed": 7,
         "tool.confirmation_required": 2,
         "tool.confirmation_confirmed": 1
       },
       "by_resource_type": {
-        "tool": 41,
-        "character": 6,
-        "student": 4
+        "tool": 91,
+        "character": 9
       },
       "recent": [
         {
-          "id": "9a4295795a864c79a089bdbb2ce04c50",
-          "action": "learning_assistant.chat",
-          "actor_id": "dev-teacher",
-          "resource_type": "student",
-          "resource_id": "pilot-student",
-          "success": true,
-          "created_at": "2026-08-13T09:28:05.380075+00:00",
-          "trace_id": "60dc08771c364997926d11fe4818b646"
-        },
-        {
-          "id": "5fbc005a72484fefbf196c414a89e955",
-          "action": "tool.allowed",
-          "actor_id": "dev-teacher",
-          "resource_type": "tool",
-          "resource_id": "search_history_knowledge",
-          "success": true,
-          "created_at": "2026-08-13T09:27:29.783228+00:00",
-          "trace_id": "440ee4582f824353b223cb87a40c0715"
-        },
-        {
-          "id": "af95f9fb427647cbab18d8beb2028cb6",
-          "action": "learning_assistant.chat",
-          "actor_id": "dev-teacher",
-          "resource_type": "student",
-          "resource_id": "pilot-student",
-          "success": true,
-          "created_at": "2026-08-13T09:27:29.658015+00:00",
-          "trace_id": "440ee4582f824353b223cb87a40c0715"
-        },
-        {
-          "id": "c60d4f40470d4c8da940aaf2fb634bf1",
-          "action": "student_profile.read",
-          "actor_id": "dev-teacher",
-          "resource_type": "student",
-          "resource_id": "pilot-student",
-          "success": true,
-          "created_at": "2026-08-13T09:27:27.197137+00:00"
-        },
-        {
-          "id": "cb46be363bec4ef887b8b0658df028b1",
-          "action": "student_profile.read",
-          "actor_id": "dev-teacher",
-          "resource_type": "student",
-          "resource_id": "pilot-student",
-          "success": true,
-          "created_at": "2026-08-13T09:27:27.183862+00:00"
-        },
-        {
-          "id": "e9421358632344fb8b51d44e89371c70",
-          "action": "tool.allowed",
-          "actor_id": null,
-          "resource_type": "tool",
-          "resource_id": "get_textbook_lesson",
-          "success": true,
-          "created_at": "2026-08-13T09:26:58.835899+00:00",
-          "trace_id": "06b413d4110943249a0bf966087ef973"
-        },
-        {
-          "id": "5e25e35609884d4494c77c60e4d8adb6",
-          "action": "tool.failed",
-          "actor_id": null,
-          "resource_type": "tool",
-          "resource_id": "start_timeline_game",
-          "success": false,
-          "created_at": "2026-08-13T09:26:58.831280+00:00",
-          "trace_id": "8d4e5e9750294450a2f17ec87b31f698"
-        },
-        {
-          "id": "ce8c8f5f1c66461c87abf7a91535771d",
-          "action": "tool.allowed",
-          "actor_id": null,
-          "resource_type": "tool",
-          "resource_id": "recommend_character",
-          "success": true,
-          "created_at": "2026-08-13T09:26:58.826358+00:00",
-          "trace_id": "b61fb2038e5e48969f00b9694c1e75bf"
-        },
-        {
-          "id": "9d432cf2e7a1446ab954040974bbd81f",
-          "action": "tool.failed",
-          "actor_id": null,
-          "resource_type": "tool",
-          "resource_id": "generate_quiz",
-          "success": false,
-          "created_at": "2026-08-13T09:26:57.917748+00:00",
-          "trace_id": "3cf4660f2482456f99972456a213545a"
-        },
-        {
-          "id": "ddcd0fd0def342aa9842e2fdf9ba50e2",
+          "id": "36137d125a464681a111ae4452c6c241",
           "action": "tool.allowed",
           "actor_id": null,
           "resource_type": "tool",
           "resource_id": "search_history_knowledge",
           "success": true,
-          "created_at": "2026-08-13T09:26:57.817229+00:00",
-          "trace_id": "8e907cfba52d4e1d82c815527586a6d0"
+          "created_at": "2026-08-14T05:57:29.076973+00:00"
+        },
+        {
+          "id": "243b719b3e0a418e918c8b5928c2b9c5",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:29.008526+00:00"
+        },
+        {
+          "id": "3dde5cd5704f4fbfa1d384a2929ac732",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.864000+00:00"
+        },
+        {
+          "id": "3e6c4da9e1754d0eab75fb8a4c91e74c",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.802413+00:00"
+        },
+        {
+          "id": "b2637ba7a09b415ba4a69bc8e826e399",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.739593+00:00"
+        },
+        {
+          "id": "b912b7e159f9419ab7915904f0a8d5ef",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.682293+00:00"
+        },
+        {
+          "id": "e61662b39a0a4047ba0d5ec2624425be",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.548655+00:00"
+        },
+        {
+          "id": "26c6b89fdc8948b581916611ba0d49c7",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.488926+00:00"
+        },
+        {
+          "id": "9d5cb1728704490b97cbf9bfa18ae8ee",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.422298+00:00"
+        },
+        {
+          "id": "214a7d126ac549c19f2fc6214786e3ee",
+          "action": "tool.allowed",
+          "actor_id": null,
+          "resource_type": "tool",
+          "resource_id": "search_history_knowledge",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.364690+00:00"
         }
       ]
     },
     "learning": {
-      "total": 0,
-      "success": 0,
-      "failure": 0,
+      "total": 100,
+      "success": 91,
+      "failure": 8,
+      "unexpected_failure": 8,
+      "expected_control": 1,
+      "user_denied": 0,
+      "degraded": 0,
       "unknown": 0,
-      "success_rate": 0.0,
-      "by_feature": {},
-      "by_event_type": {},
-      "recent": []
+      "effective_total": 99,
+      "success_rate": 0.919,
+      "by_feature": {
+        "learning_assistant": 89,
+        "auto_tutor": 11
+      },
+      "by_event_type": {
+        "tool_result": 23,
+        "answer_completed": 22,
+        "intent_detected": 22,
+        "question_asked": 22,
+        "auto_tutor_step": 6,
+        "auto_tutor_exit_ticket": 5
+      },
+      "recent": [
+        {
+          "id": "cd2239a1cc7b44c999d187a1a26ef40a",
+          "student_id": "traj-exit-wrong",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_exit_ticket",
+          "success": false,
+          "created_at": "2026-08-14T05:57:29.079468+00:00"
+        },
+        {
+          "id": "80c3349130e54b0db30b6a039ab7d3de",
+          "student_id": "traj-exit-wrong",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_step",
+          "success": true,
+          "created_at": "2026-08-14T05:57:29.077939+00:00"
+        },
+        {
+          "id": "4d24822f2175456686e56f71043fa52a",
+          "student_id": "traj-exit-event",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_exit_ticket",
+          "success": true,
+          "created_at": "2026-08-14T05:57:29.010410+00:00"
+        },
+        {
+          "id": "c601be58448c43a5b520e164de6b16a4",
+          "student_id": "traj-exit-event",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_step",
+          "success": true,
+          "created_at": "2026-08-14T05:57:29.009501+00:00"
+        },
+        {
+          "id": "62a167c3c531415b82a69e0d2ffc0ae8",
+          "student_id": "traj-exit-finalize",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_exit_ticket",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.866624+00:00"
+        },
+        {
+          "id": "cf30cd29c0564d2f8652b3f57a0ee497",
+          "student_id": "traj-exit-finalize",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_step",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.865608+00:00"
+        },
+        {
+          "id": "880eff6496c345fbb8afefa872ac53a2",
+          "student_id": "traj-closure",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_exit_ticket",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.224507+00:00"
+        },
+        {
+          "id": "12bf222eaf2049c79df87a6cf8ee5b24",
+          "student_id": "traj-closure",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_step",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.223642+00:00"
+        },
+        {
+          "id": "9c62946b519b49b1b1e4b8ff8cf2072b",
+          "student_id": "traj-closure",
+          "feature": "auto_tutor",
+          "event_type": "auto_tutor_step",
+          "success": true,
+          "created_at": "2026-08-14T05:57:28.222135+00:00"
+        },
+        {
+          "id": "1d870ead5fcd4f3f9f17e6efe5bf67f1",
+          "student_id": "rollback-eval",
+          "feature": "learning_assistant",
+          "event_type": "answer_completed",
+          "success": true,
+          "created_at": "2026-08-14T05:57:23.881915+00:00",
+          "trace_id": "419c61d74bb141b09e1f45fcfe3f326c"
+        }
+      ]
     },
     "learning_assistant": {
       "feedback_total": 0,
@@ -301,33 +447,48 @@
       "unresolved": 0,
       "resolution_rate": 0.0,
       "unresolved_rate": 0.0,
-      "question_total": 0,
+      "question_total": 22,
       "followup_total": 0,
       "followup_rate": 0.0,
       "context_feedback_total": 0,
       "context_resolved": 0,
       "context_resolution_rate": 0.0,
-      "answer_total": 0,
-      "answer_fallback_total": 0,
-      "answer_fallback_rate": 0.0,
-      "answer_real_llm_total": 0,
-      "answer_real_llm_rate": 0.0,
-      "routing_total": 0,
+      "answer_total": 22,
+      "answer_fallback_total": 3,
+      "answer_fallback_rate": 0.136,
+      "answer_real_llm_total": 10,
+      "answer_real_llm_rate": 0.455,
+      "routing_total": 22,
       "semantic_routing_total": 0,
       "semantic_routing_rate": 0.0,
+      "rollout_by_mode": {
+        "control": 22
+      },
+      "semantic_active_total": 0,
+      "semantic_active_rate": 0.0,
+      "shadow_total": 0,
+      "shadow_rate": 0.0,
+      "shadow_comparison_total": 0,
+      "shadow_agreement_rate": 0.0,
+      "planner_active_total": 8,
+      "planner_active_rate": 0.364,
       "clarification_total": 0,
       "clarification_rate": 0.0,
       "clarification_resolved_total": 0,
       "clarification_resolution_rate": 0.0,
       "routing_feedback_total": 0,
       "routing_accuracy": 0.0,
-      "multi_intent_total": 0,
-      "multi_intent_rate": 0.0,
-      "planned_answer_total": 0,
-      "plan_completed_total": 0,
-      "plan_completion_rate": 0.0,
+      "multi_intent_total": 9,
+      "multi_intent_rate": 0.409,
+      "planned_answer_total": 22,
+      "plan_completed_total": 18,
+      "plan_completion_rate": 0.818,
       "partial_completion_total": 0,
       "partial_completion_rate": 0.0,
+      "verification_required_total": 16,
+      "verification_verified_total": 15,
+      "verification_failed_total": 1,
+      "verification_pass_rate": 0.938,
       "session_created_total": 0,
       "session_resumed_total": 0,
       "session_resume_rate": 0.0,
@@ -336,13 +497,52 @@
       "autotutor_return_rate": 0.0
     },
     "tools": {
-      "total": 0,
-      "failure": 0,
-      "success_rate": 0.0,
-      "by_tool_name": {},
-      "by_success": {},
-      "by_failure": {},
-      "failures": []
+      "total": 23,
+      "failure": 3,
+      "success_rate": 0.87,
+      "by_tool_name": {
+        "search_history_knowledge": 14,
+        "get_textbook_lesson": 2,
+        "start_timeline_game": 2,
+        "delete_demo_memory": 2,
+        "recommend_character": 1,
+        "generate_quiz": 1,
+        "suggest_review_plan": 1
+      },
+      "by_success": {
+        "search_history_knowledge": 14,
+        "get_textbook_lesson": 2,
+        "recommend_character": 1,
+        "suggest_review_plan": 1,
+        "delete_demo_memory": 1
+      },
+      "by_failure": {
+        "start_timeline_game": 2,
+        "generate_quiz": 1
+      },
+      "failures": [
+        {
+          "tool_name": "start_timeline_game",
+          "event_type": "tool_result",
+          "student_id": "trajectory-eval",
+          "trace_id": "11e217e13be343908c5b122cc48bcb82",
+          "created_at": "2026-08-14T05:57:23.830562+00:00"
+        },
+        {
+          "tool_name": "generate_quiz",
+          "event_type": "tool_result",
+          "student_id": "trajectory-eval",
+          "trace_id": "79fd957a548d4c618761ce625633ea41",
+          "created_at": "2026-08-14T05:57:22.944592+00:00"
+        },
+        {
+          "tool_name": "start_timeline_game",
+          "event_type": "tool_result",
+          "student_id": "eval-student",
+          "trace_id": "130627697d0c45d4885b1953bf073807",
+          "created_at": "2026-08-14T05:56:58.328811+00:00"
+        }
+      ]
     },
     "production": {
       "trace_window": 0,
@@ -381,291 +581,432 @@
     "traces": {
       "recent": [
         {
-          "trace_id": "60dc08771c364997926d11fe4818b646",
-          "audit_count": 1,
-          "learning_count": 0,
+          "trace_id": "419c61d74bb141b09e1f45fcfe3f326c",
+          "audit_count": 0,
+          "learning_count": 4,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
-          "actions": [
-            "learning_assistant.chat"
+          "actions": [],
+          "features": [
+            "learning_assistant"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:28:05.380075+00:00"
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.881915+00:00"
         },
         {
-          "trace_id": "440ee4582f824353b223cb87a40c0715",
-          "audit_count": 2,
-          "learning_count": 0,
+          "trace_id": "c4742feb599f4400a71437b2b9bc511b",
+          "audit_count": 0,
+          "learning_count": 5,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.877956+00:00"
+        },
+        {
+          "trace_id": "c4df68b96181416ca7981f99c41237d2",
+          "audit_count": 0,
+          "learning_count": 4,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.873565+00:00"
+        },
+        {
+          "trace_id": "1fe38deb041e4b079d71fb6774b73bf8",
+          "audit_count": 0,
+          "learning_count": 4,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.869790+00:00"
+        },
+        {
+          "trace_id": "eaba7e6aa30146e59f231f7660a349f7",
+          "audit_count": 0,
+          "learning_count": 4,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.866013+00:00"
+        },
+        {
+          "trace_id": "728e754650634a908fcd8dbe03873365",
+          "audit_count": 0,
+          "learning_count": 4,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.861946+00:00"
+        },
+        {
+          "trace_id": "a1a27a09525a4fc7b40115218c8a0f9e",
+          "audit_count": 0,
+          "learning_count": 4,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.858004+00:00"
+        },
+        {
+          "trace_id": "ab5e83bacbf34f23aaadd683ead5128c",
+          "audit_count": 0,
+          "learning_count": 4,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.854056+00:00"
+        },
+        {
+          "trace_id": "283ac34eaa454f479abe863f61b25d8b",
+          "audit_count": 0,
+          "learning_count": 4,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.849877+00:00"
+        },
+        {
+          "trace_id": "3dc8721c381a4e1eb3a0acbc9033eec5",
+          "audit_count": 0,
+          "learning_count": 4,
+          "status": "ok",
+          "failure_count": 0,
+          "error_summary": "",
+          "actions": [],
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:23.846059+00:00"
+        },
+        {
+          "trace_id": "04b400a0e4d148258ebb0bd03a9909a4",
+          "audit_count": 1,
+          "learning_count": 4,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
           "actions": [
-            "learning_assistant.chat",
             "tool.allowed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:27:29.783228+00:00"
-        },
-        {
-          "trace_id": "06b413d4110943249a0bf966087ef973",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "ok",
-          "failure_count": 0,
-          "error_summary": "",
-          "actions": [
-            "tool.allowed"
+          "features": [
+            "learning_assistant"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:58.835899+00:00"
+          "tools": [
+            "get_textbook_lesson"
+          ],
+          "latest_at": "2026-08-14T05:57:23.837064+00:00"
         },
         {
-          "trace_id": "8d4e5e9750294450a2f17ec87b31f698",
+          "trace_id": "11e217e13be343908c5b122cc48bcb82",
           "audit_count": 1,
-          "learning_count": 0,
+          "learning_count": 4,
           "status": "failed",
-          "failure_count": 1,
-          "error_summary": "tool.failed",
+          "failure_count": 3,
+          "error_summary": "tool.failed; answer_completed; tool_failed",
           "actions": [
             "tool.failed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:58.831280+00:00"
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "start_timeline_game"
+          ],
+          "latest_at": "2026-08-14T05:57:23.832757+00:00"
         },
         {
-          "trace_id": "b61fb2038e5e48969f00b9694c1e75bf",
+          "trace_id": "972be5b71c1243828e1299410110b7d7",
           "audit_count": 1,
-          "learning_count": 0,
+          "learning_count": 4,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
           "actions": [
             "tool.allowed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:58.826358+00:00"
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "recommend_character"
+          ],
+          "latest_at": "2026-08-14T05:57:23.828299+00:00"
         },
         {
-          "trace_id": "3cf4660f2482456f99972456a213545a",
+          "trace_id": "79fd957a548d4c618761ce625633ea41",
           "audit_count": 1,
-          "learning_count": 0,
+          "learning_count": 4,
           "status": "failed",
-          "failure_count": 1,
-          "error_summary": "tool.failed",
+          "failure_count": 3,
+          "error_summary": "tool.failed; answer_completed; tool_failed",
           "actions": [
             "tool.failed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:57.917748+00:00"
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "generate_quiz"
+          ],
+          "latest_at": "2026-08-14T05:57:22.947110+00:00"
         },
         {
-          "trace_id": "8e907cfba52d4e1d82c815527586a6d0",
+          "trace_id": "0301fa8cb4a8466ab33ec77c89b9303b",
           "audit_count": 1,
-          "learning_count": 0,
+          "learning_count": 4,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
           "actions": [
             "tool.allowed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:57.817229+00:00"
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:57:22.830715+00:00"
         },
         {
-          "trace_id": "5dba69546a9f4412a962cb9de965706f",
+          "trace_id": "6aa62bfeb9004ab9ac10782fe8cbd312",
           "audit_count": 1,
-          "learning_count": 0,
+          "learning_count": 4,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
           "actions": [
             "tool.allowed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:10.087321+00:00"
-        },
-        {
-          "trace_id": "0208a005933b46da9867ff4308c595d8",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "failed",
-          "failure_count": 1,
-          "error_summary": "tool.failed",
-          "actions": [
-            "tool.failed"
+          "features": [
+            "learning_assistant"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:10.083758+00:00"
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:56:58.803806+00:00"
         },
         {
-          "trace_id": "a52fd9c7a10b46e5bd6f02d59ae4b077",
+          "trace_id": "7358533d66414d368e9442f9ecd5cbea",
           "audit_count": 1,
-          "learning_count": 0,
+          "learning_count": 4,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
           "actions": [
             "tool.allowed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:10.078681+00:00"
-        },
-        {
-          "trace_id": "26bd848d7ede44c19d1315c66ee5eaf3",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "failed",
-          "failure_count": 1,
-          "error_summary": "tool.failed",
-          "actions": [
-            "tool.failed"
+          "features": [
+            "learning_assistant"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:09.210281+00:00"
+          "tools": [
+            "suggest_review_plan"
+          ],
+          "latest_at": "2026-08-14T05:56:58.653514+00:00"
         },
         {
-          "trace_id": "5d96ba5da60f4c5797273c4e4802de64",
+          "trace_id": "7e4d15883a63445b895cef5c7cbbb588",
           "audit_count": 1,
-          "learning_count": 0,
+          "learning_count": 4,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
           "actions": [
             "tool.allowed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:26:09.111750+00:00"
+          "features": [
+            "learning_assistant"
+          ],
+          "tools": [
+            "search_history_knowledge"
+          ],
+          "latest_at": "2026-08-14T05:56:58.648004+00:00"
         },
         {
-          "trace_id": "9196002c932e4edda0148147ad678ebd",
+          "trace_id": "6f3fc3ea174542d3b7235f7a8d7782aa",
           "audit_count": 1,
-          "learning_count": 0,
+          "learning_count": 4,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
           "actions": [
             "tool.allowed"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:25:46.730123+00:00"
-        },
-        {
-          "trace_id": "887fc5d315364b1d98dff211c63d2dd6",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "ok",
-          "failure_count": 0,
-          "error_summary": "",
-          "actions": [
-            "tool.allowed"
+          "features": [
+            "learning_assistant"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:25:46.661160+00:00"
-        },
-        {
-          "trace_id": "69ce292346714fdfbc13b57e243bf21e",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "ok",
-          "failure_count": 0,
-          "error_summary": "",
-          "actions": [
-            "tool.allowed"
+          "tools": [
+            "get_textbook_lesson"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:25:46.657060+00:00"
+          "latest_at": "2026-08-14T05:56:58.568845+00:00"
         },
         {
-          "trace_id": "68ff824b248f4ccab1c3728d62aa5792",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "ok",
-          "failure_count": 0,
-          "error_summary": "",
-          "actions": [
-            "tool.allowed"
-          ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:25:46.499959+00:00"
-        },
-        {
-          "trace_id": "954cb6e0df204ea0a09524fcad46a994",
-          "audit_count": 2,
-          "learning_count": 0,
+          "trace_id": "b746048539a54898a8483b7a8fbca0af",
+          "audit_count": 3,
+          "learning_count": 8,
           "status": "ok",
           "failure_count": 0,
           "error_summary": "",
           "actions": [
             "tool.allowed",
-            "tool.confirmation_confirmed"
-          ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:25:46.403699+00:00"
-        },
-        {
-          "trace_id": "a0fceec0008f49cbbe51e8d0b4679516",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "failed",
-          "failure_count": 1,
-          "error_summary": "tool.confirmation_required",
-          "actions": [
+            "tool.confirmation_confirmed",
             "tool.confirmation_required"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:25:46.399322+00:00"
-        },
-        {
-          "trace_id": "ad9960ea96bc4e5eb78a78a59e068530",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "ok",
-          "failure_count": 0,
-          "error_summary": "",
-          "actions": [
-            "tool.allowed"
+          "features": [
+            "learning_assistant"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:25:46.397636+00:00"
-        },
-        {
-          "trace_id": "65c8905590b54ea09e14e46a2321846e",
-          "audit_count": 1,
-          "learning_count": 0,
-          "status": "ok",
-          "failure_count": 0,
-          "error_summary": "",
-          "actions": [
-            "tool.allowed"
+          "tools": [
+            "delete_demo_memory"
           ],
-          "features": [],
-          "tools": [],
-          "latest_at": "2026-08-13T09:25:46.329831+00:00"
+          "latest_at": "2026-08-14T05:56:58.473134+00:00"
         }
       ]
     }
   },
   "suites": [
+    {
+      "name": "eval_run_evidence_smoke",
+      "label": "Eval Run 证据与封印 Smoke",
+      "category": "ops",
+      "kind": "smoke",
+      "priority": "p0",
+      "status": "passed",
+      "ok": true,
+      "returncode": 0,
+      "duration_sec": 0.042,
+      "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/eval_run_evidence_smoke.py",
+      "passed_cases": 0,
+      "failed_cases_count": 0,
+      "skipped_cases_count": 0,
+      "total_cases": 0,
+      "metrics": {
+        "run_id_uniqueness_rate": {
+          "value": 1.0
+        },
+        "run_scoped_llm_evidence_rate": {
+          "value": 1.0
+        },
+        "dirty_revision_rejection_rate": {
+          "value": 1.0
+        },
+        "report_provenance_traceability_rate": {
+          "value": 1.0
+        },
+        "report_privacy_redaction_rate": {
+          "value": 1.0
+        }
+      },
+      "failed_cases": [],
+      "skipped_cases": []
+    },
+    {
+      "name": "answer_groundedness_eval",
+      "label": "回答证据化完成评测",
+      "category": "agent",
+      "kind": "quality",
+      "priority": "p0",
+      "status": "passed",
+      "ok": true,
+      "returncode": 0,
+      "duration_sec": 0.09,
+      "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/answer_groundedness_eval.py",
+      "passed_cases": 9,
+      "failed_cases_count": 0,
+      "skipped_cases_count": 0,
+      "total_cases": 9,
+      "metrics": {
+        "answer_groundedness_eval": {
+          "passed": 9,
+          "total": 9
+        },
+        "grounded_completion_rate": {
+          "passed": 9,
+          "total": 9
+        },
+        "citation_validity_rate": {
+          "value": 1.0
+        },
+        "supported_claim_coverage_rate": {
+          "value": 1.0
+        },
+        "citation_precision_rate": {
+          "value": 1.0
+        },
+        "unsupported_critical_claim_rate": {
+          "value": 0.0
+        },
+        "fabricated_source_rejection_rate": {
+          "value": 1.0
+        },
+        "source_conflict_detection_rate": {
+          "value": 1.0
+        }
+      },
+      "failed_cases": [],
+      "skipped_cases": []
+    },
     {
       "name": "history_character_eval",
       "label": "历史人物对话质量",
@@ -675,7 +1016,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 4.832,
+      "duration_sec": 4.061,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/history_character_eval.py",
       "passed_cases": 9,
       "failed_cases_count": 0,
@@ -725,7 +1066,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.889,
+      "duration_sec": 3.909,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/rag_retrieval_eval.py",
       "passed_cases": 5,
       "failed_cases_count": 0,
@@ -761,7 +1102,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.254,
+      "duration_sec": 3.262,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/rag_groundedness_eval.py",
       "passed_cases": 4,
       "failed_cases_count": 0,
@@ -788,7 +1129,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 4.584,
+      "duration_sec": 4.562,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/textbook_qa_eval.py",
       "passed_cases": 3,
       "failed_cases_count": 0,
@@ -828,7 +1169,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.485,
+      "duration_sec": 3.497,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/game_generation_eval.py",
       "passed_cases": 4,
       "failed_cases_count": 0,
@@ -868,13 +1209,39 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 0.16,
+      "duration_sec": 0.166,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/agent_ops_smoke.py",
       "passed_cases": 0,
       "failed_cases_count": 0,
       "skipped_cases_count": 0,
       "total_cases": 0,
       "metrics": {},
+      "failed_cases": [],
+      "skipped_cases": []
+    },
+    {
+      "name": "agent_ops_scope_smoke",
+      "label": "AgentOps 数据分域 Smoke",
+      "category": "ops",
+      "kind": "smoke",
+      "priority": "p0",
+      "status": "passed",
+      "ok": true,
+      "returncode": 0,
+      "duration_sec": 0.519,
+      "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/agent_ops_scope_smoke.py",
+      "passed_cases": 0,
+      "failed_cases_count": 0,
+      "skipped_cases_count": 0,
+      "total_cases": 0,
+      "metrics": {
+        "scope_isolation_rate": {
+          "value": 1.0
+        },
+        "expected_control_classification_rate": {
+          "value": 1.0
+        }
+      },
       "failed_cases": [],
       "skipped_cases": []
     },
@@ -887,7 +1254,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.612,
+      "duration_sec": 3.603,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/readiness_smoke.py",
       "passed_cases": 4,
       "failed_cases_count": 0,
@@ -911,7 +1278,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.323,
+      "duration_sec": 3.319,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/autotutor_session_recovery_smoke.py",
       "passed_cases": 0,
       "failed_cases_count": 0,
@@ -930,7 +1297,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.437,
+      "duration_sec": 3.337,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/learning_assistant_multiturn_smoke.py",
       "passed_cases": 0,
       "failed_cases_count": 0,
@@ -949,7 +1316,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.821,
+      "duration_sec": 3.42,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/autotutor_question_handoff_smoke.py",
       "passed_cases": 0,
       "failed_cases_count": 0,
@@ -968,7 +1335,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 4.539,
+      "duration_sec": 4.528,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/learning_assistant_smoke.py",
       "passed_cases": 10,
       "failed_cases_count": 0,
@@ -978,6 +1345,38 @@
         "learning_assistant_smoke": {
           "passed": 10,
           "total": 10
+        }
+      },
+      "failed_cases": [],
+      "skipped_cases": []
+    },
+    {
+      "name": "learning_assistant_rollout_smoke",
+      "label": "学习助手稳定灰度 Smoke",
+      "category": "agent",
+      "kind": "smoke",
+      "priority": "p0",
+      "status": "passed",
+      "ok": true,
+      "returncode": 0,
+      "duration_sec": 0.184,
+      "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/learning_assistant_rollout_smoke.py",
+      "passed_cases": 0,
+      "failed_cases_count": 0,
+      "skipped_cases_count": 0,
+      "total_cases": 0,
+      "metrics": {
+        "stable_bucket_rate": {
+          "value": 1.0
+        },
+        "rollout_boundary_rate": {
+          "value": 1.0
+        },
+        "rollout_safety_override_rate": {
+          "value": 1.0
+        },
+        "planner_explain_then_quiz_only_rate": {
+          "value": 1.0
         }
       },
       "failed_cases": [],
@@ -1040,7 +1439,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 0.301,
+      "duration_sec": 0.305,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/material_rag_smoke.py",
       "passed_cases": 4,
       "failed_cases_count": 0,
@@ -1083,7 +1482,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.094,
+      "duration_sec": 3.209,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/student_profile_smoke.py",
       "passed_cases": 6,
       "failed_cases_count": 0,
@@ -1107,7 +1506,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 0.293,
+      "duration_sec": 0.311,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/homework_grading_smoke.py",
       "passed_cases": 3,
       "failed_cases_count": 0,
@@ -1131,7 +1530,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 0.151,
+      "duration_sec": 0.156,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/weakpoints_smoke.py",
       "passed_cases": 8,
       "failed_cases_count": 0,
@@ -1179,7 +1578,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.318,
+      "duration_sec": 3.435,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/learning_closure_smoke.py",
       "passed_cases": 4,
       "failed_cases_count": 0,
@@ -1203,7 +1602,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.36,
+      "duration_sec": 3.591,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/teacher_features_smoke.py",
       "passed_cases": 6,
       "failed_cases_count": 0,
@@ -1227,7 +1626,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 0.149,
+      "duration_sec": 0.165,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/review_system_smoke.py",
       "passed_cases": 6,
       "failed_cases_count": 0,
@@ -1251,7 +1650,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.178,
+      "duration_sec": 3.728,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/tool_registry_smoke.py",
       "passed_cases": 13,
       "failed_cases_count": 0,
@@ -1279,7 +1678,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 0.028,
+      "duration_sec": 0.029,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/guardrails_smoke.py",
       "passed_cases": 14,
       "failed_cases_count": 0,
@@ -1306,7 +1705,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.056,
+      "duration_sec": 3.746,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/agent_safety_eval.py",
       "passed_cases": 5,
       "failed_cases_count": 0,
@@ -1333,7 +1732,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 1.138,
+      "duration_sec": 1.159,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/trace_smoke.py",
       "passed_cases": 6,
       "failed_cases_count": 0,
@@ -1357,7 +1756,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 4.117,
+      "duration_sec": 4.912,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/trajectory_eval.py",
       "passed_cases": 5,
       "failed_cases_count": 0,
@@ -1402,7 +1801,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 4.557,
+      "duration_sec": 5.188,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/auto_tutor_trajectory_eval.py",
       "passed_cases": 11,
       "failed_cases_count": 0,
@@ -1429,7 +1828,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.003,
+      "duration_sec": 3.134,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/autotutor_teaching_quality_eval.py",
       "passed_cases": 5,
       "failed_cases_count": 0,
@@ -1456,7 +1855,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 0.397,
+      "duration_sec": 0.415,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/debate_multi_agent_smoke.py",
       "passed_cases": 2,
       "failed_cases_count": 0,
@@ -1483,7 +1882,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 2.837,
+      "duration_sec": 2.871,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/mcp_client_smoke.py",
       "passed_cases": 0,
       "failed_cases_count": 0,
@@ -1502,7 +1901,7 @@
       "status": "passed",
       "ok": true,
       "returncode": 0,
-      "duration_sec": 3.309,
+      "duration_sec": 3.72,
       "command": "/Users/cengjiguang/.local/python3.12/bin/python3 /Users/cengjiguang/Desktop/work/edu-agent-platform/eval/agent_job_smoke.py",
       "passed_cases": 0,
       "failed_cases_count": 0,

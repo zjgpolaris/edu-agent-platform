@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from collections import defaultdict
@@ -65,10 +66,20 @@ class TraceStore:
         with self._lock:
             return self._traces.get(trace_id, [])
 
-    def list_recent_traces(self, limit: int = 20) -> list[dict]:
+    def list_recent_traces(self, limit: int = 20, *, data_scope: str | None = None) -> list[dict]:
         """Return recent traces with their in-memory events."""
         with self._lock:
-            ordered = sorted(self._timestamps.items(), key=lambda item: item[1], reverse=True)[: max(1, int(limit))]
+            ordered = sorted(self._timestamps.items(), key=lambda item: item[1], reverse=True)
+            if data_scope:
+                normalized_scope = _normalize_data_scope(data_scope)
+                ordered = [
+                    item for item in ordered
+                    if any(
+                        _normalize_data_scope((event.get("metadata") or {}).get("data_scope")) == normalized_scope
+                        for event in self._traces.get(item[0], [])
+                    )
+                ]
+            ordered = ordered[: max(1, int(limit))]
             return [
                 {
                     "trace_id": trace_id,
@@ -91,6 +102,13 @@ class TraceStore:
 
 # Global trace store instance
 _trace_store = TraceStore()
+
+
+def _normalize_data_scope(value: str | None) -> str:
+    normalized = (value or "runtime").strip().lower()
+    if normalized == "demo_seed":
+        normalized = "demo"
+    return normalized if normalized in {"runtime", "eval", "demo"} else "runtime"
 
 
 def get_trace_store() -> TraceStore:
@@ -127,6 +145,11 @@ def emit_trace_event(
         logger.warning("emit_trace_event called without trace_id")
         return
 
+    safe_metadata = dict(metadata or {})
+    safe_metadata.setdefault("data_scope", _normalize_data_scope(os.getenv("EDU_AGENT_DATA_SCOPE", "runtime")))
+    eval_run_id = os.getenv("EDU_AGENT_EVAL_RUN_ID")
+    if eval_run_id:
+        safe_metadata.setdefault("eval_run_id", eval_run_id[:96])
     event = TraceEvent(
         trace_id=trace_id,
         agent_name=agent_name,
@@ -134,7 +157,7 @@ def emit_trace_event(
         event_type=event_type,
         status=status,
         latency_ms=latency_ms,
-        metadata=metadata,
+        metadata=safe_metadata,
     )
     _trace_store.add_event(event)
 

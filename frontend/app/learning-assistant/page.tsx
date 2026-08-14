@@ -29,6 +29,8 @@ type ProfileContext = {
 };
 type RoutingEvidence = { mode?: string; task_count?: number; reason_code?: string; missing_slots?: string[] };
 type PlanSummary = { completed_steps?: number; total_steps?: number; partial_reason?: string | null; failed_step?: string | null };
+type VerificationSummary = { required?: boolean; status?: string; completion_allowed?: boolean; source_count?: number; citation_count?: number; unsupported_claim_count?: number; reason_codes?: string[] };
+type RolloutSummary = { route_mode?: string; planner_mode?: string; bucket?: number; semantic_percent_bps?: number; planner_percent_bps?: number; reason_code?: string; config_version?: string };
 type Message = {
   id: string;
   persistedId?: string;
@@ -53,6 +55,8 @@ type Message = {
     routing?: RoutingEvidence;
     plan_summary?: PlanSummary;
     completion_status?: string;
+    verification_summary?: VerificationSummary;
+    rollout_summary?: RolloutSummary;
   };
 };
 type AssistantSession = {
@@ -896,6 +900,15 @@ function LearningAssistantContent() {
         setStatus("需要补充学习范围");
         return;
       }
+      if (event === "verification_start") {
+        setStatus(data.required ? "正在核验回答依据" : "正在完成回答");
+        return;
+      }
+      if (event === "verification_result") {
+        const verificationStatus = typeof data.status === "string" ? data.status : "failed";
+        setStatus(verificationStatus === "verified" ? "回答依据已核验" : verificationStatus === "not_required" ? "回答已生成" : "回答依据不足");
+        return;
+      }
       if (event === "tool_start") {
         const toolName = typeof data.tool_name === "string" ? data.tool_name : "tool";
         setStatus(`正在调用${toolLabel(toolName)}`);
@@ -960,6 +973,8 @@ function LearningAssistantContent() {
             routing: data.routing && typeof data.routing === "object" ? data.routing as RoutingEvidence : undefined,
             plan_summary: data.plan_summary && typeof data.plan_summary === "object" ? data.plan_summary as PlanSummary : undefined,
             completion_status: typeof data.completion_status === "string" ? data.completion_status : undefined,
+            verification_summary: data.verification_summary && typeof data.verification_summary === "object" ? data.verification_summary as VerificationSummary : undefined,
+            rollout_summary: data.rollout_summary && typeof data.rollout_summary === "object" ? data.rollout_summary as RolloutSummary : undefined,
           },
         }));
         const completionStatus = typeof data.completion_status === "string" ? data.completion_status : "completed";
@@ -1290,8 +1305,10 @@ function LearningAssistantContent() {
                     {item.evidence?.history_messages ? <p>结合了最近 {item.evidence.history_messages} 条对话</p> : null}
                     {item.evidence?.used_memory_count ? <p>结合了 {item.evidence.used_memory_count} 条近期学习记忆</p> : null}
                     {item.evidence?.generation_mode === "fallback" ? <p>本回答使用了稳定降级模式</p> : null}
+                    {item.evidence?.verification_summary?.status === "verified" ? <p>证据核验：已通过 · {item.evidence.verification_summary.source_count || 0} 个来源 · {item.evidence.verification_summary.citation_count || 0} 条引用映射</p> : null}
+                    {item.evidence?.verification_summary?.status === "partial" ? <p>证据核验：来源存在冲突或覆盖不足，已按部分完成处理</p> : null}
+                    {item.evidence?.verification_summary?.status === "failed" ? <p>证据核验：依据不足，请缩小问题范围后重试</p> : null}
                     {item.intent && <p>回答方式：{intentLabels[item.intent] || item.intent}</p>}
-                    {item.routeMode && <p>路由方式：{item.routeMode}</p>}
                     {item.evidence?.plan_summary?.total_steps ? <p>计划完成：{item.evidence.plan_summary.completed_steps || 0}/{item.evidence.plan_summary.total_steps}</p> : null}
                     {(item.evidence?.tool_names?.length || item.tools?.length) ? <p>学习能力：{(item.evidence?.tool_names || item.tools?.map((tool) => tool.tool_name) || []).map(toolLabel).join("、")}</p> : null}
                   </div>

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -11,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypeAlias
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
@@ -46,17 +49,21 @@ EXTERNAL_QUOTA_ERROR_MARKERS = (
 )
 
 CORE_SUITES = [
+    "eval_run_evidence_smoke",
+    "answer_groundedness_eval",
     "history_character_eval",
     "rag_retrieval_eval",
     "rag_groundedness_eval",
     "textbook_qa_eval",
     "game_generation_eval",
     "agent_ops_smoke",
+    "agent_ops_scope_smoke",
     "readiness_smoke",
     "autotutor_session_recovery_smoke",
     "learning_assistant_multiturn_smoke",
     "autotutor_question_handoff_smoke",
     "learning_assistant_smoke",
+    "learning_assistant_rollout_smoke",
     "intent_accuracy_eval",
     "material_rag_smoke",
     "release_gate_smoke",
@@ -79,8 +86,11 @@ CORE_SUITES = [
     "agent_job_smoke",
 ]
 QUICK_SUITES = [
+    "eval_run_evidence_smoke",
+    "answer_groundedness_eval",
     # Offline-first: these run without LLM/embed and always produce metrics
     "agent_ops_smoke",
+    "agent_ops_scope_smoke",
     "readiness_smoke",
     "autotutor_session_recovery_smoke",
     "learning_assistant_multiturn_smoke",
@@ -105,12 +115,17 @@ QUICK_SUITES = [
     "textbook_trace_smoke",
     "material_rag_smoke",
     "learning_assistant_smoke",
+    "learning_assistant_rollout_smoke",
 ]
 SMOKE_SUITES = [
+    "eval_run_evidence_smoke",
+    "answer_groundedness_eval",
     "agent_ops_smoke",
+    "agent_ops_scope_smoke",
     "autotutor_session_recovery_smoke",
     "history_character_smoke",
     "learning_assistant_smoke",
+    "learning_assistant_rollout_smoke",
     "material_rag_smoke",
     "rag_inspector_smoke",
     "release_gate_smoke",
@@ -154,7 +169,10 @@ SMOKE_SUITES = [
     "agent_job_smoke",
 ]
 SUITE_FILES = {
+    "eval_run_evidence_smoke": EVAL_DIR / "eval_run_evidence_smoke.py",
+    "answer_groundedness_eval": EVAL_DIR / "answer_groundedness_eval.py",
     "agent_ops_smoke": EVAL_DIR / "agent_ops_smoke.py",
+    "agent_ops_scope_smoke": EVAL_DIR / "agent_ops_scope_smoke.py",
     "autotutor_session_recovery_smoke": EVAL_DIR / "autotutor_session_recovery_smoke.py",
     "learning_assistant_multiturn_smoke": EVAL_DIR / "learning_assistant_multiturn_smoke.py",
     "autotutor_question_handoff_smoke": EVAL_DIR / "autotutor_question_handoff_smoke.py",
@@ -168,6 +186,10 @@ SUITE_FILES = {
     "textbook_trace_smoke": EVAL_DIR / "textbook_trace_smoke.py",
     "game_generation_eval": EVAL_DIR / "game_generation_eval.py",
     "learning_assistant_smoke": EVAL_DIR / "learning_assistant_smoke.py",
+    "learning_assistant_rollout_smoke": EVAL_DIR / "learning_assistant_rollout_smoke.py",
+    "learning_assistant_blind_eval": EVAL_DIR / "learning_assistant_blind_eval.py",
+    "learning_assistant_semantic_router_eval": EVAL_DIR / "learning_assistant_semantic_router_eval.py",
+    "learning_assistant_external_ood_eval": EVAL_DIR / "learning_assistant_external_ood_eval.py",
     "intent_accuracy_eval": EVAL_DIR / "intent_accuracy_eval.py",
     "material_rag_smoke": EVAL_DIR / "material_rag_smoke.py",
     "student_profile_smoke": EVAL_DIR / "student_profile_smoke.py",
@@ -225,11 +247,29 @@ for _p in sorted(EVAL_DIR.glob("*_smoke.py")) + sorted(EVAL_DIR.glob("*_eval.py"
             SMOKE_SUITES.append(_key)
 
 SUITE_METADATA: dict[str, dict[str, str]] = {
+    "eval_run_evidence_smoke": {
+        "label": "Eval Run 证据与封印 Smoke",
+        "category": "ops",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "answer_groundedness_eval": {
+        "label": "回答证据化完成评测",
+        "category": "agent",
+        "kind": "quality",
+        "priority": "p0",
+    },
     "agent_ops_smoke": {
         "label": "AgentOps 聚合 Smoke",
         "category": "ops",
         "kind": "smoke",
         "priority": "p1",
+    },
+    "agent_ops_scope_smoke": {
+        "label": "AgentOps 数据分域 Smoke",
+        "category": "ops",
+        "kind": "smoke",
+        "priority": "p0",
     },
     "autotutor_session_recovery_smoke": {
         "label": "AutoTutor 会话恢复 Smoke",
@@ -308,6 +348,30 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "category": "tools",
         "kind": "smoke",
         "priority": "p0",
+    },
+    "learning_assistant_rollout_smoke": {
+        "label": "学习助手稳定灰度 Smoke",
+        "category": "agent",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "learning_assistant_blind_eval": {
+        "label": "学习助手私有盲测",
+        "category": "agent",
+        "kind": "quality",
+        "priority": "p0",
+    },
+    "learning_assistant_semantic_router_eval": {
+        "label": "学习助手真实语义路由评测",
+        "category": "agent",
+        "kind": "quality",
+        "priority": "p0",
+    },
+    "learning_assistant_external_ood_eval": {
+        "label": "学习助手外部真实学生 OOD 评测",
+        "category": "agent",
+        "kind": "quality",
+        "priority": "p1",
     },
     "material_rag_smoke": {
         "label": "材料 RAG Smoke",
@@ -622,6 +686,34 @@ def llm_judge_answer(case: dict, answer: str) -> dict:
         return {"factual_accuracy": 0, "educational_value": 0, "hallucination_risk": 5, "comment": "评审失败"}
 
 
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b((?:[a-z0-9_.-]*)(?:api[_-]?key|auth[_-]?token|access[_-]?token|password|client[_-]?secret))"
+    r"(\s*[:=]\s*)([^\s,;\"']+)"
+)
+_BEARER_RE = re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]{8,}")
+_KEY_PREFIX_RE = re.compile(r"\b(?:sk|sk-ant|dashscope)-[A-Za-z0-9_-]{8,}\b")
+_PRIVATE_PROMPT_RE = re.compile(r"(?im)\b(?:private|blind)[_-]?prompt\s*[:=].*$")
+
+
+def redact_sensitive_report_text(value: str) -> str:
+    redacted = _SECRET_ASSIGNMENT_RE.sub(r"\1\2[REDACTED]", str(value or ""))
+    redacted = _BEARER_RE.sub("Bearer [REDACTED]", redacted)
+    redacted = _KEY_PREFIX_RE.sub("[REDACTED_API_KEY]", redacted)
+    return _PRIVATE_PROMPT_RE.sub("PRIVATE_PROMPT=[REDACTED]", redacted)
+
+
+def sanitize_report_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return redact_sensitive_report_text(value)
+    if isinstance(value, list):
+        return [sanitize_report_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [sanitize_report_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): sanitize_report_value(item) for key, item in value.items()}
+    return value
+
+
 @dataclass
 class SuiteResult:
     name: str
@@ -651,6 +743,12 @@ class SuiteResult:
 
     def to_dict(self, *, include_output: bool = False) -> dict[str, Any]:
         metadata = suite_metadata(self.name)
+        private_eval = self.name == "learning_assistant_blind_eval"
+        failed_cases = (
+            [{"name": str(normalize_failed_case(item).get("name") or "private_eval_failure"), "reason": "private_eval_aggregate_only"} for item in self.failed_cases]
+            if private_eval
+            else sanitize_report_value(self.failed_cases)
+        )
         payload: dict[str, Any] = {
             "name": self.name,
             "label": metadata["label"],
@@ -667,14 +765,18 @@ class SuiteResult:
             "skipped_cases_count": self.skipped_cases_count,
             "total_cases": self.total_cases,
             "metrics": self.metrics,
-            "failed_cases": self.failed_cases,
-            "skipped_cases": self.skipped_cases or [],
+            "failed_cases": failed_cases,
+            "skipped_cases": sanitize_report_value(self.skipped_cases or []),
         }
         if self.error:
-            payload["error"] = self.error
+            payload["error"] = "private_eval_failure" if private_eval else redact_sensitive_report_text(self.error)
         if include_output:
-            payload["stdout"] = self.stdout
-            payload["stderr"] = self.stderr
+            if private_eval:
+                payload["stdout"] = "[REDACTED_PRIVATE_EVAL_OUTPUT]"
+                payload["stderr"] = "[REDACTED_PRIVATE_EVAL_OUTPUT]" if self.stderr else ""
+            else:
+                payload["stdout"] = redact_sensitive_report_text(self.stdout)
+                payload["stderr"] = redact_sensitive_report_text(self.stderr)
         return payload
 
 
@@ -753,7 +855,7 @@ def parse_output(stdout: str, stderr: str) -> tuple[int, int, int, dict[str, dic
     return passed, failed, total, metrics, failed_cases, skipped, skipped_cases
 
 
-def run_suite(name: str, *, verbose: bool = False) -> SuiteResult:
+def run_suite(name: str, *, verbose: bool = False, eval_run_id: str | None = None) -> SuiteResult:
     script = SUITE_FILES[name]
     env = os.environ.copy()
     if not env.get("EMBED_MODEL_PATH") and DEFAULT_LOCAL_EMBED_MODEL_PATH.exists():
@@ -763,6 +865,8 @@ def run_suite(name: str, *, verbose: bool = False) -> SuiteResult:
         pythonpath_parts.append(env["PYTHONPATH"])
     env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
     env["EDU_AGENT_DATA_SCOPE"] = "eval"
+    if eval_run_id:
+        env["EDU_AGENT_EVAL_RUN_ID"] = eval_run_id
     if name in OFFLINE_DETERMINISTIC_SUITES:
         env["EDU_AGENT_LLM_DISABLED"] = "1"
         # Keep routing/trajectory checks isolated from a developer's remote
@@ -853,6 +957,12 @@ def selected_suites(args: argparse.Namespace) -> list[str]:
         if unknown:
             raise SystemExit(f"unknown suite: {', '.join(unknown)}")
         return args.suite
+    if args.require_release_seal:
+        return [*CORE_SUITES, "learning_assistant_blind_eval", "learning_assistant_semantic_router_eval"]
+    if args.profile == "blind":
+        return ["learning_assistant_blind_eval"]
+    if args.profile == "real_llm":
+        return ["learning_assistant_semantic_router_eval"]
     return QUICK_SUITES if args.quick else SMOKE_SUITES if args.smoke else CORE_SUITES
 
 
@@ -869,22 +979,26 @@ def print_text_summary(results: list[SuiteResult]) -> None:
 
     total_cases = sum(result.total_cases for result in results)
     passed_cases = sum(result.passed_cases for result in results)
-    failed_suites = [result.name for result in results if not result.ok]
+    failed_suites = [result.name for result in results if result.status == "failed"]
+    skipped_suites = [result.name for result in results if result.status == "skipped"]
+    passed_suites = [result.name for result in results if result.status == "passed"]
     print()
     if total_cases:
         print(f"Total cases: {passed_cases}/{total_cases} passed")
-    print(f"Suites: {len(results) - len(failed_suites)}/{len(results)} passed")
+    print(f"Suites: {len(passed_suites)}/{len(results)} passed")
     if failed_suites:
         print(f"Failed suites: {', '.join(failed_suites)}")
+    if skipped_suites:
+        print(f"Skipped suites: {', '.join(skipped_suites)}")
 
 
-def collect_agent_ops_snapshot(limit: int = 100) -> dict[str, Any]:
+def collect_agent_ops_snapshot(limit: int = 100, *, scope: str = "eval") -> dict[str, Any]:
     try:
         if str(BACKEND) not in sys.path:
             sys.path.insert(0, str(BACKEND))
         from agent_ops import build_agent_ops_summary
 
-        return build_agent_ops_summary(limit=limit)
+        return build_agent_ops_summary(limit=limit, scope=scope)
     except Exception as exc:
         return {"status": "unavailable", "error": str(exc)}
 
@@ -963,6 +1077,56 @@ def source_revision() -> dict[str, Any]:
         return {"commit_sha": None, "short_sha": None, "dirty": None}
 
 
+def new_eval_run_id() -> str:
+    return f"eval_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid4().hex[:12]}"
+
+
+def _dataset_versions(evidence_profile: str) -> dict[str, str]:
+    candidates = {
+        "learning_assistant_cases": EVAL_DIR / "datasets" / "learning_assistant_cases.json",
+        "learning_assistant_reviewed_public_v1": EVAL_DIR / "datasets" / "learning_assistant_reviewed_public_v1.jsonl",
+    }
+    versions: dict[str, str] = {}
+    for name, path in candidates.items():
+        if path.exists():
+            versions[name] = f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()[:16]}"
+    blind_path = os.getenv("EDU_AGENT_BLIND_EVAL_PATH")
+    if blind_path and Path(blind_path).is_file():
+        versions["learning_assistant_blind"] = f"sha256:{hashlib.sha256(Path(blind_path).read_bytes()).hexdigest()[:16]}"
+    elif evidence_profile == "blind":
+        versions["learning_assistant_blind"] = "not_available"
+    external_ood_path = os.getenv("EDU_AGENT_EXTERNAL_OOD_PATH")
+    if external_ood_path and Path(external_ood_path).is_file():
+        versions["eedi_qatd_2k_test"] = f"sha256:{hashlib.sha256(Path(external_ood_path).read_bytes()).hexdigest()[:16]}"
+    return versions
+
+
+def _environment_fingerprint(*, evidence_profile: str, provider: str, model: str) -> str:
+    payload = {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "profile": evidence_profile,
+        "provider": provider,
+        "model": model,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()[:20]}"
+
+
+def _metric_count(result: SuiteResult, names: set[str]) -> int:
+    observed: list[int] = []
+    for name, metric in result.metrics.items():
+        if name not in names or not isinstance(metric, dict):
+            continue
+        if "passed" in metric:
+            observed.append(int(metric.get("passed") or 0))
+        elif "value" in metric:
+            observed.append(int(metric.get("value") or 0))
+    # A suite can emit both a rate and a count for the same calls. Use the
+    # strongest run-local observation rather than summing duplicates.
+    return max(observed, default=0)
+
+
 def report_runtime_status(summary: dict[str, Any]) -> dict[str, Any]:
     current = source_revision()
     generated_at = summary.get("generated_at")
@@ -996,6 +1160,11 @@ def build_json_summary(
     include_output: bool,
     profile: str = "custom",
     require_real_llm: bool = False,
+    require_clean_revision: bool = False,
+    require_release_seal: bool = False,
+    evidence_profile: str = "offline",
+    eval_run_id: str | None = None,
+    started_at: str | None = None,
 ) -> dict[str, Any]:
     failed_suites = [result.name for result in results if not result.ok]
     skipped_suites = [result.name for result in results if result.status == "skipped" or result.skipped_cases_count > 0]
@@ -1016,30 +1185,118 @@ def build_json_summary(
     total_suites = len(results)
     passed_suites = sum(1 for result in results if result.ok and result.name not in skipped_suites)
     duration_sec = round(sum(result.duration_sec for result in results), 3)
-    agent_ops = collect_agent_ops_snapshot()
-    llm_calls = int((((agent_ops.get("production") or {}).get("llm") or {}).get("calls") or 0))
-    llm_case_observations = sum(
-        int(metric.get("passed") or 0)
+    agent_ops = collect_agent_ops_snapshot(scope="eval")
+    observed_llm_calls = sum(
+        _metric_count(result, {"llm_generation_rate", "real_llm_call_rate", "real_llm_calls"})
+        for result in results
+    )
+    fallback_calls = sum(
+        _metric_count(result, {"fallback_call_count", "fallback_calls"})
+        for result in results
+    )
+    provider = os.getenv("LLM_PROVIDER", "unknown").strip().lower() or "unknown"
+    model = os.getenv("LLM_MODEL_QUALITY") or os.getenv("ANTHROPIC_MODEL_QUALITY") or "unknown"
+    llm_p95_values = [
+        float(metric.get("value") or 0)
         for result in results
         for name, metric in result.metrics.items()
-        if name in {"llm_generation_rate", "real_llm_call_rate"} and isinstance(metric, dict)
-    )
-    observed_llm_calls = llm_calls + llm_case_observations
+        if name == "llm_p95_ms" and isinstance(metric, dict) and "value" in metric
+    ]
     generated_at = datetime.now(timezone.utc).isoformat()
+    revision = source_revision()
+    dataset_versions = _dataset_versions(evidence_profile)
+    run_id = eval_run_id or new_eval_run_id()
+    clean_revision = revision.get("dirty") is False
+    commit_matches = bool(revision.get("commit_sha"))
+    base_ok = not failed_suites and not skipped_suites and not not_run_suites
+    result_by_name = {result.name: result for result in results}
+    offline_core_passed = all(
+        name in result_by_name and result_by_name[name].status == "passed"
+        for name in CORE_SUITES
+    )
+    blind_passed = any(
+        result.name == "learning_assistant_blind_eval" and result.status == "passed"
+        for result in results
+    )
+    real_llm_passed = any(
+        result.name == "learning_assistant_semantic_router_eval" and result.status == "passed"
+        for result in results
+    ) and observed_llm_calls > 0
+    required_profiles_passed = []
+    if offline_core_passed:
+        required_profiles_passed.append("offline")
+    if blind_passed:
+        required_profiles_passed.append("blind")
+    if evidence_profile == "real_llm" and real_llm_passed:
+        required_profiles_passed.append("real_llm")
+
+    seal_reasons: list[str] = []
+    if require_release_seal:
+        if not clean_revision:
+            seal_reasons.append("working_tree_dirty")
+        if not commit_matches:
+            seal_reasons.append("source_revision_unavailable")
+        if failed_suites:
+            seal_reasons.append("required_suite_failed")
+        if skipped_suites or not_run_suites:
+            seal_reasons.append("required_suite_incomplete")
+        if "offline" not in required_profiles_passed:
+            seal_reasons.append("offline_core_not_proven")
+        if "blind" not in required_profiles_passed:
+            seal_reasons.append("blind_profile_not_proven")
+        if "real_llm" not in required_profiles_passed:
+            seal_reasons.append("real_llm_profile_not_proven")
+        if observed_llm_calls <= 0:
+            seal_reasons.append("run_scoped_real_llm_not_observed")
+        if provider == "unknown" or model == "unknown":
+            seal_reasons.append("model_provenance_incomplete")
+    release_seal = {
+        "status": ("fail" if seal_reasons else "pass") if require_release_seal else "not_applicable",
+        "reasons": seal_reasons,
+        "commit_matches": commit_matches,
+        "clean_revision": clean_revision,
+        "real_llm_observed": observed_llm_calls > 0,
+        "required_profiles_passed": required_profiles_passed,
+    }
+    requirements_ok = (not require_real_llm or observed_llm_calls > 0) and (not require_clean_revision or clean_revision)
+    seal_ok = not require_release_seal or release_seal["status"] == "pass"
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "failed_case_schema_version": 1,
         "generated_at": generated_at,
         "evaluation_profile": profile,
-        "source_revision": source_revision(),
+        "eval_run": {
+            "run_id": run_id,
+            "profile": evidence_profile,
+            "suite_profile": profile,
+            "started_at": started_at or generated_at,
+            "finished_at": generated_at,
+            "dataset_versions": dataset_versions,
+            "source_revision": revision,
+            "environment_fingerprint": _environment_fingerprint(evidence_profile=evidence_profile, provider=provider, model=model),
+        },
+        "source_revision": revision,
+        "provenance": {
+            "report_commit_sha": revision.get("commit_sha"),
+            "commit_matches_current_head": commit_matches,
+            "provider": provider,
+            "model": model,
+            "dataset_versions": dataset_versions,
+        },
         "report_freshness": {"status": "fresh", "generated_at": generated_at, "stale_after_hours": 168},
         "llm_execution": {
             "status": "observed" if observed_llm_calls else "not_run" if require_real_llm else "not_observed",
             "required": require_real_llm,
             "calls": observed_llm_calls,
+            "run_scoped_calls": observed_llm_calls,
+            "fallback_calls": fallback_calls,
+            "models": {model: observed_llm_calls} if observed_llm_calls and model != "unknown" else {},
+            "provider": provider,
+            "p95_ms": max(llm_p95_values) if llm_p95_values else None,
             "note": "检测到真实 LLM 执行证据" if observed_llm_calls else "本次报告未检测到真实 LLM 执行证据；离线 profile 不把 fallback 等同于真实模型质量",
         },
-        "ok": not failed_suites and not skipped_suites and not not_run_suites and (not require_real_llm or observed_llm_calls > 0),
+        "release_seal": release_seal,
+        "ok": base_ok and requirements_ok and seal_ok,
         "summary": {
             "total": total_cases,
             "passed": passed_cases,
@@ -1069,13 +1326,22 @@ def build_json_summary(
 
 def build_markdown_report(summary: dict[str, Any]) -> str:
     status = "PASS" if summary["ok"] else "FAIL"
+    eval_run = summary.get("eval_run") or {}
+    release_seal = summary.get("release_seal") or {}
+    provenance = summary.get("provenance") or {}
+    dataset_versions = provenance.get("dataset_versions") or {}
     lines = [
         "# EduAgent Eval Report",
         "",
         f"Generated: {summary['generated_at']}",
+        f"Eval run: {eval_run.get('run_id', 'unknown')}",
+        f"Evidence profile: {eval_run.get('profile', 'offline')}",
         f"Profile: {summary.get('evaluation_profile', 'custom')}",
         f"Revision: {(summary.get('source_revision') or {}).get('short_sha') or 'unknown'}{' (dirty)' if (summary.get('source_revision') or {}).get('dirty') else ''}",
         f"LLM execution: {(summary.get('llm_execution') or {}).get('status', 'unknown')} ({(summary.get('llm_execution') or {}).get('calls', 0)} calls)",
+        f"Model provenance: {provenance.get('provider', 'unknown')} / {provenance.get('model', 'unknown')}",
+        f"Dataset versions: {', '.join(f'{name}={version}' for name, version in dataset_versions.items()) or 'None'}",
+        f"Release seal: {release_seal.get('status', 'not_applicable')} ({', '.join(release_seal.get('reasons') or []) or 'no reasons'})",
         "",
         f"Overall: {status}",
         f"Suites: {summary['passed_suites']}/{summary['total_suites']} passed",
@@ -1221,18 +1487,33 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true", help="Print each suite's raw output.")
     parser.add_argument("--include-output", action="store_true", help="Include raw stdout/stderr in JSON output.")
     parser.add_argument("--no-report", action="store_true", help="Do not write eval/reports/latest.* artifacts.")
+    parser.add_argument("--profile", choices=["offline", "blind", "real_llm", "production_canary"], default="offline", help="Evidence profile recorded in the run manifest.")
     parser.add_argument("--require-real-llm", action="store_true", help="Require observable real-model execution; zero LLM calls makes the report NOT_RUN/failing.")
+    parser.add_argument("--require-clean-revision", action="store_true", help="Fail when the current working tree is dirty.")
+    parser.add_argument("--require-release-seal", action="store_true", help="Require all release-seal evidence; intended for release workflows.")
     args = parser.parse_args()
 
+    eval_run_id = new_eval_run_id()
+    started_at = datetime.now(timezone.utc).isoformat()
     results: list[SuiteResult] = []
     for suite in selected_suites(args):
-        result = run_suite(suite, verbose=args.verbose and not args.json)
+        result = run_suite(suite, verbose=args.verbose and not args.json, eval_run_id=eval_run_id)
         results.append(result)
         if args.fail_fast and not result.ok:
             break
 
-    profile = "custom" if args.suite else "smoke" if args.smoke else "quick" if args.quick else "core"
-    summary = build_json_summary(results, include_output=args.include_output, profile=profile, require_real_llm=args.require_real_llm)
+    profile = "custom" if args.suite or (args.profile != "offline" and not args.require_release_seal) else "smoke" if args.smoke else "quick" if args.quick else "core"
+    summary = build_json_summary(
+        results,
+        include_output=args.include_output,
+        profile=profile,
+        require_real_llm=args.require_real_llm,
+        require_clean_revision=args.require_clean_revision,
+        require_release_seal=args.require_release_seal,
+        evidence_profile=args.profile,
+        eval_run_id=eval_run_id,
+        started_at=started_at,
+    )
     if not args.no_report:
         write_reports(summary)
 
@@ -1240,6 +1521,11 @@ def main() -> None:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     else:
         print_text_summary(results)
+        if args.require_release_seal:
+            seal = summary.get("release_seal") or {}
+            reasons = ", ".join(seal.get("reasons") or []) or "none"
+            print(f"Release seal: {seal.get('status', 'unknown')} ({reasons})")
+            print(f"Eval run: {summary['eval_run']['run_id']}")
         if not args.no_report:
             print(f"Reports: {summary['report_paths']['json']}, {summary['report_paths']['markdown']}")
 

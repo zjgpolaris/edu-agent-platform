@@ -56,6 +56,11 @@ type AgentOpsSummary = {
   readiness?: {
     status: string;
     reasons?: string[];
+    sample_sufficient?: boolean;
+    runtime_event_count?: number;
+    minimum_runtime_events?: number;
+    window_hours?: number;
+    unexpected_failure_count?: number;
   };
   trace_correlation?: {
     audit_total: number;
@@ -85,6 +90,14 @@ type AgentOpsSummary = {
     routing_total?: number;
     semantic_routing_total?: number;
     semantic_routing_rate?: number;
+    semantic_active_total?: number;
+    semantic_active_rate?: number;
+    shadow_total?: number;
+    shadow_rate?: number;
+    shadow_comparison_total?: number;
+    shadow_agreement_rate?: number;
+    planner_active_total?: number;
+    planner_active_rate?: number;
     clarification_total?: number;
     clarification_rate?: number;
     clarification_resolved_total?: number;
@@ -98,6 +111,10 @@ type AgentOpsSummary = {
     plan_completion_rate?: number;
     partial_completion_total?: number;
     partial_completion_rate?: number;
+    verification_required_total?: number;
+    verification_verified_total?: number;
+    verification_failed_total?: number;
+    verification_pass_rate?: number;
     session_created_total?: number;
     session_resumed_total?: number;
     session_resume_rate?: number;
@@ -179,7 +196,17 @@ type RunResult = {
   evaluation_profile?: string;
   source_revision?: { commit_sha?: string | null; short_sha?: string | null; dirty?: boolean | null };
   report_freshness?: { status?: string; generated_at?: string; age_hours?: number | null; stale_after_hours?: number; reasons?: string[]; current_revision?: { short_sha?: string | null } };
-  llm_execution?: { status?: string; calls?: number; note?: string };
+  eval_run?: {
+    run_id?: string;
+    profile?: string;
+    suite_profile?: string;
+    started_at?: string;
+    finished_at?: string;
+    dataset_versions?: Record<string, string>;
+    environment_fingerprint?: string;
+  };
+  llm_execution?: { status?: string; calls?: number; run_scoped_calls?: number; fallback_calls?: number; models?: Record<string, number>; provider?: string; p95_ms?: number | null; note?: string };
+  release_seal?: { status?: string; reasons?: string[]; commit_matches?: boolean; clean_revision?: boolean; real_llm_observed?: boolean; required_profiles_passed?: string[] };
   summary?: EvalSummary;
   metrics?: EvalTopLevelMetrics;
   category_summary?: CategorySummary;
@@ -904,8 +931,11 @@ function ReportOverview({ result, token }: { result: RunResult; token?: string }
         {result.generated_at && <span>Report: {new Date(result.generated_at).toLocaleString()}</span>}
         <Badge>{isStale ? "STALE" : "FRESH"}</Badge>
         {result.evaluation_profile && <span>Profile: {result.evaluation_profile}</span>}
+        {result.eval_run?.run_id && <span>Run: {result.eval_run.run_id}</span>}
+        {result.eval_run?.profile && <span>Evidence: {result.eval_run.profile}</span>}
         {result.source_revision?.short_sha && <span>Commit: {result.source_revision.short_sha}{result.source_revision.dirty ? " · dirty" : ""}</span>}
-        {result.llm_execution && <span>LLM: {result.llm_execution.status} · {result.llm_execution.calls ?? 0} calls</span>}
+        {result.llm_execution && <span>LLM: {result.llm_execution.status} · {result.llm_execution.run_scoped_calls ?? result.llm_execution.calls ?? 0} run-scoped calls</span>}
+        {result.release_seal && <Badge>SEAL {result.release_seal.status || "not_applicable"}</Badge>}
         <button type="button" onClick={() => void downloadReport("json")} style={{ border: "none", background: "transparent", color: "var(--jade-dark)", fontWeight: 700, cursor: "pointer", padding: 0 }}>下载 latest.json</button>
         <button type="button" onClick={() => void downloadReport("markdown")} style={{ border: "none", background: "transparent", color: "var(--jade-dark)", fontWeight: 700, cursor: "pointer", padding: 0 }}>下载 latest.md</button>
         {downloadStatus && <span>{downloadStatus}</span>}
@@ -918,6 +948,12 @@ function ReportOverview({ result, token }: { result: RunResult; token?: string }
         <OpsCard label="Guardrail pass" value={formatRate(metrics.guardrail_pass_rate)} hint="safety cases" />
         <OpsCard label="Avg latency" value={metrics.avg_latency_ms != null ? `${Math.round(metrics.avg_latency_ms)}ms` : "--"} hint="per case" />
       </div>
+
+      {result.release_seal?.status === "fail" ? (
+        <div style={{ border: "1px solid var(--cinnabar)", borderRadius: "var(--radius-sm)", padding: "0.75rem 1rem", background: "#fdecea", color: "var(--cinnabar-dark)", fontSize: "0.82rem" }}>
+          发布封印未通过：{(result.release_seal.reasons || []).join(" · ") || "证据不完整"}
+        </div>
+      ) : null}
 
       <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "0.85rem 1rem", background: "var(--paper-soft)" }}>
         <div style={{ fontWeight: 700, color: "var(--ink)", marginBottom: "0.6rem" }}>Category summary</div>
@@ -946,7 +982,9 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
   const coverageHealth = !trace ? "waiting" : coverage >= 80 ? "healthy" : coverage >= 30 ? "partial" : "needs attention";
   const coverageHint = trace ? `${traced}/${total} events · ${coverageHealth}` : "等待数据";
   const readiness = summary?.readiness;
-  const readinessHint = readiness?.reasons?.length ? readiness.reasons.slice(0, 2).join(" · ") : "release signal";
+  const readinessHint = readiness?.sample_sufficient === false
+    ? `${readiness.runtime_event_count ?? 0}/${readiness.minimum_runtime_events ?? 0} samples · ${readiness.window_hours ?? 24}h`
+    : readiness?.reasons?.length ? readiness.reasons.slice(0, 2).join(" · ") : "release signal";
   const production = summary?.production;
   const latency = production?.latency;
   const llm = production?.llm;
@@ -979,11 +1017,16 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="随问降级率" value={assistantFeedback?.answer_total ? `${Math.round((assistantFeedback.answer_fallback_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.answer_fallback_total ?? 0}/${assistantFeedback?.answer_total ?? 0} answers`} />
             <OpsCard label="真实 LLM 回答率" value={assistantFeedback?.answer_total ? `${Math.round((assistantFeedback.answer_real_llm_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.answer_real_llm_total ?? 0}/${assistantFeedback?.answer_total ?? 0} answers`} />
             <OpsCard label="语义路由率" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.semantic_routing_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.semantic_routing_total ?? 0}/${assistantFeedback?.routing_total ?? 0} routes`} />
+            <OpsCard label="语义 Active" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.semantic_active_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.semantic_active_total ?? 0} active routes`} />
+            <OpsCard label="Shadow 流量" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.shadow_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.shadow_total ?? 0} shadow decisions`} />
+            <OpsCard label="Shadow 一致率" value={assistantFeedback?.shadow_comparison_total ? `${Math.round((assistantFeedback.shadow_agreement_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.shadow_comparison_total ?? 0} comparisons`} />
+            <OpsCard label="Planner Active" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.planner_active_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.planner_active_total ?? 0} active plans`} />
             <OpsCard label="澄清率" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.clarification_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.clarification_total ?? 0} clarification`} />
             <OpsCard label="澄清解决率" value={assistantFeedback?.clarification_total ? `${Math.round((assistantFeedback.clarification_resolution_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.clarification_resolved_total ?? 0}/${assistantFeedback?.clarification_total ?? 0} resolved`} />
             <OpsCard label="多意图率" value={assistantFeedback?.routing_total ? `${Math.round((assistantFeedback.multi_intent_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.multi_intent_total ?? 0} composite routes`} />
             <OpsCard label="计划完成率" value={assistantFeedback?.planned_answer_total ? `${Math.round((assistantFeedback.plan_completion_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.plan_completed_total ?? 0}/${assistantFeedback?.planned_answer_total ?? 0} plans`} />
             <OpsCard label="部分完成率" value={assistantFeedback?.planned_answer_total ? `${Math.round((assistantFeedback.partial_completion_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.partial_completion_total ?? 0} partial plans`} />
+            <OpsCard label="证据核验通过率" value={assistantFeedback?.verification_required_total ? `${Math.round((assistantFeedback.verification_pass_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.verification_verified_total ?? 0}/${assistantFeedback?.verification_required_total ?? 0} required answers`} />
             <OpsCard label="会话恢复率" value={assistantFeedback?.session_created_total ? `${Math.round((assistantFeedback.session_resume_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.session_resumed_total ?? 0}/${assistantFeedback?.session_created_total ?? 0} sessions`} />
             <OpsCard label="辅导返回率" value={assistantFeedback?.autotutor_question_total ? `${Math.round((assistantFeedback.autotutor_return_rate ?? 0) * 100)}%` : "--"} hint={`${assistantFeedback?.autotutor_return_total ?? 0}/${assistantFeedback?.autotutor_question_total ?? 0} handoffs`} />
             <OpsCard label="Tool Calls" value={String(summary?.tools?.total ?? "--")} hint={`${summary?.tools?.failure ?? 0} failed · ${Math.round((summary?.tools?.success_rate ?? 0) * 100)}% ok`} />

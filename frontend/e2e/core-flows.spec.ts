@@ -91,11 +91,15 @@ test("随问可执行解释后出题的三步受限计划", async ({ page }) => 
   test.setTimeout(60_000);
   await enterDemo(page, "student");
   await page.goto("/student/assistant");
+  await page.getByRole("button", { name: "新对话" }).click();
   await page.getByRole("textbox", { name: "学习问题" }).fill("先解释洋务运动，再出3道选择题");
   await page.getByRole("button", { name: "发送问题" }).click();
   await expect(page.getByLabel("学习计划进度")).toBeVisible({ timeout: 45_000 });
   await expect(page.locator(".learning-plan-step.completed")).toHaveCount(3, { timeout: 45_000 });
-  await expect(page.getByText(/已为你生成 3 道练习题/)).toBeVisible();
+  const plannedAnswer = page.locator(".learning-message.assistant").filter({ has: page.getByLabel("学习计划进度") }).last();
+  await expect(plannedAnswer.getByText(/已为你生成 3 道练习题/)).toBeVisible();
+  await plannedAnswer.getByText("查看回答依据").click();
+  await expect(plannedAnswer).not.toContainText(/灰度决策|路由方式|reason_code|bucket|置信度/);
 });
 
 test("教师可查看作业管理与 Pilot 作业", async ({ page }) => {

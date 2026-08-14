@@ -114,8 +114,10 @@ backend/
 │   ├── debate_supervisor.py       # 辩论主持
 │   ├── learning_assistant.py      # 学习助手
 │   ├── learning_assistant_router.py   # v1.29 结构化混合路由、槽位与澄清
+│   ├── learning_assistant_rollout.py  # v1.30 稳定哈希分桶、shadow/canary/kill switch
 │   ├── learning_assistant_planner.py  # v1.29 最多 3 步的 allowlist 确定性计划
 │   ├── learning_assistant_runtime.py  # v1.29 串行执行、证据条件与单次受控 repair
+│   ├── answer_verifier.py             # v1.30 来源标准化、claim-source 映射与完成门禁
 │   ├── auto_tutor.py              # AutoTutor 自主辅导闭环（plan→act→observe→judge→reflect→re_plan→exit_ticket→evidence→finalize）
 │   └── history_map_agent.py       # 历史地图代理
 │
@@ -329,7 +331,7 @@ frontend/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/learning/assistant/tools` | 工具列表 |
-| POST | `/api/learning/assistant/chat` | 学习助手对话；兼容原请求，SSE 新增 `route`、`plan`、`plan_step`、`clarification`、`repair_attempt`，`final` 增加 `routing`、`plan_summary`、`completion_status` |
+| POST | `/api/learning/assistant/chat` | 学习助手对话；兼容原请求，SSE 支持 `route`、`plan`、`plan_step`、`clarification`、`repair_attempt`、`verification_start/result`，`final` 增加 `routing`、`plan_summary`、`completion_status`、`rollout_summary`、`verification_summary` |
 | POST | `/api/learning/assistant/tool-confirmation/cancel` | 取消工具确认 |
 
 ### AutoTutor 自主辅导
@@ -1057,3 +1059,4 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | 2026-07-14 | 1.26.1 | UX 状态反馈优化：学生复习页补加载失败/提交失败可重试反馈，智能练习页补教材/课次加载失败、空态与按钮禁用原因；教师作业列表补初始加载、错误重试、行动型空态与刷新失败保留旧数据提示，教师作业管理页 640px 以下优化列表、讲评洞察、答案与评阅/创建表单布局；同步前端技术栈为 Next.js 16 + React 19。纯前端 UX，后端 API 无变化 |
 | 2026-07-14 | 1.26.2 | 修复 Render/Docker 默认 SQLite 路径：`backend/db/engine.py` 按运行布局解析默认 `.data`，本地源码树使用仓库根 `.data/edu_agent.sqlite3`，Docker 镜像使用 `/app/.data/edu_agent.sqlite3`，并仅在 SQLite fallback 时创建目录，避免未设置 `DATABASE_URL` 的部署环境尝试创建 `/.data` 导致 PermissionError |
 | 2026-08-13 | 1.29.1 | 随问智能体升级：新增结构化混合 router、主动澄清与 30 分钟待补槽位、最多 3 步 allowlist planner/runtime、一次受控只读 repair、证据验证和 completed/partial/waiting 状态；扩展 SSE/会话持久化与计划进度 UI；新增 300 条意图集、组合/澄清/多轮评测，fast gate 纳入学习助手和 AutoTutor 质量 suite；AgentOps 增加语义路由、澄清、多意图、计划、repair、真实 LLM 指标；Eval 报告增加 commit/profile/freshness/LLM execution 并区分 skipped/not-run/infra/quality failure |
+| 2026-08-14 | 1.30.0-dev | Agent 真实证据基线：learning/audit data_scope 正式列与迁移；AgentOps 查询前分域、时间窗、最小样本和 outcome 分类；稳定 rollout/shadow/canary/kill switch；required intent 来源级完成门禁；Eval schema v3、eval_run_id、run-scoped LLM 与 release seal；前端展示核验和封印证据。私有 blind 仍由外部路径注入，不入库。 |

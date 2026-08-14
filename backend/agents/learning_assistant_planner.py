@@ -160,11 +160,15 @@ def _single_task_steps(task: RoutedTask, req: dict[str, Any]) -> list[PlanStep]:
 
 
 def _composition_steps(tasks: list[RoutedTask], req: dict[str, Any]) -> list[PlanStep] | None:
-    intents = [task.intent for task in tasks]
-    if len(tasks) != 2 or IntentName.quiz_generation not in intents:
+    if (
+        len(tasks) != 2
+        or tasks[0].intent not in {IntentName.history_search, IntentName.textbook_qa}
+        or tasks[1].intent != IntentName.quiz_generation
+        or tasks[1].depends_on != [tasks[0].task_id]
+    ):
         return None
     explain_task = tasks[0]
-    quiz_task = next(task for task in tasks if task.intent == IntentName.quiz_generation)
+    quiz_task = tasks[1]
     message = str(req.get("message") or "").strip()
     count = quiz_task.count or _requested_count(message)
     if req.get("book_id") and req.get("lesson_id"):

@@ -1,0 +1,75 @@
+name: Agent Evidence Profiles
+
+on:
+  schedule:
+    - cron: '20 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  blind-and-real-llm:
+    name: Blind and real LLM evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run private blind profile
+        env:
+          BLIND_EVAL_JSONL: ${{ secrets.EDU_AGENT_BLIND_EVAL_JSONL }}
+          BAILIAN_API_KEY: ${{ secrets.BAILIAN_API_KEY }}
+          LLM_PROVIDER: bailian
+          PYTHONPATH: backend
+        run: |
+          if [ -z "$BLIND_EVAL_JSONL" ]; then
+            echo "Blind evidence secret is not configured; profile remains NOT_RUN."
+            exit 0
+          fi
+          blind_file="$(mktemp)"
+          trap 'rm -f "$blind_file"' EXIT
+          printf '%s' "$BLIND_EVAL_JSONL" > "$blind_file"
+          EDU_AGENT_BLIND_EVAL_PATH="$blind_file" python3 eval/run_core_evals.py --profile blind --require-clean-revision
+          cp eval/reports/latest.json /tmp/blind-aggregate.json
+          cp eval/reports/latest.md /tmp/blind-aggregate.md
+
+      - name: Run real LLM profile
+        env:
+          BAILIAN_API_KEY: ${{ secrets.BAILIAN_API_KEY }}
+          LLM_PROVIDER: bailian
+          PYTHONPATH: backend
+        run: |
+          if [ -z "$BAILIAN_API_KEY" ]; then
+            echo "Real LLM credential is not configured; profile remains NOT_RUN."
+            exit 0
+          fi
+          python3 eval/run_core_evals.py --profile real_llm --require-real-llm --require-clean-revision
+          cp eval/reports/latest.json /tmp/real-llm-aggregate.json
+          cp eval/reports/latest.md /tmp/real-llm-aggregate.md
+
+      - name: Upload aggregate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-evidence-aggregate
+          path: |
+            /tmp/blind-aggregate.json
+            /tmp/blind-aggregate.md
+            /tmp/real-llm-aggregate.json
+            /tmp/real-llm-aggregate.md
+          if-no-files-found: ignore
+          retention-days: 14

@@ -406,6 +406,8 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                         "routing": final.get("routing") or {},
                         "plan_summary": final.get("plan_summary") or {},
                         "completion_status": final.get("completion_status"),
+                        "rollout_summary": final.get("rollout_summary") or {},
+                        "verification_summary": final.get("verification_summary") or {},
                     },
                 )
                 final["message_id"] = persisted["message_id"]
@@ -456,6 +458,8 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                                 "routing": data.get("routing") or {},
                                 "plan_summary": data.get("plan_summary") or {},
                                 "completion_status": data.get("completion_status"),
+                                "rollout_summary": data.get("rollout_summary") or {},
+                                "verification_summary": data.get("verification_summary") or {},
                             },
                         )
                         data = {**data, "message_id": persisted["message_id"]}

@@ -362,9 +362,10 @@ def route_learning_request(
     llm: Any | None = None,
     semantic_enabled: bool | None = None,
     shadow_mode: bool | None = None,
+    rule_decision: RoutingDecision | None = None,
 ) -> tuple[RoutingDecision, RoutingDecision | None]:
     """Return the active route and an optional shadow semantic decision."""
-    rule = deterministic_route(req)
+    rule = rule_decision or deterministic_route(req)
     enabled = env_enabled("EDU_AGENT_ASSISTANT_SEMANTIC_ROUTER_ENABLED") if semantic_enabled is None else semantic_enabled
     shadow = env_enabled("EDU_AGENT_ASSISTANT_ROUTER_SHADOW_MODE", True) if shadow_mode is None else shadow_mode
     should_use_semantic = enabled and (

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import re
 from time import perf_counter
 from typing import Any, Iterator, Literal, TypedDict
 from uuid import uuid4
 
-from agents.learning_assistant_planner import PlanStep, build_task_plan, planner_enabled, public_plan
-from agents.learning_assistant_router import IntentName, RoutingDecision, legacy_intent_payload, route_learning_request
+from agents.learning_assistant_planner import PlanStep, build_task_plan, public_plan
+from agents.learning_assistant_rollout import build_rollout_decision
+from agents.answer_verifier import canonical_source_id, citation_supports_claim, verify_answer_evidence
+from agents.learning_assistant_router import IntentName, RoutingDecision, deterministic_route, legacy_intent_payload, route_learning_request
 from agents.learning_assistant_runtime import stream_task_plan
 from llm_config import llm_fast
 from utils.cost_estimator import estimate_cost_from_chars
@@ -46,6 +49,7 @@ class LearningAssistantRequestData(TypedDict, total=False):
     source_context: dict[str, Any]
     source_feature: str | None
     source_session_id: str | None
+    trace_id: str | None
 
 
 def detect_learning_intent(req: LearningAssistantRequestData) -> dict[str, Any]:
@@ -180,6 +184,7 @@ def _fallback_quiz_from_sources(message: str, sources: list[dict[str, Any]], cou
     topic = topic_match.group(1) if topic_match else str((sources[0] if sources else {}).get("topic") or message).strip(" ，。！？")[:40]
     snippets = [str(item.get("snippet") or item.get("content") or "").strip() for item in sources if str(item.get("snippet") or item.get("content") or "").strip()]
     basis = snippets[0][:180] if snippets else f"{topic}的核心史实、原因和影响"
+    source_item_ids = [canonical_source_id(sources[0])] if sources else []
     questions: list[dict[str, Any]] = []
     for index in range(count):
         use_choice = question_type == "choice" or (question_type == "mixed" and index % 2 == 0)
@@ -190,6 +195,7 @@ def _fallback_quiz_from_sources(message: str, sources: list[dict[str, Any]], cou
                 "options": [f"A. {basis}", "B. 与该主题无关的说法", "C. 把不同历史时期混为一谈", "D. 完全否定其历史影响"],
                 "answer": "A",
                 "explanation": f"史料依据：{basis}",
+                "source_item_ids": source_item_ids,
             })
         else:
             questions.append({
@@ -198,6 +204,7 @@ def _fallback_quiz_from_sources(message: str, sources: list[dict[str, Any]], cou
                 "options": None,
                 "answer": basis,
                 "explanation": f"回答应围绕：{basis}",
+                "source_item_ids": source_item_ids,
             })
     return questions
 
@@ -205,12 +212,15 @@ def _fallback_quiz_from_sources(message: str, sources: list[dict[str, Any]], cou
 def _generate_quiz_from_sources(message: str, sources: list[dict[str, Any]], count: int = 3, question_type: str = "mixed") -> tuple[list[dict[str, Any]], str]:
     import json as _json  # noqa: F401 kept for other local uses
     from structured_output import StructuredOutputError, invoke_structured
-    context = build_untrusted_context_block(sources[:4], title="史料")
+    annotated_sources = [{**source, "source_id": canonical_source_id(source)} for source in sources[:4]]
+    valid_source_ids = {item["source_id"] for item in annotated_sources}
+    context = build_untrusted_context_block(annotated_sources, title="史料")
     prompt = [
         {"role": "system", "content": (
             "你是初中历史教师。根据史料出练习题，以 JSON 数组返回，每项格式：\n"
-            "{\"id\": \"q1\", \"question\": \"题干\", \"answer\": \"参考答案\", \"options\": null}\n"
+            "{\"id\": \"q1\", \"question\": \"题干\", \"answer\": \"参考答案\", \"options\": null, \"source_item_ids\": [\"source_id\"]}\n"
             "选择题时 options 为 [\"A...\",\"B...\",\"C...\",\"D...\"]，answer 为正确选项字母。\n"
+            "每道题必须引用至少一个输入史料中的 source_id，不得编造 source_id。\n"
             "只输出 JSON 数组，不要其他文字。"
         )},
         {"role": "user", "content": f"根据以下史料，围绕\"{message}\"出 {count} 道题：\n{context}"},
@@ -218,10 +228,22 @@ def _generate_quiz_from_sources(message: str, sources: list[dict[str, Any]], cou
     try:
         generated = invoke_structured(llm_fast, prompt, expect="list", fallback=[])
         if isinstance(generated, list) and len(generated) >= count:
-            return generated[:count], "llm"
+            normalized: list[dict[str, Any]] = []
+            for item in generated[:count]:
+                if not isinstance(item, dict):
+                    normalized = []
+                    break
+                raw_ids = item.get("source_item_ids") or item.get("source_ids") or []
+                source_ids = [str(value).strip() for value in raw_ids if str(value).strip()]
+                if not source_ids or any(source_id not in valid_source_ids for source_id in source_ids):
+                    normalized = []
+                    break
+                normalized.append({**item, "source_item_ids": list(dict.fromkeys(source_ids))})
+            if len(normalized) == count:
+                return normalized, "llm"
     except StructuredOutputError:
         pass
-    return _fallback_quiz_from_sources(message, sources, count, question_type), "fallback"
+    return _fallback_quiz_from_sources(message, annotated_sources, count, question_type), "fallback"
 
 
 def _explain_topic(topic: str, sources: list[dict[str, Any]]) -> str:
@@ -461,6 +483,34 @@ def _dependency_data(outputs: dict[str, dict[str, Any]], key: str) -> Any:
     return None
 
 
+def _source_excerpt(source: dict[str, Any]) -> str:
+    return str(source.get("snippet") or source.get("content") or source.get("text") or "").strip()[:500]
+
+
+def _evidence_claim(
+    operation: str,
+    claim_id: str,
+    text: str,
+    sources: list[dict[str, Any]],
+    *,
+    source_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    selected = set(source_ids) if source_ids is not None else None
+    candidates = [
+        {"source_id": canonical_source_id(source), "quote": _source_excerpt(source)}
+        for source in sources
+        if _source_excerpt(source) and (selected is None or canonical_source_id(source) in selected)
+    ]
+    citations = [item for item in candidates if citation_supports_claim(text, item["quote"])] or candidates
+    return {
+        "claim_id": claim_id,
+        "operation": operation,
+        "text": text[:2000],
+        "critical": bool(re.search(r"(?<!\d)\d{3,4}\s*年", text)),
+        "citations": citations,
+    }
+
+
 def _lesson_sources(lesson: dict[str, Any]) -> list[dict[str, Any]]:
     title = str(lesson.get("lesson_title") or lesson.get("title") or "本课")
     return [
@@ -468,6 +518,7 @@ def _lesson_sources(lesson: dict[str, Any]) -> list[dict[str, Any]]:
             "topic": str(item.get("topic") or title),
             "snippet": str(item.get("text") or item.get("content") or ""),
             "source": title,
+            "source_id": item.get("source_id") or item.get("id"),
         }
         for item in (lesson.get("items") or [])[:5]
         if str(item.get("text") or item.get("content") or "").strip()
@@ -487,7 +538,8 @@ def _run_generation_operation(
     if operation == "answer_from_sources":
         sources = _dependency_data(outputs, "sources") or []
         response, mode = _generate_history_answer(message, sources, history, source_context)
-        return {"ok": bool(response), "response": response, "data": {"sources": sources[:4]}, "generation_mode": mode, "result_summary": "已生成基于史料的解释"}
+        evidence_claims = [_evidence_claim(operation, f"{step.step_id}_answer", response, sources[:4])]
+        return {"ok": bool(response), "response": response, "data": {"sources": sources[:4]}, "evidence_claims": evidence_claims, "generation_mode": mode, "result_summary": "已生成基于史料的解释"}
     if operation == "answer_from_lesson":
         lesson = _dependency_data(outputs, "lesson") or {}
         title = str(lesson.get("lesson_title") or lesson.get("title") or "本课")
@@ -498,7 +550,9 @@ def _run_generation_operation(
             if item.get("text") or item.get("content")
         )
         response = f"围绕《{title}》，可以先抓住这些要点：{highlights}" if highlights else f"我已读取《{title}》，请告诉我你最想理解的部分。"
-        return {"ok": True, "response": response, "data": {"lesson": lesson}, "generation_mode": "template", "result_summary": f"已生成《{title}》的教材回答"}
+        lesson_sources = _lesson_sources(lesson)
+        evidence_claims = [_evidence_claim(operation, f"{step.step_id}_answer", response, lesson_sources)]
+        return {"ok": True, "response": response, "data": {"lesson": lesson}, "evidence_claims": evidence_claims, "generation_mode": "template", "result_summary": f"已生成《{title}》的教材回答"}
     if operation in {"quiz_from_sources", "quiz_from_lesson"}:
         sources = _dependency_data(outputs, "sources") or []
         if operation == "quiz_from_lesson":
@@ -507,6 +561,17 @@ def _run_generation_operation(
         question_type = str(step.input.get("question_type") or "mixed")
         questions, mode = _generate_quiz_from_sources(message, sources, count, question_type)
         quiz = {"questions": questions}
+        evidence_claims = [
+            _evidence_claim(
+                operation,
+                f"{step.step_id}_{question.get('id') or index}",
+                " ".join(str(question.get(key) or "") for key in ("question", "answer", "explanation")),
+                sources,
+                source_ids=[str(value) for value in (question.get("source_item_ids") or [])],
+            )
+            for index, question in enumerate(questions, start=1)
+            if isinstance(question, dict)
+        ]
         synthetic = {
             "tool_name": "generate_quiz",
             "ok": bool(questions),
@@ -517,6 +582,7 @@ def _run_generation_operation(
             "ok": len(questions) >= count,
             "response": f"已为你生成 {len(questions)} 道练习题。" if questions else "练习题暂时没有生成成功。",
             "data": {"quiz": quiz},
+            "evidence_claims": evidence_claims,
             "generation_mode": mode,
             "synthetic_tool_result": synthetic,
             "result_summary": f"生成 {len(questions)} 道练习题",
@@ -579,7 +645,9 @@ def _final_from_execution(
 
 def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Iterator[tuple[str, dict[str, Any]]]:
     # Ensure trace_id is set for this call; generate a fresh one if the caller (e.g. eval) didn't provide one.
-    set_trace_id(req.get("trace_id") or uuid4().hex)
+    request_trace_id = req.get("trace_id") or uuid4().hex
+    req["trace_id"] = request_trace_id
+    set_trace_id(request_trace_id)
     message = (req.get("message") or "").strip()
     receive_started = perf_counter()
     check_user_input(message)
@@ -601,16 +669,58 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
         ))
 
     intent_started = perf_counter()
-    route, shadow_route = route_learning_request(dict(req), llm=llm_fast)
+    baseline_route = deterministic_route(dict(req))
+    high_risk = any(task.intent == IntentName.memory_delete_demo for task in baseline_route.tasks)
+    rollout = build_rollout_decision(
+        dict(req),
+        high_risk=high_risk,
+        composition_candidate=len(baseline_route.tasks) > 1,
+    )
+    rollout_payload = rollout.model_dump(mode="json")
+    emit_trace_event(
+        agent_name="learning_assistant",
+        step_name="Rollout Decision",
+        event_type="rollout_decision",
+        status="success",
+        metadata=rollout_payload,
+    )
+    route, shadow_route = route_learning_request(
+        dict(req),
+        llm=llm_fast,
+        semantic_enabled=rollout.route_mode != "control",
+        shadow_mode=rollout.route_mode == "shadow",
+        rule_decision=baseline_route,
+    )
     intent_payload = legacy_intent_payload(route)
     intent = intent_payload["intent"]
     topic = route.tasks[0].topic
     route_payload = route.model_dump(mode="json")
+    route_payload["contract_version"] = 3
+    route_payload["rollout"] = rollout_payload
+    agreement: bool | None = None
     if shadow_route is not None:
         route_payload["shadow"] = shadow_route.model_dump(mode="json")
-        route_payload["agreement"] = [task.intent for task in route.tasks] == [task.intent for task in shadow_route.tasks]
-    _record_assistant_event(req, event_type="intent_detected", intent=intent, topic=topic, ok=True, metadata={"reason": intent_payload.get("reason"), "routing_mode": route.mode, "task_count": len(route.tasks), "needs_clarification": route.needs_clarification})
-    yield _runtime_step("intent_detection", "Semantic Routing", "routing", "success", sequence=3, started_at=intent_started, metadata={"mode": route.mode, "confidence": route.confidence, "reason_code": route.reason_code, "task_count": len(route.tasks), "needs_clarification": route.needs_clarification})
+        agreement = [task.intent for task in route.tasks] == [task.intent for task in shadow_route.tasks]
+        route_payload["agreement"] = agreement
+        emit_trace_event(
+            agent_name="learning_assistant",
+            step_name="Routing Comparison",
+            event_type="routing_comparison",
+            status="success",
+            metadata={
+                "config_version": rollout.config_version,
+                "active_mode": route.mode,
+                "active_intents": [task.intent.value for task in route.tasks],
+                "shadow_mode": shadow_route.mode,
+                "shadow_intents": [task.intent.value for task in shadow_route.tasks],
+                "agreement": agreement,
+                "confidence_rule": route.confidence,
+                "confidence_semantic": shadow_route.confidence,
+                "label_status": "unlabeled",
+            },
+        )
+    _record_assistant_event(req, event_type="intent_detected", intent=intent, topic=topic, ok=True, metadata={"reason": intent_payload.get("reason"), "routing_mode": route.mode, "task_count": len(route.tasks), "needs_clarification": route.needs_clarification, "rollout": rollout_payload, "shadow_agreement": agreement})
+    yield _runtime_step("intent_detection", "Semantic Routing", "routing", "success", sequence=3, started_at=intent_started, metadata={"mode": route.mode, "confidence": route.confidence, "reason_code": route.reason_code, "task_count": len(route.tasks), "needs_clarification": route.needs_clarification, "route_mode": rollout.route_mode, "config_version": rollout.config_version})
     yield "route", route_payload
     yield "intent", intent_payload
 
@@ -627,13 +737,15 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
             "session_id": req.get("session_id"), "response": response, "intent": intent, "tool_results": [], "profile_context": None,
             "generation_mode": "template", "completion_status": "needs_clarification", "routing": {"schema_version": 2, "mode": route.mode, "task_count": len(route.tasks), "reason_code": route.reason_code, "missing_slots": route.missing_slots, "completion_status": "needs_clarification", "pending_task": route.tasks[0].model_dump(mode="json")},
             "plan_summary": {"completed_steps": 0, "total_steps": 0, "partial_reason": route.reason_code},
+            "rollout_summary": rollout_payload,
+            "verification_summary": {"schema_version": 1, "required": False, "status": "not_required", "completion_allowed": False, "reason_codes": ["needs_clarification"]},
             "context_usage": {"history_messages": len(history), "source_feature": req.get("source_feature"), "source_session_id": req.get("source_session_id")}, "trace_id": trace_id,
         }
         yield "suggestions", {"suggestions": ["添加教材上下文", "直接告诉我课名", "换一个问题"], "trace_id": trace_id}
         return
 
     plan_started = perf_counter()
-    composition_enabled = planner_enabled()
+    composition_enabled = rollout.planner_mode == "composition_active"
     plan = build_task_plan(route, dict(req), enable_composition=composition_enabled)
     plan_payload = public_plan(plan)
     yield _runtime_step("plan_build", "Plan Build", "plan", "success", sequence=4, started_at=plan_started, metadata={"step_count": len(plan.steps), "tool_step_count": sum(1 for step in plan.steps if step.kind == "tool"), "generation_step_count": sum(1 for step in plan.steps if step.kind == "generation"), "composition_enabled": composition_enabled})
@@ -673,12 +785,40 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
 
     answer_started = perf_counter()
     response, suggestions, generation_mode, tool_results = _final_from_execution(route, execution, message=message, history=history, source_context=source_context)
-    verification_passed = bool(response) and str(execution.get("completion_status") or "failed") != "failed"
-    yield _runtime_step("evidence_verify", "Evidence Verify", "verification", "success" if verification_passed else "failed", sequence=6, metadata={"criteria_count": 2, "passed_count": int(bool(response)) + int(str(execution.get("completion_status") or "failed") != "failed"), "completion_status": execution.get("completion_status")})
+    routed_intents = [task.intent.value for task in route.tasks]
+    yield "verification_start", {"trace_id": current_trace_id(), "required": any(name in {"history_search", "textbook_qa", "quiz_generation"} for name in routed_intents)}
+    verification = verify_answer_evidence(intents=routed_intents, execution=execution)
+    verification_payload = verification.model_dump(mode="json")
+    completion_status = str(execution.get("completion_status") or "failed")
+    if verification.required and not verification.completion_allowed:
+        if completion_status == "completed":
+            completion_status = "partial"
+        execution["completion_status"] = completion_status
+        execution["partial_reason"] = verification.reason_codes[0] if verification.reason_codes else "evidence_verification_failed"
+        if response and completion_status == "partial":
+            response += "\n\n这部分回答缺少足够的可核验来源，因此暂按部分完成处理。"
+    verification_passed = verification.status in {"verified", "not_required"} and bool(response) and completion_status != "failed"
+    yield "verification_result", {"trace_id": current_trace_id(), **verification_payload}
+    yield _runtime_step(
+        "evidence_verify",
+        "Evidence Verify",
+        "verification",
+        "success" if verification_passed else "failed",
+        sequence=6,
+        metadata={
+            "required": verification.required,
+            "verification_status": verification.status,
+            "source_count": verification.source_count,
+            "citation_count": verification.citation_count,
+            "unsupported_claim_count": verification.unsupported_claim_count,
+            "reason_codes": verification.reason_codes,
+            "completion_status": completion_status,
+        },
+    )
     answer_metadata = {
         "intent": intent,
         "used_tool_count": int(execution.get("used_tool_count") or 0),
-        "completion_status": execution.get("completion_status"),
+        "completion_status": completion_status,
         "completed_steps": execution.get("completed_steps"),
         "total_steps": execution.get("total_steps"),
         **_llm_runtime_metadata(generation_mode=generation_mode, response_chars=len(response)),
@@ -687,8 +827,7 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
 
     memory_started = perf_counter()
     suggestions, profile_context = _personalize_suggestions(req.get("student_id"), suggestions)
-    completion_status = str(execution.get("completion_status") or "failed")
-    _record_assistant_event(req, event_type="answer_completed", intent=intent, topic=topic, ok=completion_status in {"completed", "partial", "waiting_confirmation"}, metadata={"tool_count": int(execution.get("used_tool_count") or 0), "generation_mode": generation_mode, "fallback_used": generation_mode == "fallback", "history_messages": len(history), "source_feature": req.get("source_feature"), "routing_mode": route.mode, "task_count": len(route.tasks), "completion_status": completion_status, "completed_steps": execution.get("completed_steps"), "total_steps": execution.get("total_steps"), "partial_reason": execution.get("partial_reason"), "clarification_resolved": route.reason_code == "pending_clarification_resolved"})
+    _record_assistant_event(req, event_type="answer_completed", intent=intent, topic=topic, ok=completion_status in {"completed", "partial", "waiting_confirmation"}, metadata={"tool_count": int(execution.get("used_tool_count") or 0), "generation_mode": generation_mode, "fallback_used": generation_mode == "fallback", "history_messages": len(history), "source_feature": req.get("source_feature"), "routing_mode": route.mode, "task_count": len(route.tasks), "completion_status": completion_status, "completed_steps": execution.get("completed_steps"), "total_steps": execution.get("total_steps"), "partial_reason": execution.get("partial_reason"), "clarification_resolved": route.reason_code == "pending_clarification_resolved", "rollout": rollout_payload, "verification_status": verification.status, "verification_source_count": verification.source_count, "unsupported_claim_count": verification.unsupported_claim_count})
     yield _runtime_step("memory_update", "Persist Interaction", "memory", "success", sequence=8, started_at=memory_started, metadata={"student_id": req.get("student_id"), "session_id": req.get("session_id"), "profile_context_loaded": bool(profile_context), "used_memory_count": len((profile_context or {}).get("used_memory") or []), "wrote_event": bool(req.get("student_id"))})
     trace_id = current_trace_id()
     if response:
@@ -698,6 +837,8 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
         "generation_mode": generation_mode, "completion_status": completion_status,
         "routing": {"schema_version": 2, "mode": route.mode, "task_count": len(route.tasks), "reason_code": route.reason_code},
         "plan_summary": {"completed_steps": execution.get("completed_steps"), "total_steps": execution.get("total_steps"), "partial_reason": execution.get("partial_reason"), "failed_step": execution.get("failed_step")},
+        "rollout_summary": rollout_payload,
+        "verification_summary": verification_payload,
         "context_usage": {"history_messages": len(history), "source_feature": req.get("source_feature"), "source_session_id": req.get("source_session_id")}, "trace_id": trace_id,
     }
     yield "suggestions", {"suggestions": suggestions, "trace_id": trace_id}

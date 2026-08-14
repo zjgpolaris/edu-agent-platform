@@ -25,9 +25,12 @@ learning_events = Table(
     Column("book_id", Text),
     Column("score", Float),
     Column("success", Integer),
+    Column("data_scope", Text, nullable=False, server_default="runtime"),
     Column("metadata_json", Text, nullable=False),
     Column("created_at", Text, nullable=False),
     Index("idx_learning_events_student_created", "student_id", "created_at"),
+    Index("idx_learning_events_scope_created", "data_scope", "created_at"),
+    Index("idx_learning_events_feature_type_created", "feature", "event_type", "created_at"),
 )
 
 student_profiles = Table(
@@ -145,8 +148,10 @@ audit_events = Table(
     Column("resource_type", Text),
     Column("resource_id", Text),
     Column("success", Integer, nullable=False),
+    Column("data_scope", Text, nullable=False, server_default="runtime"),
     Column("metadata_json", Text, nullable=False),
     Column("created_at", Text, nullable=False),
+    Index("idx_audit_events_scope_created", "data_scope", "created_at"),
 )
 
 weakpoints = Table(

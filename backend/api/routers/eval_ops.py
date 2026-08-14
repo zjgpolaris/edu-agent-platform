@@ -1,6 +1,6 @@
 """Eval 运维路由：/api/eval/*, /api/agent-ops/*, /api/agent-jobs/*"""
 import json
-from typing import Any
+from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, StreamingResponse
@@ -37,6 +37,10 @@ def require_eval_actor(actor: Actor) -> None:
 class EvalRunRequest(BaseModel):
     suite: str | None = None
     quick: bool = True
+    profile: Literal["offline", "blind", "real_llm"] = "offline"
+    require_real_llm: bool = False
+    require_clean_revision: bool = False
+    require_release_seal: bool = False
 
 
 class WeeklySummaryJobRequest(BaseModel):
@@ -51,9 +55,17 @@ class SaveEvalCaseRequest(BaseModel):
 
 
 @router.get("/api/agent-ops/summary")
-async def agent_ops_summary(limit: int = 100, actor: Actor = Depends(require_auth)):
+async def agent_ops_summary(
+    limit: int = 100,
+    scope: str = "runtime",
+    window_hours: int = 24,
+    actor: Actor = Depends(require_auth),
+):
     require_eval_actor(actor)
-    return build_agent_ops_summary(limit=limit)
+    try:
+        return build_agent_ops_summary(limit=limit, scope=scope, window_hours=window_hours)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/eval/suites")
@@ -70,7 +82,13 @@ async def eval_latest(actor: Actor = Depends(require_auth)):
     if not runner.LATEST_JSON.exists():
         raise HTTPException(status_code=404, detail="latest eval report not found")
     payload = json.loads(runner.LATEST_JSON.read_text(encoding="utf-8"))
-    payload["report_freshness"] = runner.report_runtime_status(payload)
+    freshness = runner.report_runtime_status(payload)
+    payload["report_freshness"] = freshness
+    release_seal = payload.get("release_seal")
+    if isinstance(release_seal, dict) and release_seal.get("status") == "pass" and "commit_mismatch" in (freshness.get("reasons") or []):
+        release_seal["status"] = "fail"
+        release_seal["commit_matches"] = False
+        release_seal["reasons"] = list(dict.fromkeys([*(release_seal.get("reasons") or []), "commit_mismatch"]))
     return payload
 
 
@@ -95,23 +113,43 @@ async def eval_report_markdown(actor: Actor = Depends(require_auth)):
 @router.post("/api/eval/run")
 async def eval_run(req: EvalRunRequest, actor: Actor = Depends(require_auth)):
     require_eval_actor(actor)
+    if (req.profile in {"blind", "real_llm"} or req.require_release_seal) and actor.role != "admin":
+        raise HTTPException(status_code=403, detail="真实模型、盲测和发布盖章仅管理员可触发")
     runner = load_eval_runner()
     if req.suite and req.suite not in ("quick", "all"):
         if req.suite not in runner.SUITE_FILES:
             raise HTTPException(status_code=400, detail=f"unknown suite: {req.suite}")
         names = [req.suite]
+    elif req.require_release_seal:
+        names = [*runner.CORE_SUITES, "learning_assistant_blind_eval", "learning_assistant_semantic_router_eval"]
+    elif req.profile == "blind":
+        names = ["learning_assistant_blind_eval"]
+    elif req.profile == "real_llm":
+        names = ["learning_assistant_semantic_router_eval"]
     elif req.suite == "all" or not req.quick:
         names = runner.CORE_SUITES
     else:
         names = runner.QUICK_SUITES
+    eval_run_id = runner.new_eval_run_id()
+    started_at = runner.datetime.now(runner.timezone.utc).isoformat()
     results = []
     for name in names:
         try:
-            results.append(await run_in_threadpool(runner.run_suite, name))
+            results.append(await run_in_threadpool(lambda suite=name: runner.run_suite(suite, eval_run_id=eval_run_id)))
         except Exception as exc:
             results.append(runner.SuiteResult(name=name, command=[], returncode=1, duration_sec=0, stdout="", stderr="", passed_cases=0, failed_cases_count=1, total_cases=1, metrics={}, failed_cases=[], error=str(exc)))
-    profile = "custom" if req.suite and req.suite not in {"quick", "all"} else "core" if req.suite == "all" or not req.quick else "quick"
-    summary = runner.build_json_summary(results, include_output=True, profile=profile)
+    profile = "custom" if (req.suite and req.suite not in {"quick", "all"}) or (req.profile != "offline" and not req.require_release_seal) else "core" if req.require_release_seal or req.suite == "all" or not req.quick else "quick"
+    summary = runner.build_json_summary(
+        results,
+        include_output=True,
+        profile=profile,
+        require_real_llm=req.require_real_llm,
+        require_clean_revision=req.require_clean_revision,
+        require_release_seal=req.require_release_seal,
+        evidence_profile=req.profile,
+        eval_run_id=eval_run_id,
+        started_at=started_at,
+    )
     runner.write_reports(summary)
     return summary
 
@@ -125,19 +163,28 @@ async def eval_run_stream(suite: str = "quick", actor: Actor = Depends(require_a
     names = runner.CORE_SUITES if suite == "all" else (runner.QUICK_SUITES if suite == "quick" else [suite])
 
     async def generate():
-        yield f"data: {json.dumps({'type': 'start', 'total': len(names)})}\n\n"
+        eval_run_id = runner.new_eval_run_id()
+        started_at = runner.datetime.now(runner.timezone.utc).isoformat()
+        yield f"data: {json.dumps({'type': 'start', 'total': len(names), 'eval_run_id': eval_run_id})}\n\n"
         results = []
         for i, name in enumerate(names):
             yield f"data: {json.dumps({'type': 'running', 'suite': name, 'index': i})}\n\n"
             try:
-                r = await run_in_threadpool(runner.run_suite, name)
+                r = await run_in_threadpool(lambda suite=name: runner.run_suite(suite, eval_run_id=eval_run_id))
                 results.append(r)
                 yield f"data: {json.dumps({'type': 'suite_done', 'suite': name, 'ok': r.ok, 'passed': r.passed_cases or 0, 'total': r.total_cases or 0, 'duration': round(r.duration_sec or 0, 2), 'index': i})}\n\n"
             except Exception as exc:
                 yield f"data: {json.dumps({'type': 'suite_error', 'suite': name, 'error': str(exc), 'index': i})}\n\n"
         try:
             profile = "core" if suite == "all" else "quick" if suite == "quick" else "custom"
-            summary = runner.build_json_summary(results, include_output=True, profile=profile)
+            summary = runner.build_json_summary(
+                results,
+                include_output=True,
+                profile=profile,
+                evidence_profile="offline",
+                eval_run_id=eval_run_id,
+                started_at=started_at,
+            )
             runner.write_reports(summary)
             yield f"data: {json.dumps({'type': 'done', 'summary': summary})}\n\n"
         except Exception as exc:
@@ -194,7 +241,7 @@ async def eval_candidate_cases(limit: int = 20, actor: Actor = Depends(require_a
                 missing.append("expected_error")
         return missing
 
-    raw_events = list_audit_events(limit=200)
+    raw_events = list_audit_events(limit=200, data_scope="runtime")
     candidates = []
     for ev in raw_events:
         action = ev.get("action", "")

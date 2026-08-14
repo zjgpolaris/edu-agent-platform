@@ -17,6 +17,14 @@ from tracing import current_trace_id, truncate_text
 STUDENT_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 MAX_LIST_ITEMS = 10
 MAX_METADATA_CHARS = 1200
+VALID_DATA_SCOPES = {"runtime", "eval", "demo"}
+
+
+def normalize_data_scope(value: str | None) -> str:
+    normalized = (value or "runtime").strip().lower()
+    if normalized == "demo_seed":
+        normalized = "demo"
+    return normalized if normalized in VALID_DATA_SCOPES else "runtime"
 
 
 class LearningEvent(BaseModel):
@@ -30,6 +38,7 @@ class LearningEvent(BaseModel):
     lesson_id: str | None = None
     score: float | None = Field(default=None, ge=0, le=1)
     success: bool | None = None
+    data_scope: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("student_id")
@@ -105,7 +114,7 @@ def init_db() -> None:
               id TEXT PRIMARY KEY, student_id TEXT NOT NULL, session_id TEXT,
               feature TEXT NOT NULL, event_type TEXT NOT NULL, grade TEXT,
               topic TEXT, lesson_id TEXT, book_id TEXT, score REAL, success INTEGER,
-              metadata_json TEXT NOT NULL, created_at TEXT NOT NULL)"""))
+              data_scope TEXT NOT NULL DEFAULT 'runtime', metadata_json TEXT NOT NULL, created_at TEXT NOT NULL)"""))
         conn.execute(text("""CREATE TABLE IF NOT EXISTS student_profiles (
               student_id TEXT PRIMARY KEY, grade TEXT,
               recent_topics_json TEXT NOT NULL, recent_lessons_json TEXT NOT NULL,
@@ -129,6 +138,12 @@ def init_db() -> None:
               teacher_id TEXT, teacher_note TEXT, teacher_score REAL,
               created_at TEXT NOT NULL, reviewed_at TEXT)"""))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_learning_events_student_created ON learning_events(student_id, created_at)"))
+        if engine.dialect.name == "sqlite":
+            event_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(learning_events)"))}
+            if "data_scope" not in event_columns:
+                conn.execute(text("ALTER TABLE learning_events ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'runtime'"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_learning_events_scope_created ON learning_events(data_scope, created_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_learning_events_feature_type_created ON learning_events(feature, event_type, created_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_memory_entries_student_status ON memory_entries(student_id, status, updated_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_memory_entries_source_event ON memory_entries(source_event_id)"))
         # SQLite only: patch older databases missing interaction_summary_json
@@ -418,8 +433,9 @@ def record_learning_event(event: LearningEvent) -> str | None:
     trace_id = current_trace_id()
     if trace_id and "trace_id" not in metadata:
         metadata["trace_id"] = trace_id
-    metadata.setdefault("data_scope", os.getenv("EDU_AGENT_DATA_SCOPE", "runtime"))
-    event = LearningEvent.model_validate({**event.model_dump(), "metadata": _safe_metadata(metadata)})
+    scope = normalize_data_scope(event.data_scope or metadata.get("data_scope") or os.getenv("EDU_AGENT_DATA_SCOPE", "runtime"))
+    metadata["data_scope"] = scope
+    event = LearningEvent.model_validate({**event.model_dump(), "data_scope": scope, "metadata": _safe_metadata(metadata)})
     event_id = uuid4().hex
     created_at = now_iso()
     with get_connection() as conn:
@@ -427,10 +443,10 @@ def record_learning_event(event: LearningEvent) -> str | None:
         conn.execute(
             text("""INSERT INTO learning_events (
                 id, student_id, session_id, feature, event_type, grade, topic, lesson_id,
-                book_id, score, success, metadata_json, created_at
+                book_id, score, success, data_scope, metadata_json, created_at
             ) VALUES (
                 :id, :student_id, :session_id, :feature, :event_type, :grade, :topic, :lesson_id,
-                :book_id, :score, :success, :metadata, :created_at
+                :book_id, :score, :success, :data_scope, :metadata, :created_at
             )"""),
             {
                 "id": event_id,
@@ -444,6 +460,7 @@ def record_learning_event(event: LearningEvent) -> str | None:
                 "book_id": event.book_id,
                 "score": event.score,
                 "success": None if event.success is None else int(event.success),
+                "data_scope": scope,
                 "metadata": _json_dump(event.metadata),
                 "created_at": created_at,
             },
@@ -627,6 +644,8 @@ def list_learning_events(
     student_id: str | None = None,
     feature: str | None = None,
     event_type: str | None = None,
+    data_scope: str | None = None,
+    since: str | None = None,
 ) -> list[dict[str, Any]]:
     init_db()
     filters = []
@@ -640,6 +659,12 @@ def list_learning_events(
     if event_type:
         filters.append("event_type = :event_type")
         params["event_type"] = event_type
+    if data_scope:
+        filters.append("data_scope = :data_scope")
+        params["data_scope"] = normalize_data_scope(data_scope)
+    if since:
+        filters.append("created_at >= :since")
+        params["since"] = since
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     params["limit"] = max(1, min(int(limit), 500))
     with get_connection() as conn:
@@ -652,8 +677,24 @@ def list_learning_events(
         item = dict(row)
         item["success"] = None if item["success"] is None else bool(item["success"])
         item["metadata"] = _json_load(item.pop("metadata_json"), {})
+        item["data_scope"] = normalize_data_scope(item.get("data_scope") or item["metadata"].get("data_scope"))
+        item["metadata"].setdefault("data_scope", item["data_scope"])
         events.append(item)
     return events
+
+
+def count_learning_events(*, data_scope: str, since: str | None = None) -> int:
+    init_db()
+    filters = ["data_scope = :data_scope"]
+    params: dict[str, Any] = {"data_scope": normalize_data_scope(data_scope)}
+    if since:
+        filters.append("created_at >= :since")
+        params["since"] = since
+    with get_connection() as conn:
+        return int(conn.execute(
+            text(f"SELECT COUNT(*) FROM learning_events WHERE {' AND '.join(filters)}"),
+            params,
+        ).scalar_one())
 
 
 def delete_learning_event(event_id: str, student_id: str) -> bool:
