@@ -2,7 +2,7 @@
 
 验证：
 1. /api/ready 浅检查返回稳定结构，不触发外部 LLM/Embedding。
-2. /api/eval/latest 与 /api/eval/run 只注册一份，避免旧 mock/report_generator 路由遮蔽新版 run_core_evals 体系。
+2. eval_ops router 中 /api/eval/latest 与 /api/eval/run 只注册一份，避免旧 mock/report_generator 路由遮蔽新版 run_core_evals 体系。
 """
 from __future__ import annotations
 
@@ -25,10 +25,9 @@ except FileNotFoundError:
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
-from api.main import app  # noqa: E402
 from api.routers import debug as debug_router  # noqa: E402
 from api.routers.debug import api_ready  # noqa: E402
-from api.routers.eval_ops import eval_latest, eval_run, load_eval_runner  # noqa: E402
+from api.routers.eval_ops import eval_latest, eval_run, load_eval_runner, router as eval_ops_router  # noqa: E402
 
 
 def run_case(name: str, fn) -> bool:
@@ -81,7 +80,7 @@ async def ready_endpoint_shape() -> None:
 
 
 def eval_routes_registered_once() -> None:
-    routes = [route for route in app.routes if getattr(route, "path", None) in {"/api/eval/latest", "/api/eval/run"}]
+    routes = [route for route in eval_ops_router.routes if getattr(route, "path", None) in {"/api/eval/latest", "/api/eval/run"}]
     pairs = [(getattr(route, "path", ""), tuple(sorted(getattr(route, "methods", []) or [])), getattr(route, "endpoint", None).__name__) for route in routes]
     latest = [p for p in pairs if p[0] == "/api/eval/latest" and "GET" in p[1]]
     run = [p for p in pairs if p[0] == "/api/eval/run" and "POST" in p[1]]
