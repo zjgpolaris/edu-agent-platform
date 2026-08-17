@@ -481,7 +481,7 @@
   },
   {
     "id": "person-苏轼-1",
-    "query": "苏轼是什么",
+    "query": "苏轼是谁",
     "expected_entity": "苏轼",
     "expected_entity_type": "person",
     "expected_aspect": "definition",
@@ -489,7 +489,7 @@
   },
   {
     "id": "person-苏轼-2",
-    "query": "苏轼发生的背景是什么",
+    "query": "苏轼生活在什么时代",
     "expected_entity": "苏轼",
     "expected_entity_type": "person",
     "expected_aspect": "background",
@@ -497,26 +497,26 @@
   },
   {
     "id": "person-苏轼-3",
-    "query": "苏轼的主要原因是什么",
+    "query": "苏轼有哪些主要成就",
     "expected_entity": "苏轼",
     "expected_entity_type": "person",
-    "expected_aspect": "cause",
+    "expected_aspect": "contribution",
     "review_status": "seed_pending_teacher_review"
   },
   {
     "id": "person-苏轼-4",
-    "query": "简述苏轼的经过",
+    "query": "苏轼的创作风格有什么特点",
     "expected_entity": "苏轼",
     "expected_entity_type": "person",
-    "expected_aspect": "process",
+    "expected_aspect": "feature",
     "review_status": "seed_pending_teacher_review"
   },
   {
     "id": "person-苏轼-5",
-    "query": "苏轼的结果是什么",
+    "query": "苏轼在文学史上的地位如何",
     "expected_entity": "苏轼",
     "expected_entity_type": "person",
-    "expected_aspect": "result",
+    "expected_aspect": "evaluation",
     "review_status": "seed_pending_teacher_review"
   },
   {
@@ -553,10 +553,10 @@
   },
   {
     "id": "person-苏轼-10",
-    "query": "为什么会发生苏轼",
+    "query": "苏轼对宋词发展有什么贡献",
     "expected_entity": "苏轼",
     "expected_entity_type": "person",
-    "expected_aspect": "cause",
+    "expected_aspect": "contribution",
     "review_status": "seed_pending_teacher_review"
   },
   {
@@ -577,7 +577,7 @@
   },
   {
     "id": "person-辛弃疾-1",
-    "query": "辛弃疾是什么",
+    "query": "辛弃疾是谁",
     "expected_entity": "辛弃疾",
     "expected_entity_type": "person",
     "expected_aspect": "definition",
@@ -585,7 +585,7 @@
   },
   {
     "id": "person-辛弃疾-2",
-    "query": "辛弃疾发生的背景是什么",
+    "query": "辛弃疾生活在什么时代",
     "expected_entity": "辛弃疾",
     "expected_entity_type": "person",
     "expected_aspect": "background",
@@ -593,26 +593,26 @@
   },
   {
     "id": "person-辛弃疾-3",
-    "query": "辛弃疾的主要原因是什么",
+    "query": "辛弃疾有哪些主要成就",
     "expected_entity": "辛弃疾",
     "expected_entity_type": "person",
-    "expected_aspect": "cause",
+    "expected_aspect": "contribution",
     "review_status": "seed_pending_teacher_review"
   },
   {
     "id": "person-辛弃疾-4",
-    "query": "简述辛弃疾的经过",
+    "query": "辛弃疾的创作风格有什么特点",
     "expected_entity": "辛弃疾",
     "expected_entity_type": "person",
-    "expected_aspect": "process",
+    "expected_aspect": "feature",
     "review_status": "seed_pending_teacher_review"
   },
   {
     "id": "person-辛弃疾-5",
-    "query": "辛弃疾的结果是什么",
+    "query": "辛弃疾在文学史上的地位如何",
     "expected_entity": "辛弃疾",
     "expected_entity_type": "person",
-    "expected_aspect": "result",
+    "expected_aspect": "evaluation",
     "review_status": "seed_pending_teacher_review"
   },
   {
@@ -649,10 +649,10 @@
   },
   {
     "id": "person-辛弃疾-10",
-    "query": "为什么会发生辛弃疾",
+    "query": "辛弃疾对宋词发展有什么贡献",
     "expected_entity": "辛弃疾",
     "expected_entity_type": "person",
-    "expected_aspect": "cause",
+    "expected_aspect": "contribution",
     "review_status": "seed_pending_teacher_review"
   },
   {

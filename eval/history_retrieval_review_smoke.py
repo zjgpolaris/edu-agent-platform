@@ -17,6 +17,7 @@ from scripts.history_retrieval_review import (
     export_review_packet,
     validate_reviewed_case,
 )
+from eval.build_history_eval_datasets import build_datasets
 from eval.history_retrieval_quality_eval import reviewed_relevance
 
 
@@ -84,7 +85,36 @@ def _approve(record: dict) -> None:
 
 def main() -> None:
     passed = 0
-    total = 10
+    total = 11
+    scale = {"0": "unrelated", "1": "entity_only", "2": "answer_bearing"}
+    rebuilt = build_datasets([
+        {
+            "id": "person-苏轼-1",
+            "query": "苏轼是什么",
+            "expected_entity": "苏轼",
+            "expected_aspect": "definition",
+            "relevance_scale": scale,
+            "review_status": "teacher_rejected",
+            "reviewed_by": "history-teacher-01",
+        },
+        {
+            "id": "person-苏轼-6",
+            "query": "苏轼有什么影响",
+            "expected_entity": "苏轼",
+            "expected_aspect": "impact",
+            "relevance_scale": scale,
+            "review_status": "teacher_reviewed",
+            "reviewed_by": "history-teacher-01",
+        },
+    ])
+    rebuilt_retrieval = {case["id"]: case for case in rebuilt["history_retrieval_cases.json"]}
+    assert rebuilt_retrieval["person-苏轼-1"]["query"] == "苏轼是谁"
+    assert rebuilt_retrieval["person-苏轼-1"]["review_status"] == "seed_pending_teacher_review"
+    assert "reviewed_by" not in rebuilt_retrieval["person-苏轼-1"]
+    assert rebuilt_retrieval["person-苏轼-6"]["reviewed_by"] == "history-teacher-01"
+    assert rebuilt_retrieval["event-长平之战-1"]["query"] == "长平之战是什么"
+    passed += 1
+
     with tempfile.TemporaryDirectory(prefix="history-review-smoke-") as temp_dir:
         root = Path(temp_dir)
         dataset_path = root / "history_retrieval_cases.json"

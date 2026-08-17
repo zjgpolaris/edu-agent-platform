@@ -39,7 +39,9 @@ def main() -> None:
     assert fused[0]["channel_ranks"] == {"entity": 1, "bm25": 2, "vector": 2}, fused[0]
 
     original = history_search.search_with_scores_and_diagnostics
+    original_curated_loader = history_search._load_curated_history_events
     try:
+        history_search._load_curated_history_events = lambda: ()
         history_search.search_with_scores_and_diagnostics = lambda *args, **kwargs: ([
             {
                 "document": exact,
@@ -89,11 +91,43 @@ def main() -> None:
             "topic": "赤壁之战",
         }).model_dump()
         assert missing["ok"] is True and missing["data"]["retrieval_status"] == "none", missing
+
+        history_search._load_curated_history_events = lambda: ({
+            "title": "长平之战",
+            "summary": "秦赵之间规模最大的野战，赵军大败，白起坑杀降卒四十万，赵国元气大伤。",
+            "location_name": "长平（今山西高平）",
+            "dynasty": "战国",
+            "character": "白起",
+        },)
+        curated_fallback = history_search.search_history_knowledge({
+            "query": "长平之战的结果是什么",
+            "topic": "长平之战",
+        }).model_dump()
+        assert curated_fallback["data"]["retrieval_status"] == "partial", curated_fallback
+        assert curated_fallback["data"]["sources"][0]["source_tier"] == "L3_CURATED_REFERENCE", curated_fallback
+        assert curated_fallback["data"]["sources"][0]["answer_bearing"] is True, curated_fallback
+        assert curated_fallback["metadata"]["curated_fallback_added"] is True, curated_fallback
+        assert "retrieval_curated_only" in curated_fallback["data"]["evidence_sufficiency"]["reason_codes"], curated_fallback
+
+        unsupported_curated = history_search.search_history_knowledge({
+            "query": "长平之战的主要原因是什么",
+            "topic": "长平之战",
+        }).model_dump()
+        assert unsupported_curated["data"]["retrieval_status"] == "partial", unsupported_curated
+        assert unsupported_curated["data"]["sources"][0]["answer_bearing"] is False, unsupported_curated
+        assert "retrieval_aspect_not_supported" in unsupported_curated["data"]["evidence_sufficiency"]["reason_codes"], unsupported_curated
+
+        unverifiable_detail = history_search.search_history_knowledge({
+            "query": "请根据教材说明长平之战的逐日行军路线",
+            "topic": "长平之战",
+        }).model_dump()
+        assert unverifiable_detail["data"]["retrieval_status"] == "none", unverifiable_detail
+        assert unverifiable_detail["metadata"]["curated_fallback_added"] is False, unverifiable_detail
     finally:
         history_search.search_with_scores_and_diagnostics = original
+        history_search._load_curated_history_events = original_curated_loader
     print("history_retrieval_contract_smoke=PASS")
 
 
 if __name__ == "__main__":
     main()
-

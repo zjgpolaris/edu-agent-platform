@@ -59,10 +59,10 @@
     },
     "review_status": "teacher_rejected",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
     "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
     "review_source_fingerprint": "sha256:d13c534681788070543d8f77bb8b6b9fabe52ccf410c5e2d63ce1e6d5c531e4b",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:28240c859f09997139bab34108d49884666cacb0dfeacc4d8f81a38e030b743e"
   },
   {
     "id": "event-长平之战-4",
@@ -76,10 +76,10 @@
     },
     "review_status": "teacher_rejected",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
     "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
     "review_source_fingerprint": "sha256:1b09364665599fdb69388adabe848565fd6c65bc63b970345d2741800718eed7",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:28240c859f09997139bab34108d49884666cacb0dfeacc4d8f81a38e030b743e"
   },
   {
     "id": "event-长平之战-5",
@@ -91,12 +91,24 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
     "review_source_fingerprint": "sha256:3659b236f2d7d1b1ed57e1a86f861712821bdd97ae6de4034932795dfcf47610",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:22ed0254026b40030d08b334fccc04dea8c8323f8e46d48014b15c9e62802653",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f9eff6cce80d802277595bb2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ]
   },
   {
     "id": "event-长平之战-6",
@@ -108,12 +120,24 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
     "review_source_fingerprint": "sha256:e22bdb906b9685d6f2643fdb36b51d771be604a642bf11cf5eb4c1ca82bd2d10",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:5f3f686de5de76e2db77943dff2c83ecbaee5ab1aae35701f2288e5dcc6fda25",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f9eff6cce80d802277595bb2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ]
   },
   {
     "id": "event-长平之战-7",
@@ -125,12 +149,24 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
     "review_source_fingerprint": "sha256:7036411ae34f4567c52372bd523df989d5888e379dc173a73e0dc55c05cfdcc9",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:5f3f686de5de76e2db77943dff2c83ecbaee5ab1aae35701f2288e5dcc6fda25",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f9eff6cce80d802277595bb2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ]
   },
   {
     "id": "event-长平之战-8",
@@ -142,12 +178,24 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
     "review_source_fingerprint": "sha256:6086ef577d5f3c74a470c31f81070be5dbecdc97a841d52694c7f743a906d897",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:f79bb9078f8fbd7fca8678deb9571e249443a10df184d30f13cda68aef5552bf",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f9eff6cce80d802277595bb2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ]
   },
   {
     "id": "event-长平之战-9",
@@ -185,10 +233,10 @@
     },
     "review_status": "teacher_rejected",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
     "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
     "review_source_fingerprint": "sha256:e8884e6372ea934a182343c630b7381d410d70534737e092e7f355e02b809d20",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:28240c859f09997139bab34108d49884666cacb0dfeacc4d8f81a38e030b743e"
   },
   {
     "id": "event-长平之战-11",
@@ -200,12 +248,24 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
     "review_source_fingerprint": "sha256:d2e0060ad8fa426df62b66045d8f8dd3b151dd28d32203b436164d2b3980ce18",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:5f3f686de5de76e2db77943dff2c83ecbaee5ab1aae35701f2288e5dcc6fda25",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f9eff6cce80d802277595bb2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ]
   },
   {
     "id": "event-长平之战-12",
@@ -217,12 +277,24 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
     "review_source_fingerprint": "sha256:cc894821c1d78e6402dce9d36c6d6be0dab5b8cf0769dcd6d9a55a3257c17110",
-    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
+    "candidate_snapshot_hash": "sha256:5f3f686de5de76e2db77943dff2c83ecbaee5ab1aae35701f2288e5dcc6fda25",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f9eff6cce80d802277595bb2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ]
   },
   {
     "id": "event-赤壁之战-1",
@@ -2978,7 +3050,7 @@
   },
   {
     "id": "person-苏轼-1",
-    "query": "苏轼是什么",
+    "query": "苏轼是谁",
     "expected_entity": "苏轼",
     "expected_aspect": "definition",
     "relevance_scale": {
@@ -2986,16 +3058,53 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:cc47ceaa631f5d6f786a8bd95de85eecedd41be708c394c46db322ed284bbed6",
-    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:3bec0959a2075db6a267a58347ac05a6628c61e7b9df6039dfd5523204057bd7",
+    "candidate_snapshot_hash": "sha256:953672aad4a66f74e7e0b28e3bef6eb57f8834b8036c88d3c68182dc37236ec4"
   },
   {
     "id": "person-苏轼-2",
-    "query": "苏轼发生的背景是什么",
+    "query": "苏轼生活在什么时代",
     "expected_entity": "苏轼",
     "expected_aspect": "background",
     "relevance_scale": {
@@ -3003,63 +3112,211 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:ec893ccd53b0756ee440ff8c5a263bb97fc7ab2ed1e34d333cf1e07156d5a303",
-    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:ac00c7092aefef53ca2ad4abbebe6b238dc8d22160a7cb8c11173d52969424a6",
+    "candidate_snapshot_hash": "sha256:953672aad4a66f74e7e0b28e3bef6eb57f8834b8036c88d3c68182dc37236ec4"
   },
   {
     "id": "person-苏轼-3",
-    "query": "苏轼的主要原因是什么",
+    "query": "苏轼有哪些主要成就",
     "expected_entity": "苏轼",
-    "expected_aspect": "cause",
+    "expected_aspect": "contribution",
     "relevance_scale": {
       "0": "unrelated",
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:55afa481dab7e785c3a660b65893f96cc1656f977cedbb8874a82f0d61144866",
-    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:2b574ad122c25ccdad7e58c063d63dcffdc0384e728aa8e7e5c15d26693e5424",
+    "candidate_snapshot_hash": "sha256:953672aad4a66f74e7e0b28e3bef6eb57f8834b8036c88d3c68182dc37236ec4"
   },
   {
     "id": "person-苏轼-4",
-    "query": "简述苏轼的经过",
+    "query": "苏轼的创作风格有什么特点",
     "expected_entity": "苏轼",
-    "expected_aspect": "process",
+    "expected_aspect": "feature",
     "relevance_scale": {
       "0": "unrelated",
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:2d175e9690160b076282f10c4c70a7c31d4dc071c6a033364263cce04cca1cfc",
-    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:1e81f5b668347d862deb2b2b0b3cfb61da3c9a7362a5446caf943f4923b8ce6d",
+    "candidate_snapshot_hash": "sha256:953672aad4a66f74e7e0b28e3bef6eb57f8834b8036c88d3c68182dc37236ec4"
   },
   {
     "id": "person-苏轼-5",
-    "query": "苏轼的结果是什么",
+    "query": "苏轼在文学史上的地位如何",
     "expected_entity": "苏轼",
-    "expected_aspect": "result",
+    "expected_aspect": "evaluation",
     "relevance_scale": {
       "0": "unrelated",
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:c7bee69b55ab56a792df820da9569a535c8e9b056c58bae02ed85a96dd5ccb76",
-    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:045ee6b5e260c5e4f5ddda16a8dc862542b35dd952ebc54030d8ffee12ccd180",
+    "candidate_snapshot_hash": "sha256:112703af4745acbd8d2f556a6aee2ff823083b4d3af140e43668b5a39ee0b434"
   },
   {
     "id": "person-苏轼-6",
@@ -3279,20 +3536,57 @@
   },
   {
     "id": "person-苏轼-10",
-    "query": "为什么会发生苏轼",
+    "query": "苏轼对宋词发展有什么贡献",
     "expected_entity": "苏轼",
-    "expected_aspect": "cause",
+    "expected_aspect": "contribution",
     "relevance_scale": {
       "0": "unrelated",
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:c9b918e4acb09e26a2c7a12cbecf52175194a3545d1349d2dd7d7b76fad956c1",
-    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:ab8f98ef83bcd298699753d04eede3e4f83b5a17c931770a72e9f393d2e68d7e",
+    "candidate_snapshot_hash": "sha256:953672aad4a66f74e7e0b28e3bef6eb57f8834b8036c88d3c68182dc37236ec4"
   },
   {
     "id": "person-苏轼-11",
@@ -3404,7 +3698,7 @@
   },
   {
     "id": "person-辛弃疾-1",
-    "query": "辛弃疾是什么",
+    "query": "辛弃疾是谁",
     "expected_entity": "辛弃疾",
     "expected_aspect": "definition",
     "relevance_scale": {
@@ -3412,16 +3706,48 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:94a59b3af375c3ac95cb02a406a2ab268520c8ef01783d6f87cf3317714fa5d6",
-    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:33be0c1f932ab3762b9fa48c55b085d48c21bf474bc67d527c78fa86711f2b0a",
+    "candidate_snapshot_hash": "sha256:58f661012a478a3ed4d61147699e8a6062707246e6370acaafd03539ea9622f1"
   },
   {
     "id": "person-辛弃疾-2",
-    "query": "辛弃疾发生的背景是什么",
+    "query": "辛弃疾生活在什么时代",
     "expected_entity": "辛弃疾",
     "expected_aspect": "background",
     "relevance_scale": {
@@ -3429,63 +3755,191 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:21a8bcfc5e826456e0d04c177e5e67acfee120bf3a9f680bb10c24bd2d996b24",
-    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:996feb9ecdf8c65c2296a4426eeabf27a45365b66f8576c5398231af5b6951d4",
+    "candidate_snapshot_hash": "sha256:58f661012a478a3ed4d61147699e8a6062707246e6370acaafd03539ea9622f1"
   },
   {
     "id": "person-辛弃疾-3",
-    "query": "辛弃疾的主要原因是什么",
+    "query": "辛弃疾有哪些主要成就",
     "expected_entity": "辛弃疾",
-    "expected_aspect": "cause",
+    "expected_aspect": "contribution",
     "relevance_scale": {
       "0": "unrelated",
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:21cfd16ffcb276345f61967dc2f03ae59d9dfb372f29007df947372b62e812b1",
-    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:6025a385f3fa15606c17e15b05ef8b819055235833d88b30ad0e1f5d73472e6c",
+    "candidate_snapshot_hash": "sha256:58f661012a478a3ed4d61147699e8a6062707246e6370acaafd03539ea9622f1"
   },
   {
     "id": "person-辛弃疾-4",
-    "query": "简述辛弃疾的经过",
+    "query": "辛弃疾的创作风格有什么特点",
     "expected_entity": "辛弃疾",
-    "expected_aspect": "process",
+    "expected_aspect": "feature",
     "relevance_scale": {
       "0": "unrelated",
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:40c46eb04fac4c4fc6216953374d85e863fd01ce6289fc318e6d1a7bf4c973bc",
-    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:6bd89b46d31889d5071359a13ec7bb0cca88459674a63353687351423687b52a",
+    "candidate_snapshot_hash": "sha256:58f661012a478a3ed4d61147699e8a6062707246e6370acaafd03539ea9622f1"
   },
   {
     "id": "person-辛弃疾-5",
-    "query": "辛弃疾的结果是什么",
+    "query": "辛弃疾在文学史上的地位如何",
     "expected_entity": "辛弃疾",
-    "expected_aspect": "result",
+    "expected_aspect": "evaluation",
     "relevance_scale": {
       "0": "unrelated",
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:6191ddae8e298f11620e45b8bb3b0798bb12bdda25d0bde80e35b1db0eac05fc",
-    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:9bc2a6bf45d3d71b5cb570114e8d7f8eff99e7871eae7fa3893c888140ffdaea",
+    "candidate_snapshot_hash": "sha256:10d75e28af170b80be4fc2db9f63ca852c2e05ea502ce9a0dda5405964ddfa53"
   },
   {
     "id": "person-辛弃疾-6",
@@ -3685,20 +4139,52 @@
   },
   {
     "id": "person-辛弃疾-10",
-    "query": "为什么会发生辛弃疾",
+    "query": "辛弃疾对宋词发展有什么贡献",
     "expected_entity": "辛弃疾",
-    "expected_aspect": "cause",
+    "expected_aspect": "contribution",
     "relevance_scale": {
       "0": "unrelated",
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "teacher_rejected",
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
     "reviewed_by": "cengjiguang",
-    "reviewed_at": "2026-08-17T16:25:38+08:00",
-    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
-    "review_source_fingerprint": "sha256:5b9e45aa424809988352e8e8e3d29fdb4bd8011087c7d782ebcd7468479a95b6",
-    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
+    "reviewed_at": "2026-08-17T16:47:15+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:482b18185bd7e1b275e035c07b2fa2cc4c5f13564123fa7f98a4aaa115c302a4",
+    "candidate_snapshot_hash": "sha256:58f661012a478a3ed4d61147699e8a6062707246e6370acaafd03539ea9622f1"
   },
   {
     "id": "person-辛弃疾-11",

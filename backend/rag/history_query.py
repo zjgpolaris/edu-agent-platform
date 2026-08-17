@@ -63,17 +63,17 @@ ENTITY_CATALOG_PATH = ROOT / "knowledge_base" / "history" / "entities.json"
 
 _ASPECT_TERMS: tuple[tuple[HistoryAspect, tuple[str, ...]], ...] = (
     ("comparison", ("比较", "区别", "相同点", "不同点", "异同")),
-    ("evaluation", ("评价", "如何看待", "怎么看", "认识")),
+    ("evaluation", ("评价", "如何看待", "怎么看", "认识", "文学史上的地位", "地位如何")),
     ("significance", ("意义", "为什么重要", "重要性")),
     ("contribution", ("贡献", "做了什么", "主要成就")),
     ("cause", ("原因", "为什么", "为何", "导火索")),
-    ("background", ("背景", "条件")),
+    ("background", ("背景", "条件", "生活在什么时代", "所处时代")),
     ("process", ("经过", "过程", "如何发生", "怎么发生")),
     ("result", ("结果", "结局", "后果")),
     ("impact", ("影响", "作用", "带来什么", "带来了什么", "产生什么", "变化")),
     ("measure", ("措施", "内容", "做法", "政策")),
     ("feature", ("特点", "特征")),
-    ("definition", ("是什么", "什么是", "介绍")),
+    ("definition", ("是什么", "什么是", "是谁", "介绍")),
 )
 
 _ASPECT_QUERY_LABEL: dict[HistoryAspect, str] = {

@@ -1,16 +1,42 @@
 from __future__ import annotations
 
+import json
 import os
 import re
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal
 
+from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
-from rag.history_documents import history_source_fields
-from rag.history_query import HistoryQuery, aspect_query_label, parse_history_query, topic_anchor
+from rag.history_documents import history_source_fields, stable_history_source_id
+from rag.history_query import HistoryQuery, aspect_query_label, detect_history_aspect, parse_history_query, topic_anchor
 from rag.knowledge_base import MetadataHints, search_with_scores_and_diagnostics
 from tracing import truncate_text
 from tools.base import ToolResult
+
+
+ROOT = Path(__file__).resolve().parents[2]
+GEO_EVENTS_PATH = ROOT / "knowledge_base" / "history" / "geo_events.json"
+
+
+@lru_cache(maxsize=2)
+def _load_curated_history_events_cached(path: str, mtime_ns: int) -> tuple[dict[str, Any], ...]:
+    del mtime_ns
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return ()
+    return tuple(row for row in payload if isinstance(row, dict)) if isinstance(payload, list) else ()
+
+
+def _load_curated_history_events(path: Path = GEO_EVENTS_PATH) -> tuple[dict[str, Any], ...]:
+    try:
+        mtime_ns = path.stat().st_mtime_ns
+    except OSError:
+        return ()
+    return _load_curated_history_events_cached(str(path), mtime_ns)
 
 
 class SearchHistoryKnowledgeInput(BaseModel):
@@ -175,6 +201,61 @@ def _source_from_scored_doc(
     return source
 
 
+def _curated_event_source(topic: str, query: str, target_aspect: str) -> dict[str, Any] | None:
+    event = next(
+        (row for row in _load_curated_history_events() if _compact(row.get("title")) == _compact(topic)),
+        None,
+    )
+    if not event:
+        return None
+    title = str(event.get("title") or "").strip()
+    summary = str(event.get("summary") or "").strip()
+    if not title or not summary:
+        return None
+    source_title = "历史事件补充资料库"
+    source_id = stable_history_source_id(
+        source_title=f"{source_title}:{title}",
+        grade=None,
+        lesson=None,
+        page=None,
+        document_type="curated_event_fact",
+        claim=summary,
+    )
+    content = f"{title}：{summary}"
+    document = Document(page_content=content, metadata={
+        "source_id": source_id,
+        "document_type": "curated_event_fact",
+        "source_tier": "L3_CURATED_REFERENCE",
+        "source_title": source_title,
+        "source": source_title,
+        "topic": title,
+        "event": title,
+        "entity": title,
+        "entities": [title, event.get("character")] if event.get("character") else [title],
+        "aspect": detect_history_aspect(summary),
+        "claim": summary,
+        "context": event.get("location_name"),
+        "period": event.get("dynasty"),
+        "corpus_version": "history-v1.31",
+        "reviewed": bool(event.get("reviewed", False)),
+        "meta_source": "geo_events",
+    })
+    return _source_from_scored_doc(
+        {
+            "document": document,
+            "rank": 1,
+            "score": 0.0,
+            "final_score": 0.0,
+            "retrieval_score": 0.0,
+            "keyword_score": 0.0,
+            "source_mode": "curated_fallback",
+        },
+        topic,
+        query,
+        target_aspect=target_aspect,
+    )
+
+
 def _compact(value: Any) -> str:
     return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", str(value or "").lower())
 
@@ -203,14 +284,14 @@ _ASPECT_COMPATIBLE_TERMS: dict[str, tuple[str, ...]] = {
     "background": ("背景", "条件", "局面"),
     "cause": ("原因", "由于", "因为", "为了", "导火索"),
     "process": ("经过", "过程", "开始", "随后", "进而"),
-    "result": ("结果", "失败", "胜利", "灭亡", "建立", "结束"),
-    "impact": ("影响", "作用", "促进", "推动", "导致", "改变", "奠定"),
+    "result": ("结果", "失败", "胜利", "大败", "战败", "获胜", "灭亡", "建立", "结束"),
+    "impact": ("影响", "作用", "促进", "推动", "导致", "改变", "奠定", "元气大伤", "削弱"),
     "significance": ("意义", "重要", "奠定", "促进", "推动", "标志", "基础", "元气大伤"),
     "measure": ("措施", "内容", "实行", "推行", "颁布", "设置"),
     "contribution": ("贡献", "创作", "改进", "提出", "发明", "建立", "成就"),
     "feature": ("特点", "特征", "风格", "表现"),
     "comparison": ("比较", "相同", "不同", "共同"),
-    "evaluation": ("评价", "地位", "局限", "进步"),
+    "evaluation": ("评价", "地位", "局限", "进步", "决定性", "规模最大"),
 }
 
 
@@ -336,6 +417,16 @@ def search_history_knowledge(payload: BaseModel) -> ToolResult:
         for item in scored_docs
     ])
     sufficiency = _sufficiency(sources, history_query)
+    curated_fallback_added = False
+    if sufficiency.status != "sufficient" and topic and history_query.aspect not in {"fact", "unknown"}:
+        curated = _curated_event_source(topic, req.query, history_query.aspect)
+        if curated and all(source.get("source_id") != curated.get("source_id") for source in sources):
+            combined = [*sources, curated]
+            if len(combined) > req.k:
+                combined = [*combined[: max(req.k - 1, 0)], curated]
+            sources = _dedupe_sources(combined)
+            sufficiency = _sufficiency(sources, history_query)
+            curated_fallback_added = True
     return ToolResult(
         tool_name="search_history_knowledge",
         ok=True,
@@ -358,6 +449,7 @@ def search_history_knowledge(payload: BaseModel) -> ToolResult:
             "query_confidence": history_query.confidence,
             "fusion": diagnostics.get("fusion"),
             "rerank_status": (diagnostics.get("reranker") or {}).get("status"),
+            "curated_fallback_added": curated_fallback_added,
             "retrieval_diagnostics": diagnostics,
         },
     )
