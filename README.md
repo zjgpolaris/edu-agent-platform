@@ -220,6 +220,26 @@ PYTHONPATH=backend python3 eval/run_core_evals.py \
   --suite learning_assistant_external_ood_eval --profile production_canary
 ```
 
+### 历史检索人工相关性复核（v1.31）
+
+生产检索的 Recall@5、MRR 和 nDCG 只接受教研人员对稳定 `source_id` 给出的 `0/1/2` 相关性标签：`0` 为无关，`1` 为实体相关但不能回答目标维度，`2` 为可直接支持答案。系统生成的 `entity_match` 或 `answer_bearing` 不能作为自己的质量标签。
+
+```bash
+# 查看聚合复核状态
+npm run history:review -- status
+
+# 使用当前检索版本导出候选快照；复核包建议放在仓库之外
+npm run history:review -- export --output /secure/path/history-retrieval-review.jsonl
+
+# 教研填写 decision / reviewer_id / reviewed_at / judgments 后先做只读校验
+npm run history:review -- apply --input /secure/path/history-retrieval-review.jsonl
+
+# 确认无误后原子写回 reviewed 标签
+npm run history:review -- apply --input /secure/path/history-retrieval-review.jsonl --write
+```
+
+复核包带有 case fingerprint 和候选快照 hash；问题、标签或候选内容变化后，旧包不能写回。生产质量评测要求当前 top source 全部存在人工判断，出现新的未标注 source ID 时会返回 `NOT_RUN`，必须重新导出和复核，避免索引变化后继续沿用失效标签。
+
 ### MCP Server
 
 EduAgent 提供一个轻量 stdio MCP server，用于展示标准 Agent 工具协议适配。它只暴露现有 Tool Registry 中的 4 个工具，并继续复用 `run_tool()` 的 schema 校验、角色策略、确认元数据、审计与 trace：

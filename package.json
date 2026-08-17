@@ -20,6 +20,7 @@
     "test:release-gate": "PYTHONPATH=backend python3 eval/release_gate_smoke.py",
     "mcp:server": "PYTHONPATH=backend python3 -m backend.mcp_server",
     "test:prod-rag": "PYTHONPATH=backend python3 eval/run_core_evals.py --suite production_rag_health_smoke --no-report",
+    "history:review": "PYTHONPATH=backend python3 scripts/history_retrieval_review.py",
     "release:gate": "PYTHONPATH=backend python3 scripts/release_gate.py",
     "release:gate:fast": "PYTHONPATH=backend python3 scripts/release_gate.py --fast",
     "release:gate:prod": "PYTHONPATH=backend python3 scripts/release_gate.py --production"

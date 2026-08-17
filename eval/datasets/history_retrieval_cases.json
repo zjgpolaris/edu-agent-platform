@@ -9,7 +9,19 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:fd70bd50dd5d9e7cff45ea229967057198f18a8578521c7480ad0cb340b7299f",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-2",
@@ -21,7 +33,19 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:3dc89a76878df48dfd6b1226efae2bbb5c2dcbd70cc8b62b734e65691a5b205d",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-3",
@@ -33,7 +57,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:d13c534681788070543d8f77bb8b6b9fabe52ccf410c5e2d63ce1e6d5c531e4b",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-4",
@@ -45,7 +74,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:1b09364665599fdb69388adabe848565fd6c65bc63b970345d2741800718eed7",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-5",
@@ -57,7 +91,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:3659b236f2d7d1b1ed57e1a86f861712821bdd97ae6de4034932795dfcf47610",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-6",
@@ -69,7 +108,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:e22bdb906b9685d6f2643fdb36b51d771be604a642bf11cf5eb4c1ca82bd2d10",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-7",
@@ -81,7 +125,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:7036411ae34f4567c52372bd523df989d5888e379dc173a73e0dc55c05cfdcc9",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-8",
@@ -93,7 +142,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:6086ef577d5f3c74a470c31f81070be5dbecdc97a841d52694c7f743a906d897",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-9",
@@ -105,7 +159,19 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_29bd92298b26fe5b7e67f40b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:00e8d77e6ff90b30dc5a1b33db5ab833e9d6fdb04aa12f58f4b760785a335aee",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-10",
@@ -117,7 +183,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:e8884e6372ea934a182343c630b7381d410d70534737e092e7f355e02b809d20",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-11",
@@ -129,7 +200,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:d2e0060ad8fa426df62b66045d8f8dd3b151dd28d32203b436164d2b3980ce18",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-长平之战-12",
@@ -141,7 +217,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：当前候选没有可直接回答目标维度的来源，需要补充语料或改善召回。",
+    "review_source_fingerprint": "sha256:cc894821c1d78e6402dce9d36c6d6be0dab5b8cf0769dcd6d9a55a3257c17110",
+    "candidate_snapshot_hash": "sha256:1c09b3567c8c164f2dfa4a948b33c3bf76660d73b81b4ab80b07e04c1174d681"
   },
   {
     "id": "event-赤壁之战-1",
@@ -153,7 +234,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:6598e0bd1c8f83883e4989d24fb08d504a817f404744af747ecad4404b1137e6",
+    "candidate_snapshot_hash": "sha256:23b76e5300ae3518b5eae48b049709440975d18e00761c86c5bd9c470d07d64e"
   },
   {
     "id": "event-赤壁之战-2",
@@ -165,7 +293,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d13b3b4e9130a4b21ad62434fd13d01a57a79ad8bbbe5bb24962053de0d4a8e1",
+    "candidate_snapshot_hash": "sha256:a4364bb2864463980b75eb8d5624f3dbcbb5485a9793741398ce388378c5e97d"
   },
   {
     "id": "event-赤壁之战-3",
@@ -177,7 +347,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:0a2e8008cc40498942b60c02da6382620ca2951c8dc3202b41253dd97653107f",
+    "candidate_snapshot_hash": "sha256:2c2c1162e6ab9a8de04aca3d51ff8b68ebb8b58e4db43025dcb1a23d52219971"
   },
   {
     "id": "event-赤壁之战-4",
@@ -189,7 +406,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:f52efdd1c096c7751e3761f431462bbaa699cd233b4da505e2e7b7abbdd4f65b",
+    "candidate_snapshot_hash": "sha256:a134073f5a16f16f147a885b71200e7e9a1505824f088f2d69b35171e84b26d6"
   },
   {
     "id": "event-赤壁之战-5",
@@ -201,7 +460,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:3e479162a0ab88b5d7499da5220760718315ffdc0992583128dfa737316ecfaa",
+    "candidate_snapshot_hash": "sha256:23b76e5300ae3518b5eae48b049709440975d18e00761c86c5bd9c470d07d64e"
   },
   {
     "id": "event-赤壁之战-6",
@@ -213,7 +519,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d8ef7281af21280ee79d33cfccc457f381db695754be2dcdc528d426e9b8a2d5",
+    "candidate_snapshot_hash": "sha256:576f01d1620f32787fad546486f64602da6992f27902699a45da10935f214dd5"
   },
   {
     "id": "event-赤壁之战-7",
@@ -225,7 +578,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:6affa1d9cbbe3aa13b7e91aefb65bcfd7ee1d9a102621c8a10f680bfc47cca37",
+    "candidate_snapshot_hash": "sha256:a4364bb2864463980b75eb8d5624f3dbcbb5485a9793741398ce388378c5e97d"
   },
   {
     "id": "event-赤壁之战-8",
@@ -237,7 +632,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:7284f9ddf92cd01ee196baa888df0be425b55385a7001eeeddff4638b23d172a",
+    "candidate_snapshot_hash": "sha256:23b76e5300ae3518b5eae48b049709440975d18e00761c86c5bd9c470d07d64e"
   },
   {
     "id": "event-赤壁之战-9",
@@ -249,7 +691,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:a678a444d0433abc598009befeba6fcf6fc21800db7ef9aa1e928445bfc4f1c4",
+    "candidate_snapshot_hash": "sha256:23b76e5300ae3518b5eae48b049709440975d18e00761c86c5bd9c470d07d64e"
   },
   {
     "id": "event-赤壁之战-10",
@@ -261,7 +750,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:f01f40472d75706b0cdedb45b3ea780cdc9564dff5dc9bd09cd3eaba0fc2a29d",
+    "candidate_snapshot_hash": "sha256:23b76e5300ae3518b5eae48b049709440975d18e00761c86c5bd9c470d07d64e"
   },
   {
     "id": "event-赤壁之战-11",
@@ -273,7 +809,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3fef14d1cdd0378c6fd3d4f9",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:709616a006886ff395bb2b0d26ee6a7cd4237cd9b8cf65ccbdcf20400549cdbc",
+    "candidate_snapshot_hash": "sha256:576f01d1620f32787fad546486f64602da6992f27902699a45da10935f214dd5"
   },
   {
     "id": "event-赤壁之战-12",
@@ -285,7 +868,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_c18308e34a01fb81aafa5318",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c8cda28ca5d9564d10d9919c",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_431299a304e848b857b2b0a8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5b9e14a32dc7142acced2b7d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_5dadbfd56e4c6a989d163a9b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_e827c0b55ba0224adb151b25",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_71aeed1b256ce89065985930",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:5b266a720c5ee565abe0e07454740eb12c4bc1a74e821acc0172cbcabb9206eb",
+    "candidate_snapshot_hash": "sha256:a4364bb2864463980b75eb8d5624f3dbcbb5485a9793741398ce388378c5e97d"
   },
   {
     "id": "event-鸦片战争-1",
@@ -297,7 +922,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:3aa281182f5695334c291fd886b258a215ed451defac236a7d28e2e228f6932f",
+    "candidate_snapshot_hash": "sha256:6cefa6ebcdfb8f16abe29b195f02a1a29bfdfbd9bcd6d9c221ac263d7add03d8"
   },
   {
     "id": "event-鸦片战争-2",
@@ -309,7 +981,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:b9ae39a5c6932518def17a5842689e879d6a12d95dc4eedfd057a3bbb158c9f3",
+    "candidate_snapshot_hash": "sha256:152e8f94dd025fe0382e97731c16ce934e02f6594fedd840b2406e6dbb9ff604"
   },
   {
     "id": "event-鸦片战争-3",
@@ -321,7 +1040,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:9aa93dc2f1d5cf1529a5fbcf0d59a6aef082a23a4c7d9f21b5861a61a6443066",
+    "candidate_snapshot_hash": "sha256:ebeaf50c8eead82b088e4c2c6a2a62ccad884504a486dff735db051db6013537"
   },
   {
     "id": "event-鸦片战争-4",
@@ -333,7 +1099,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_37ec3f8cda8bad9b191d1bd4",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:2b2e22e9df1adadf672110bcd0218a9dea035b92d01175c814d405218e569461",
+    "candidate_snapshot_hash": "sha256:0844dfd509b85522f3da8160cf71957323571ac9942cffcef34144fcc39ce5a5"
   },
   {
     "id": "event-鸦片战争-5",
@@ -345,7 +1158,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:df327ec6f32bd76e7206e61a9097e38ad39a04e913bb12270c853f25e14dd8eb",
+    "candidate_snapshot_hash": "sha256:6cefa6ebcdfb8f16abe29b195f02a1a29bfdfbd9bcd6d9c221ac263d7add03d8"
   },
   {
     "id": "event-鸦片战争-6",
@@ -357,7 +1217,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_e60cb8912229288ea1add4a2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:fdae5d158aa8cdb32fd4c5d7730beb274275c3c4302ed67e049c5db57b74a7b9",
+    "candidate_snapshot_hash": "sha256:0ec32aba3a56e791e316340ed8a485e8455106cf7d0526fc3f77a90ce3bde0f4"
   },
   {
     "id": "event-鸦片战争-7",
@@ -369,7 +1276,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:f6d2673e4284a7999e2d97feab392c3fdc2ae5427ce7da2f0867d83250388b57",
+    "candidate_snapshot_hash": "sha256:6cefa6ebcdfb8f16abe29b195f02a1a29bfdfbd9bcd6d9c221ac263d7add03d8"
   },
   {
     "id": "event-鸦片战争-8",
@@ -381,7 +1335,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:4f6cddbeed70f6e73a8e51fc74f8f55acaddd2ce09688ab883dc6ce8fa701ef7",
+    "candidate_snapshot_hash": "sha256:35f67c13a109a0d2c09f5c0a53eff0a236473ecfa4726379f3bd737ea44824f4"
   },
   {
     "id": "event-鸦片战争-9",
@@ -393,7 +1394,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:ca1da2d1142531ae4760b72ef7bb42ef2dd6ab2a28b083daba023f29a06bbd2a",
+    "candidate_snapshot_hash": "sha256:6cefa6ebcdfb8f16abe29b195f02a1a29bfdfbd9bcd6d9c221ac263d7add03d8"
   },
   {
     "id": "event-鸦片战争-10",
@@ -405,7 +1453,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:ce5c5c0ae06c0729e6f6e6d36df2dc52ea2d2e23ac70b006a7c8e7c0cdd334b2",
+    "candidate_snapshot_hash": "sha256:ebeaf50c8eead82b088e4c2c6a2a62ccad884504a486dff735db051db6013537"
   },
   {
     "id": "event-鸦片战争-11",
@@ -417,7 +1512,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:26fb7034fe4875bbe5996dedf1afc0210b4d19ffbebe72b09fb165da3e2486dc",
+    "candidate_snapshot_hash": "sha256:aba28de31b7767557485b387fdc2e9837d2f6608fa55acc0266062376322fc8a"
   },
   {
     "id": "event-鸦片战争-12",
@@ -429,7 +1571,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_feb99c3aae4a809f815b22a1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4d1bd612c37692967c6c8733",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f04253393bd7bbea58171619",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c3a4a3ac0811881e5d9784c2",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_e8d38f84e532082fee1539bd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_c32f4798057fbde36b6f252f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a833da9d8cf5865d7df936c0",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7e9752342083aee779eb25cb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d0931190ceb3cebb6f0800d6ff2cba6b93bd8e08355c93d78e7188b271f19159",
+    "candidate_snapshot_hash": "sha256:6cefa6ebcdfb8f16abe29b195f02a1a29bfdfbd9bcd6d9c221ac263d7add03d8"
   },
   {
     "id": "event-洋务运动-1",
@@ -441,7 +1630,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:c7c0e699de6692fd4c8c99045695a6ad203ec098d0b78016b0cb69f4df3d4a1b",
+    "candidate_snapshot_hash": "sha256:9e44cf02d65d485ec3c7a6df217f0f07f682fef40faf77d730197638e22b9632"
   },
   {
     "id": "event-洋务运动-2",
@@ -453,7 +1689,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:1a83082b9b81d6ecf46c0e7805ccf5f2b6849056d57ce8324b47ce056d7c4af9",
+    "candidate_snapshot_hash": "sha256:9e44cf02d65d485ec3c7a6df217f0f07f682fef40faf77d730197638e22b9632"
   },
   {
     "id": "event-洋务运动-3",
@@ -465,7 +1748,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:de177e0a834a3273fbcd2482e3550d7841bd5362f492dab0ad1ada26910c2b8e",
+    "candidate_snapshot_hash": "sha256:f83a4ae5d5d69b92a107a1631bd88fc775e6383ebf0d6c2a9a9ae264da7e0382"
   },
   {
     "id": "event-洋务运动-4",
@@ -477,7 +1807,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_74f97508b762f86a8289402e",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:ddec06bad3739a5b0a495d4fb1ea23c04f1f3c8948d29ec23a29dcc6dcdebd17",
+    "candidate_snapshot_hash": "sha256:fe37a2c620e2e57b6bd8f195fbacb47815daa6222fe60faedecf645211b7df57"
   },
   {
     "id": "event-洋务运动-5",
@@ -489,7 +1866,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:919c00b3b6c9ad08827d5289486d2b8ef73a1e6a0b9f1530243d747bd249b346",
+    "candidate_snapshot_hash": "sha256:9e44cf02d65d485ec3c7a6df217f0f07f682fef40faf77d730197638e22b9632"
   },
   {
     "id": "event-洋务运动-6",
@@ -501,7 +1925,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_82bcfafd0b5053301b5d890b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:563a3ccf122c54bb71e7c2a0a374c0cd18aa14df9f354d88daa3520f3993013f",
+    "candidate_snapshot_hash": "sha256:edb25c3d3b6e885fa0cc4658cd9bcfa51e1188a2f0c93b267ce3dc05f2536785"
   },
   {
     "id": "event-洋务运动-7",
@@ -513,7 +1984,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:fb1d370c5b88914f9ada1eb95c7efb2becb5dcbb01af3e857f9a07325979f514",
+    "candidate_snapshot_hash": "sha256:1a800a3d309cf95d3fceab9ed407815e0dc2a1e06214f4fac90f08ad9bff200e"
   },
   {
     "id": "event-洋务运动-8",
@@ -525,7 +2043,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:b6fc782ae8b189fc3cd628858448fd03d0101115974d8973303064d6b55b62fa",
+    "candidate_snapshot_hash": "sha256:644256b5a40129686302f8664c1fa01d87645ad356d2216eeffbdc15aeef5e02"
   },
   {
     "id": "event-洋务运动-9",
@@ -537,7 +2102,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:a5d82e51caf9d9fd9881f256b70a4f76874fc75fbea438e33a81f77ebe77391e",
+    "candidate_snapshot_hash": "sha256:9e44cf02d65d485ec3c7a6df217f0f07f682fef40faf77d730197638e22b9632"
   },
   {
     "id": "event-洋务运动-10",
@@ -549,7 +2161,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:0d05452b5677d99bceefb10cc17a59ce04843ddce132cb2f8608d7332714d337",
+    "candidate_snapshot_hash": "sha256:f83a4ae5d5d69b92a107a1631bd88fc775e6383ebf0d6c2a9a9ae264da7e0382"
   },
   {
     "id": "event-洋务运动-11",
@@ -561,7 +2220,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:52e81e2c55335784d28a761d45875f7228c3a22a034820958586996e8f68f7a4",
+    "candidate_snapshot_hash": "sha256:680241a0b74c11d64b9dfcae00a512cb9622e991c2ffbf324e3568ebfce8f871"
   },
   {
     "id": "event-洋务运动-12",
@@ -573,7 +2279,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_afe5274004df659f9ab9740a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7855d22c67d6de2160a27b64",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d933d97b1a1c81ec690f6c3a",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3583212c797b1cdd314af79f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a179b7933884b3e1c540e779",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_4373328ce7dd18ea5fea7c13",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_138ecbb43a0376505f3f2388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_840564495ea9ab31b190ee6b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:307f17deb8a3193e328c86e52f926502f94be839a0d3f65b79a2fc6f1ea4f419",
+    "candidate_snapshot_hash": "sha256:1a800a3d309cf95d3fceab9ed407815e0dc2a1e06214f4fac90f08ad9bff200e"
   },
   {
     "id": "event-商鞅变法-1",
@@ -585,7 +2338,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:e56ee256f94330e31c1d7b7c30118859eec302b40b214070eaa4b7b494706952",
+    "candidate_snapshot_hash": "sha256:9d03fadeed229baf836d3c3b861b27156558578e4129a1f6ee1d90b35860243a"
   },
   {
     "id": "event-商鞅变法-2",
@@ -597,7 +2392,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:67828dec65e5bdced3f03fdd827651392f910553f6333a942e9d376f4c72807d",
+    "candidate_snapshot_hash": "sha256:2f666c720d77e2b22a9b283dd7e4b2c8cd7e1fe04adfef0f9c16a828b0441a3f"
   },
   {
     "id": "event-商鞅变法-3",
@@ -609,7 +2446,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:eddd0e24c94db3d85ad12a79f4db68863af589a4e20144f14b760ed87a3c6cd0",
+    "candidate_snapshot_hash": "sha256:9d03fadeed229baf836d3c3b861b27156558578e4129a1f6ee1d90b35860243a"
   },
   {
     "id": "event-商鞅变法-4",
@@ -621,7 +2500,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d62ead68a66e2ef895ab59aee2a1f4d36f50b83b24d8bf0158eb87bead1022ae",
+    "candidate_snapshot_hash": "sha256:6d31e0cd071d319d6de8fc4bda3cac630293d80334053f67f18147e1e3b7b368"
   },
   {
     "id": "event-商鞅变法-5",
@@ -633,7 +2554,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:8103aadfde788931d4aa69c87cf6ba3d685eaec6efe9982e067efa2ec31b6623",
+    "candidate_snapshot_hash": "sha256:9d03fadeed229baf836d3c3b861b27156558578e4129a1f6ee1d90b35860243a"
   },
   {
     "id": "event-商鞅变法-6",
@@ -645,7 +2608,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:110fdce4cc727e799a49f8aebff98b9fcf6f57480c36388e4357ff7f8bfdc069",
+    "candidate_snapshot_hash": "sha256:bcc785ac3847abf233666d2154ef13833eb06d8ce77e33ca7e16f3375003a1e8"
   },
   {
     "id": "event-商鞅变法-7",
@@ -657,7 +2662,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:83ded1824cf1d89ce3457be454c2449d722c89dbfeabab6f005513215920a6f5",
+    "candidate_snapshot_hash": "sha256:8921cbb3e3b10c56a516dd23a9c79b8c79411f7ea2bdbc272d461e41110809c1"
   },
   {
     "id": "event-商鞅变法-8",
@@ -669,7 +2716,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d9e5e51f9db8725853767514a1ddf73a79b30c485957fcdac38811e45346cf75",
+    "candidate_snapshot_hash": "sha256:9d03fadeed229baf836d3c3b861b27156558578e4129a1f6ee1d90b35860243a"
   },
   {
     "id": "event-商鞅变法-9",
@@ -681,7 +2770,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:2c874092681109c75bd033a427122ebc93216cd7295573d85f6ebef1413f2978",
+    "candidate_snapshot_hash": "sha256:9d03fadeed229baf836d3c3b861b27156558578e4129a1f6ee1d90b35860243a"
   },
   {
     "id": "event-商鞅变法-10",
@@ -693,7 +2824,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:8a4757cba3ab252e03093ad92062067756d90bb4f440fa874311b75581f98803",
+    "candidate_snapshot_hash": "sha256:9d03fadeed229baf836d3c3b861b27156558578e4129a1f6ee1d90b35860243a"
   },
   {
     "id": "event-商鞅变法-11",
@@ -705,7 +2878,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:10657b095730d77561b7ced0540cacd60e43c1ebfa09e1483dfeb565383bc103",
+    "candidate_snapshot_hash": "sha256:ed7a097a5469fa0568e038c4514280719280d6a2cba8401adcfe0713f248e1f8"
   },
   {
     "id": "event-商鞅变法-12",
@@ -717,7 +2932,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_53451c12f258619984022230",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_b29774ee0229c2c3aff76388",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_6372817922ae82a3a2efbe96",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d1b5c70f542695293cc28ce5",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_909b40df40abb3c33ed8321b",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_561a56f7ba509fc9d43a9baa",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_00aea86466c08974fdd02b2f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:1bf3fc889427f5e63a3cbc5b91fbb48eaad8f50436b5648e4e76fe9fc8915f66",
+    "candidate_snapshot_hash": "sha256:8921cbb3e3b10c56a516dd23a9c79b8c79411f7ea2bdbc272d461e41110809c1"
   },
   {
     "id": "person-苏轼-1",
@@ -729,7 +2986,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:cc47ceaa631f5d6f786a8bd95de85eecedd41be708c394c46db322ed284bbed6",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-2",
@@ -741,7 +3003,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:ec893ccd53b0756ee440ff8c5a263bb97fc7ab2ed1e34d333cf1e07156d5a303",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-3",
@@ -753,7 +3020,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:55afa481dab7e785c3a660b65893f96cc1656f977cedbb8874a82f0d61144866",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-4",
@@ -765,7 +3037,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:2d175e9690160b076282f10c4c70a7c31d4dc071c6a033364263cce04cca1cfc",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-5",
@@ -777,7 +3054,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:c7bee69b55ab56a792df820da9569a535c8e9b056c58bae02ed85a96dd5ccb76",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-6",
@@ -789,7 +3071,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:7bdae1dc80c38a8bf1021c9ca96ee06da2c9dc0433c2dc2c054d8a5ac24af5ca",
+    "candidate_snapshot_hash": "sha256:4af82bcebbe2d12f7471cc0aeec45683644415dbf17ca97289310cb055bf96d5"
   },
   {
     "id": "person-苏轼-7",
@@ -801,7 +3125,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:c4d2a9d35f3f9d17af83e4d1696dd793478372af8ef51a415e67718dee473503",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-8",
@@ -813,7 +3179,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:ae03139763779e18391b4017b20d67e6dbb8c799e8d693f3daa6ed6f1d821ccc",
+    "candidate_snapshot_hash": "sha256:c4e0d5ca90fff222da7708c7536d666e6cca210cceb68e4ef7a751042af744c8"
   },
   {
     "id": "person-苏轼-9",
@@ -825,7 +3233,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:21c652d0aff7e116416d4b0c2d33f7779ebc4ec267babd3e591711d96f1aa42e",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-10",
@@ -837,7 +3287,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:c9b918e4acb09e26a2c7a12cbecf52175194a3545d1349d2dd7d7b76fad956c1",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-11",
@@ -849,7 +3304,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:693c3758ffff4c280c4aa9d3a416a4f069f6239d6cf085529660c4fd1da181cb",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-苏轼-12",
@@ -861,7 +3358,49 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_2dba8b7ea51eb881004e1417",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fb0099bdc9ab65779db0eb56",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:07328eb2edc4a37b0f6912585ff3ae8c44672a263aff37c4d48ef08795480a4e",
+    "candidate_snapshot_hash": "sha256:2d01749fd8d9a16eb334cdb6667efb6ff08d3434d5bff9acc8deb72070539387"
   },
   {
     "id": "person-辛弃疾-1",
@@ -873,7 +3412,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:94a59b3af375c3ac95cb02a406a2ab268520c8ef01783d6f87cf3317714fa5d6",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-2",
@@ -885,7 +3429,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:21a8bcfc5e826456e0d04c177e5e67acfee120bf3a9f680bb10c24bd2d996b24",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-3",
@@ -897,7 +3446,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:21cfd16ffcb276345f61967dc2f03ae59d9dfb372f29007df947372b62e812b1",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-4",
@@ -909,7 +3463,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:40c46eb04fac4c4fc6216953374d85e863fd01ce6289fc318e6d1a7bf4c973bc",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-5",
@@ -921,7 +3480,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:6191ddae8e298f11620e45b8bb3b0798bb12bdda25d0bde80e35b1db0eac05fc",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-6",
@@ -933,7 +3497,44 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:b8d162e34c75f6a845990b3f1f3eb5ffe0f82b66806001699fc976757c7b8fba",
+    "candidate_snapshot_hash": "sha256:e9f19555846295f8f788d708ab3e015252f09e36445ec2e6decee35175fbe8c0"
   },
   {
     "id": "person-辛弃疾-7",
@@ -945,7 +3546,44 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:14e647bd620467244ce3369abafec3df7aba1e8ae79dfe061debc867f851958a",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-8",
@@ -957,7 +3595,44 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:208f222dbe5e798f5de29a293002028da5dae8d2e9e5847b085957b8a6ccb79c",
+    "candidate_snapshot_hash": "sha256:ecc171e0af02c4596891033ab6cdee0d7cef398ba5728b662abc949f5d34da1f"
   },
   {
     "id": "person-辛弃疾-9",
@@ -969,7 +3644,44 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:c3bcdd0e2ae176e2cb4531afcdde639dcf3a96e08fc65f93d3c881b14e6ec17e",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-10",
@@ -981,7 +3693,12 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_rejected",
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核确认驳回：人物被错误套用事件问句模板，需改写 query/aspect 后重新导出。",
+    "review_source_fingerprint": "sha256:5b9e45aa424809988352e8e8e3d29fdb4bd8011087c7d782ebcd7468479a95b6",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-11",
@@ -993,7 +3710,44 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:a9e5dba1107f2b27a7357e543a9fa753a4c6de5e35c5e19b2ee5f7c2581b9364",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "person-辛弃疾-12",
@@ -1005,7 +3759,44 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_d5a0c306b66c99e06d68abeb",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_e753e56f5e7c7389a552c5a2",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_93049731de5060e0a71b61a6",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd5e7cbd5d878a95ba80b30a",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_359b883e4140e09dc049f96d",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_f22333f15db17dc831376103",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:2cb881e58ab2078371cece64926f87a7df86f6e9521ee2f1c44e4f18b538148a",
+    "candidate_snapshot_hash": "sha256:7233e9dc191b00da32c2f1028964b37d3404785a0be7529b776eee48a36b5fd1"
   },
   {
     "id": "event-贞观之治-1",
@@ -1017,7 +3808,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d41f4d6c1767371c1dc564a5d732a2eba2aab7492a5e3f1abf3591217959e048",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-贞观之治-2",
@@ -1029,7 +3867,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_4c125ba15be2b2e020f8f465",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:3fecd6f2377fdd2c46e990d370531414b2a734dda1818857b67f95d223e3491b",
+    "candidate_snapshot_hash": "sha256:2a46887cf5dcad1987e32ce015dd86eabab22890a2632e81eed63af471baec7d"
   },
   {
     "id": "event-贞观之治-3",
@@ -1041,7 +3926,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d90d31687287b3a36a623737687afb5cf0d625d6b9acafab5bce519df1fe156e",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-贞观之治-4",
@@ -1053,7 +3985,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:c581df6ac32dc0780d2fd4b4c3d973f73b9b663a1aba4e7105cfd45e8b666881",
+    "candidate_snapshot_hash": "sha256:c63e394f37761a997457628745b994ee54272a4b55ff72dd44faa3fb553ded19"
   },
   {
     "id": "event-贞观之治-5",
@@ -1065,7 +4044,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:59aa76a1f2f600ae0b84867b36a89817a9a521befae9b65d856d6bd5c5efab1d",
+    "candidate_snapshot_hash": "sha256:578c466a88390ed8c0d61d5ad78d94a4e4f815160eb478e90da5d772b28b9bd8"
   },
   {
     "id": "event-贞观之治-6",
@@ -1077,7 +4103,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:38158d87d3bb28beb8cdfc1e97bb37f042a724f144cc653e9b6a53fb3fd405af",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-贞观之治-7",
@@ -1089,7 +4162,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:c1e302e1ce7bed519c877888860921ac88a31debe9219132180dd37b75acfb7b",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-贞观之治-8",
@@ -1101,7 +4221,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d75eb724ae1bb4ce89edf3d405afe3d765b638ee779494e171128efea33e10e3",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-贞观之治-9",
@@ -1113,7 +4280,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:10c9fe6dd798413486cd78321045bf6c4d95a296520532bca7808f53a2e4e54e",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-贞观之治-10",
@@ -1125,7 +4339,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:3d34e75155c9b163bd317e6818e567f45eafd795dd01ec01b97e6183aa362df2",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-贞观之治-11",
@@ -1137,7 +4398,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:b609bacd04f4c6a5649ae08ffa138dda3424a928e924923a6c9dfe7ed9f46a43",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-贞观之治-12",
@@ -1149,7 +4457,54 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_fea1a17745d00bc038db9481",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_213c5168af54b18688aad1b4",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_7d07cb855c49040718a9eeea",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_98f0570c4c99f7106608c14f",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a49ae866e6e377a2c03bc29e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_febbcc2c26795aba029b0280",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_fd368f653681a4cbc17606db",
+        "relevance": 0,
+        "notes": "AI预审：材料属于其他事件或人物，不能支持当前问题。"
+      },
+      {
+        "source_id": "history_c2f5cb72771ad31375e20892",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:458884886feed1d006b20b58a949f4575083b85d42f61fa3808925660163a49d",
+    "candidate_snapshot_hash": "sha256:027af132f7176c97c6d9168b3ea4699f51e54783d09312f94e3dd53e3c7abd8b"
   },
   {
     "id": "event-张骞出使西域-1",
@@ -1161,7 +4516,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:ce7c0c10f511cfa88b6450cad949dc3aba7f540eb97ddfdea4192b911e43c871",
+    "candidate_snapshot_hash": "sha256:e72e842d3136cd67b98fe6ebd8a14e699dcb6dcb92182519646d121710055e1c"
   },
   {
     "id": "event-张骞出使西域-2",
@@ -1173,7 +4555,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:6d568b364829bbb14a6f1d84c785e2396f2b009449a232408a213cd5387d56db",
+    "candidate_snapshot_hash": "sha256:e72e842d3136cd67b98fe6ebd8a14e699dcb6dcb92182519646d121710055e1c"
   },
   {
     "id": "event-张骞出使西域-3",
@@ -1185,7 +4594,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:64b638aa30d06e619757a9bded333f6674200fce9e6acc850c7fb7633f1db939",
+    "candidate_snapshot_hash": "sha256:e72e842d3136cd67b98fe6ebd8a14e699dcb6dcb92182519646d121710055e1c"
   },
   {
     "id": "event-张骞出使西域-4",
@@ -1197,7 +4633,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:3f3698d1b0ab06d6b852dce00822715437fee44afceb4c0844b12c234a2a836b",
+    "candidate_snapshot_hash": "sha256:eb23b31200565c20b27519e6601840d50063d6dc259c85c845fddd6ecb748add"
   },
   {
     "id": "event-张骞出使西域-5",
@@ -1209,7 +4672,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:531202a32bb622275c430cbe89680a6ab94828e5f20a787f00c65f20d8b0cce0",
+    "candidate_snapshot_hash": "sha256:e72e842d3136cd67b98fe6ebd8a14e699dcb6dcb92182519646d121710055e1c"
   },
   {
     "id": "event-张骞出使西域-6",
@@ -1221,7 +4711,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d95ca4fb18e256043d482e8c812ba43abd5c2e51316ae36739d6e6480f9f9620",
+    "candidate_snapshot_hash": "sha256:a722f1e1822519ecd113983fec4cbbda3a32aef5692caace8223ae32946c3c10"
   },
   {
     "id": "event-张骞出使西域-7",
@@ -1233,7 +4750,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:c904d0b4547dcfbd5d81578826d3be7e71786378ee99e96025439353a35636f1",
+    "candidate_snapshot_hash": "sha256:a722f1e1822519ecd113983fec4cbbda3a32aef5692caace8223ae32946c3c10"
   },
   {
     "id": "event-张骞出使西域-8",
@@ -1245,7 +4789,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:d56bcd3d65b3024930c9b4ada4f90593e5df42c595036a6521572da13b3b0052",
+    "candidate_snapshot_hash": "sha256:e72e842d3136cd67b98fe6ebd8a14e699dcb6dcb92182519646d121710055e1c"
   },
   {
     "id": "event-张骞出使西域-9",
@@ -1257,7 +4828,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:835b3c39228f654ffce3eff0ae8f56a4705bc4638896e248e4781d1485239678",
+    "candidate_snapshot_hash": "sha256:e72e842d3136cd67b98fe6ebd8a14e699dcb6dcb92182519646d121710055e1c"
   },
   {
     "id": "event-张骞出使西域-10",
@@ -1269,7 +4867,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:ef7417d70ca7dea97174c3d06edc12c6f48be40a1c9de4a332da885526d70874",
+    "candidate_snapshot_hash": "sha256:e72e842d3136cd67b98fe6ebd8a14e699dcb6dcb92182519646d121710055e1c"
   },
   {
     "id": "event-张骞出使西域-11",
@@ -1281,7 +4906,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:2c3c67b5b05fde39876f949539ed3b04f322041cee6d9e1e4876992e9e44dbac",
+    "candidate_snapshot_hash": "sha256:a722f1e1822519ecd113983fec4cbbda3a32aef5692caace8223ae32946c3c10"
   },
   {
     "id": "event-张骞出使西域-12",
@@ -1293,7 +4945,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_251ef73dbbc8168fbcd99b43",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_a5e3751ed514732cd986fb66",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_9eb1528bed88fcb0dbf445fd",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_2c93f0151e164ad122b8a3f8",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:dac4e0b1dcdd891bae2911b7f63ecc430d7392760b79ade42f499445776bfb8e",
+    "candidate_snapshot_hash": "sha256:a722f1e1822519ecd113983fec4cbbda3a32aef5692caace8223ae32946c3c10"
   },
   {
     "id": "event-虎门销烟-1",
@@ -1305,7 +4984,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:f27dda7ff1e791c2e72cdce31c80aa03f54a342f9a9a6ebcffbc12d822fc02bf",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-2",
@@ -1317,7 +5023,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:38e03dacf4ab1a524c927d2bf0a72fc89545477c680ebe9f1b2d5b5389dac0c5",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-3",
@@ -1329,7 +5062,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:85aed7ba710ef8bcd27aec2fc278f0b5b863ec06db0c8026a739b107c065f8a4",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-4",
@@ -1341,7 +5101,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:5e705dc2455a52ff52972d9041eb4a5fc2166ae527bb825a5f8f8f44ea378ed9",
+    "candidate_snapshot_hash": "sha256:02d9b208e9bf7203d9d32db27b48148d0ee4ca4bb7ae048fae9b3025fba6e35b"
   },
   {
     "id": "event-虎门销烟-5",
@@ -1353,7 +5140,29 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:29f28ff8241527585e4a59ee68da2c4ce0514c42b679482e005584a6664d4b12",
+    "candidate_snapshot_hash": "sha256:2d2f94a2467fc288882882c99a986ee76a734e041cd3f942385bd6d4b963c2e8"
   },
   {
     "id": "event-虎门销烟-6",
@@ -1365,7 +5174,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:f44106da71d7412f19a9870e0f61f5e116486778c9861fc0d67162afecc2b105",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-7",
@@ -1377,7 +5213,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:900b8e733fa06a636e4f2afbe90b92c1d807f90747179e329f6fb796d9072abc",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-8",
@@ -1389,7 +5252,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:e3826727800b83dc1152b52e29b49b19e823a17a3044c4ab250bca73a8802b17",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-9",
@@ -1401,7 +5291,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:f1aad472c7eb31ad2d3f565f422ea157211f0cda0fa71e5991b60503cbc8a99f",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-10",
@@ -1413,7 +5330,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:220d5da09dd19fa84627bccba1a56bdf3f6680393e471241798e20817eec3ab2",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-11",
@@ -1425,7 +5369,34 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:c7454fdcd96779b33e37350814611ae14f42d2054b906ef9d5b54ceceafe6f7a",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   },
   {
     "id": "event-虎门销烟-12",
@@ -1437,6 +5408,33 @@
       "1": "entity_only",
       "2": "answer_bearing"
     },
-    "review_status": "seed_pending_teacher_review"
+    "review_status": "teacher_reviewed",
+    "source_judgments": [
+      {
+        "source_id": "history_dc298e333ff9a411f8fddd2e",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_cc07fbcdf5445070ef81edf1",
+        "relevance": 2,
+        "notes": "AI预审：材料包含可直接支持当前问题维度的教材证据。"
+      },
+      {
+        "source_id": "history_3affda70eccacdcbcd0286c1",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      },
+      {
+        "source_id": "history_0f1f479349f83126f47a2fcf",
+        "relevance": 1,
+        "notes": "AI预审：材料与目标实体相关，但不足以直接回答当前维度。"
+      }
+    ],
+    "reviewed_by": "cengjiguang",
+    "reviewed_at": "2026-08-17T16:25:38+08:00",
+    "review_notes": "人工复核人已逐项确认候选来源相关性标签。",
+    "review_source_fingerprint": "sha256:7b8fcf05dc845eae8d8dce071114305f338bd3d2455600a945dc115b0fde5d35",
+    "candidate_snapshot_hash": "sha256:e78c7ca23bc74f45a098ddf99a94b15ca783bc7e69f46611e7e878476c2edf31"
   }
 ]

@@ -710,13 +710,17 @@ shadow 100%（只记录）
 - 语料构建、语料校验、稳定索引 ID 和 index manifest 构建逻辑；
 - 120 条查询解析种子、120 条检索种子、40 条无答案种子、60 条 grounding 种子；
 - fast release gate 新增 query、RRF/sufficiency、no-answer 和 grounding suites。
+- 人工相关性复核工作流：按当前检索版本导出稳定 source ID 候选快照，教研填写 `0/1/2` 判断后先 dry-run 校验，再显式 `--write` 原子写回；禁止 `system/auto/llm` 作为 reviewer。
+- 生产检索评测不再用系统自身的 `entity_match / answer_bearing` 充当相关性标签；Recall、MRR、nDCG 只读取 `teacher_reviewed` 的 source judgments，当前 top source 出现未标注 ID 时返回 `NOT_RUN`。
 
 当前工程验证：
 
 - history query：`120/120`；
 - history no-answer：`40/40`；
 - history grounding：`60/60`；
-- fast release gate：`24/24 suites`、`497/497 cases`；
+- history retrieval review contract：`10/10`；
+- fast release gate：`25/25 suites`、`507/507 cases`；
+- full core eval：`40/40 suites`、`592/592 cases`；
 - 前端相关单测：`7/7`；
 - Next.js production build：通过。
 
@@ -728,7 +732,7 @@ shadow 100%（只记录）
 
 发布前仍需完成：
 
-1. 教研人员将 `seed_pending_teacher_review` 数据改为 `teacher_reviewed`，生产检索质量 gate 会在此之前阻断盖章。
+1. 教研人员使用 `npm run history:review -- export ...` 导出候选快照，为每个 query-source 标注 `0/1/2`，并通过 dry-run 后显式写回；截至 2026-08-17，当前状态为 `99/120 teacher_reviewed`、`21/120 teacher_rejected`、`0 pending`。驳回项包括 9 条长平之战证据不足，以及苏轼、辛弃疾各 6 条错误套用事件问句模板；修复并重新复核前，生产检索质量 gate 继续阻断盖章。
 2. 使用真实 `DATABASE_URL + EMBED_API + RERANK_MODEL_PATH` 重建 history collection；构建完成后生成 `index_manifest.json`。
 3. 运行 `release:gate:prod`，确认真实 entity/aspect Recall、MRR、nDCG 与延迟达到第 3 节门槛。
 4. 按 Phase 4 收集 shadow / 10% / 50% / 100% 生产样本；代码完成不能替代灰度证据。
