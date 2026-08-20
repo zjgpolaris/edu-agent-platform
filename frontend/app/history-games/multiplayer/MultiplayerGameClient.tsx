@@ -51,7 +51,7 @@ type GameState = {
   current_player_index: number;
   deck_count: number;
   winner_player_id: string | null;
-  source?: "llm" | "static";
+  source?: "llm" | "trusted_candidates" | "static";
   fallback_used?: boolean;
   generation_reason?: string | null;
   learning_goal?: string | null;
@@ -346,7 +346,11 @@ export default function MultiplayerGameClient() {
             <div className="timewheel-hud-actions">
               {gameState && (
                 <div className="tabletop-source-chip">
-                  牌堆 {gameState.deck_count} · {gameState.source === "llm" && !gameState.fallback_used ? "AI 出题" : "静态题库"}
+                  牌堆 {gameState.deck_count} · {gameState.source === "llm" && !gameState.fallback_used
+                    ? "AI 润色组牌"
+                    : gameState.source === "trusted_candidates"
+                      ? "知识库动态组牌"
+                      : "静态题库"}
                 </div>
               )}
               <button className="timewheel-ghost-btn" type="button" disabled={busy} onClick={startGame}>

@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from db.engine import get_connection
 from student_profile import now_iso
+from services.history_review_question import build_grounded_review_question, is_usable_choice_question
 from services.weakpoint_service import get_weakpoints
 from services.variant_service import get_or_create_variant, should_use_variant
 
@@ -70,12 +71,7 @@ def _generate_question(tag: str) -> dict[str, Any]:
             data = json.loads(raw[start:end])
         except json.JSONDecodeError:
             return None
-        opts = data.get("options") or []
-        q = data.get("question", "")
-        if len(opts) != 4:
-            return None
-        combined = " ".join(opts) + " " + q
-        if any(p in combined for p in _PLACEHOLDER_OPTS):
+        if not is_usable_choice_question(data):
             return None
         return data
 
@@ -90,18 +86,14 @@ def _generate_question(tag: str) -> dict[str, Any]:
         except Exception as exc:
             _log.warning("review _generate_question failed attempt=%s tag=%s: %s", attempt + 1, tag, exc)
 
-    # 两次均失败，返回带明确错误提示的兜底题（至少题目是有意义的）
-    _log.error("review _generate_question gave up tag=%s", tag)
-    return {
-        "tag": tag,
-        "question": f"关于「{tag}」，以下说法正确的是？（题目生成失败，请刷新重试）",
-        "options": ["A. 暂无选项", "B. 暂无选项", "C. 暂无选项", "D. 暂无选项"],
-        "answer": "A",
-        "explanation": f"题目生成失败，请稍后刷新复习页面重试。",
-        "done": False,
-        "correct": None,
-        "_generation_failed": True,
-    }
+    # 模型不可用时仍必须给学生一道可作答、可判分、教材有据的题。
+    fallback = build_grounded_review_question(tag)
+    _log.info(
+        "review _generate_question grounded_fallback tag=%s source=%s",
+        tag,
+        fallback.get("generation_source"),
+    )
+    return fallback
 
 
 def get_today_session(student_id: str, today: str, *, hydrate: bool = True) -> dict | None:

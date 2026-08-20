@@ -29,6 +29,7 @@ from sqlalchemy import text
 
 from db.engine import get_connection
 from student_profile import now_iso
+from services.history_review_question import build_grounded_review_question, is_usable_choice_question
 
 _log = logging.getLogger(__name__)
 
@@ -88,19 +89,11 @@ def generate_variant(tag: str, seed_question: dict | None = None) -> dict[str, A
         data["tag"] = tag
         data.setdefault("done", False)
         data.setdefault("correct", None)
+        if not is_usable_choice_question(data):
+            raise ValueError("variant question is unusable")
     except Exception as exc:
         _log.warning("variant_service: LLM 生成失败 tag=%s: %s", tag, exc)
-        # 降级：生成占位变式题，与原题有所区别
-        data = {
-            "question": f"下列关于「{tag}」的说法，正确的是？",
-            "options": ["A. 选项一", "B. 选项二", "C. 选项三", "D. 选项四"],
-            "answer": "A",
-            "explanation": f"请结合课本复习「{tag}」的核心内容。",
-            "is_variant": True,
-            "tag": tag,
-            "done": False,
-            "correct": None,
-        }
+        data = build_grounded_review_question(tag, is_variant=True, seed_question=seed_question)
 
     return data
 
@@ -128,7 +121,7 @@ def get_or_create_variant(
 
     # 1. 先查今日缓存
     cached = get_cached_variant(student_id, tag, today)
-    if cached:
+    if cached and is_usable_choice_question(cached):
         return cached
 
     # 2. 生成新变式题

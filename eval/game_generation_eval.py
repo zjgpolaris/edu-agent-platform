@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "backend"))
 
 from agents.card_game import generate_card_game_round
 from agents.history_games import TIMELINE_LEVELS
+from agents.multiplayer_game import ACTIVE_MULTIPLAYER_ROUNDS, MULTIPLAYER_RECENT_EVENTS, start_multiplayer_round
 from agents.timeline_question_generator import (
     TimelineGenerationError,
     event_count_for_difficulty,
@@ -21,6 +22,11 @@ CARD_CASES = [
     {"name": "card-ancient-easy", "grade": "七年级", "difficulty": "easy", "topic": "中国古代史"},
     {"name": "card-world-normal", "grade": "九年级", "difficulty": "normal", "topic": "世界史"},
 ]
+MULTIPLAYER_CASE = {
+    "name": "multiplayer-ancient-easy",
+    "difficulty": "easy",
+    "topic": "中国古代史",
+}
 
 
 def _ids_unique(items: list[dict[str, Any]]) -> bool:
@@ -121,22 +127,81 @@ def _run_card_case(case: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _run_multiplayer_case(case: dict[str, Any]) -> dict[str, Any]:
+    ACTIVE_MULTIPLAYER_ROUNDS.clear()
+    MULTIPLAYER_RECENT_EVENTS.clear()
+    try:
+        first = start_multiplayer_round(
+            difficulty=case["difficulty"],
+            topic=case["topic"],
+            student_id="game-generation-eval",
+            ai_count=2,
+            mode="llm",
+        )
+        second = start_multiplayer_round(
+            difficulty=case["difficulty"],
+            topic=case["topic"],
+            student_id="game-generation-eval",
+            ai_count=2,
+            mode="llm",
+        )
+        first_state = ACTIVE_MULTIPLAYER_ROUNDS[first["round_id"]]
+        second_state = ACTIVE_MULTIPLAYER_ROUNDS[second["round_id"]]
+        first_cards = list(first_state["all_cards"].values())
+        second_cards = list(second_state["all_cards"].values())
+        first_ids = set(first_state["all_cards"])
+        second_ids = set(second_state["all_cards"])
+        dealt_count = 1 + sum(len(player["hand"]) for player in first_state["players"]) + len(first_state["deck"])
+        error = ""
+    except Exception as exc:
+        first = {}
+        first_cards = []
+        second_cards = []
+        first_ids = set()
+        second_ids = set()
+        dealt_count = 0
+        error = str(exc)
+
+    source = first.get("source", "unknown")
+    reason = str(first.get("generation_reason") or "")
+    return {
+        "name": case["name"],
+        "kind": "multiplayer",
+        "generated": bool(first),
+        "shape_valid": dealt_count == 19 and len(first_cards) == 19,
+        "ids_unique": _ids_unique(first_cards),
+        "years_unique": _years_unique(first_cards),
+        "selected_ids_match": True,
+        "year_leak": _year_leaks({"events": first_cards}) or _year_leaks({"events": second_cards}),
+        "generation_source": source,
+        "rotates": bool(first_ids and second_ids and first_ids.isdisjoint(second_ids)),
+        "reason_safe": "credential" not in reason.lower() and "api key" not in reason.lower(),
+        "error": error,
+    }
+
+
 def _passed(result: dict[str, Any]) -> bool:
-    return all(
-        [
-            result["generated"],
-            result["shape_valid"],
-            result["ids_unique"],
-            result["years_unique"],
-            result["selected_ids_match"],
-            not result["year_leak"],
-        ]
-    )
+    checks = [
+        result["generated"],
+        result["shape_valid"],
+        result["ids_unique"],
+        result["years_unique"],
+        result["selected_ids_match"],
+        not result["year_leak"],
+    ]
+    if result["kind"] == "multiplayer":
+        checks.extend([
+            result.get("rotates"),
+            result.get("reason_safe"),
+            result.get("generation_source") in {"llm", "trusted_candidates"},
+        ])
+    return all(checks)
 
 
 def main() -> None:
     results = [_run_timeline_case(case) for case in TIMELINE_CASES]
     results.extend(_run_card_case(case) for case in CARD_CASES)
+    results.append(_run_multiplayer_case(MULTIPLAYER_CASE))
 
     for result in results:
         status = "OK" if _passed(result) else "FAIL"
@@ -144,7 +209,7 @@ def main() -> None:
             f"{status} {result['name']}: kind={result['kind']} generated={result['generated']} "
             f"shape={result['shape_valid']} ids_unique={result['ids_unique']} years_unique={result['years_unique']} "
             f"selected_ids={result['selected_ids_match']} year_leak={result['year_leak']} error={result['error']}"
-            f" source={result['generation_source']}"
+            f" source={result['generation_source']} rotates={result.get('rotates', 'n/a')}"
         )
 
     total = len(results)

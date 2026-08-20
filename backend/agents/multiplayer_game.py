@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import random
 from datetime import datetime, timedelta, timezone
-from services.weakpoint_service import record_weakpoint
 from typing import Any, Literal, TypedDict
 from uuid import uuid4
 
@@ -12,6 +11,7 @@ from agents.multiplayer_ai_commentary import generate_ai_play_reason
 from agents.multiplayer_card_generator import generate_multiplayer_card_pool
 from agents.multiplayer_coach import classify_timeline_error, generate_coach_tip
 from agents.timeline_question_generator import flatten_static_levels, get_recent_event_ids, matches_topic, update_recent_event_ids
+from services.weakpoint_service import record_weakpoint
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,15 @@ ACTIVE_MULTIPLAYER_ROUNDS: dict[str, MultiplayerGameState] = {}
 MULTIPLAYER_RECENT_EVENTS: dict[str, list[str]] = {}
 ROUND_TTL = timedelta(hours=2)
 AI_ERROR_RATES: dict[str, float] = {"easy": 0.30, "medium": 0.15, "hard": 0.05}
+
+
+def _safe_generation_reason(exc: Exception) -> str:
+    message = str(exc).lower()
+    if "credential" in message or "api key" in message or "disabled" in message:
+        return "model_unavailable"
+    if "timeout" in message or "timed out" in message:
+        return "model_timeout"
+    return "dynamic_pool_unavailable"
 
 
 class AiPersona(TypedDict):
@@ -89,7 +98,7 @@ class MultiplayerGameState(TypedDict):
     current_player_index: int
     winner_player_id: str | None
     ai_difficulty: str
-    source: Literal["llm", "static"]
+    source: Literal["llm", "trusted_candidates", "static"]
     fallback_used: bool
     generation_reason: str | None
     learning_goal: str | None
@@ -116,7 +125,7 @@ def start_multiplayer_round(
     min_required_cards = 1 + total_players * hand_size
     target_cards = _multiplayer_target_card_count(total_players)
 
-    source: Literal["llm", "static"]
+    source: Literal["llm", "trusted_candidates", "static"]
     fallback_used = False
     generation_reason: str | None = None
     learning_goal: str | None = None
@@ -143,7 +152,10 @@ def start_multiplayer_round(
                 target_cards=target_cards,
             )
             cards = generated["cards"]
-            source = "llm"
+            generated_source = str(generated.get("generation_source") or "llm")
+            source = "llm" if generated_source == "llm" else "trusted_candidates"
+            fallback_used = source != "llm"
+            generation_reason = generated.get("generation_reason")
             learning_goal = generated.get("learning_goal")
         except Exception as exc:
             logger.warning(
@@ -163,7 +175,7 @@ def start_multiplayer_round(
             )
             source = "static"
             fallback_used = True
-            generation_reason = str(exc)
+            generation_reason = _safe_generation_reason(exc)
     else:
         cards = _select_cards(
             grade,

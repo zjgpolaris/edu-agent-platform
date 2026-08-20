@@ -19,12 +19,14 @@ sys.path.insert(0, str(ROOT / "backend"))
 from datetime import date
 
 from services.review_service import (
+    _generate_question,
     create_today_session,
     get_mastery_overview,
     get_today_session,
     is_unusable_question,
     submit_answer,
 )
+from services.variant_service import generate_variant
 
 STUDENT = "smoke-review"
 TODAY = date.today().isoformat()
@@ -104,6 +106,33 @@ def accepts_valid_questions() -> None:
     assert not is_unusable_question(valid), "正常题被误判为占位题"
 
 
+def model_failure_uses_grounded_questions() -> None:
+    """没有模型凭证时也必须返回学生可作答、教材有据的题。"""
+    import llm_config
+
+    class FailingLlm:
+        def invoke(self, _messages):
+            raise RuntimeError("credentials are not configured")
+
+    original = llm_config.llm_fast
+    llm_config.llm_fast = FailingLlm()
+    try:
+        purpose = _generate_question("洋务运动目的")
+        significance = _generate_question("辛亥革命历史意义")
+        variant = generate_variant("洋务运动目的", purpose)
+    finally:
+        llm_config.llm_fast = original
+
+    assert not is_unusable_question(purpose), purpose
+    assert "维护和巩固清政府的统治" in " ".join(purpose["options"]), purpose
+    assert purpose["answer"] in "ABCD", purpose
+    assert purpose.get("generation_source") == "trusted_corpus", purpose
+    assert not is_unusable_question(significance), significance
+    assert "君主专制制度" in " ".join(significance["options"]), significance
+    assert not is_unusable_question(variant) and variant.get("is_variant") is True, variant
+    assert "题目生成失败" not in str(purpose) + str(significance)
+
+
 if __name__ == "__main__":
     cases = [
         ("no_session_initially", no_session_initially),
@@ -112,6 +141,7 @@ if __name__ == "__main__":
         ("session_cached", session_cached),
         ("detects_placeholder_questions", detects_placeholder_questions),
         ("accepts_valid_questions", accepts_valid_questions),
+        ("model_failure_uses_grounded_questions", model_failure_uses_grounded_questions),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)
     print(f"review_system_smoke={passed}/{len(cases)}")
