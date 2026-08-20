@@ -10,11 +10,17 @@ from agents.learning_assistant_planner import (
     TaskPlan,
 )
 from trace_store import emit_trace_event
+from agent_runtime.adapters.sequential import map_legacy_task_plan
 
 
 ToolRunner = Callable[[str, dict[str, Any]], Any]
 ToolSummary = Callable[[Any], dict[str, Any]]
 GenerationRunner = Callable[[str, PlanStep, dict[str, dict[str, Any]]], dict[str, Any]]
+
+
+def map_task_plan_to_agent_plan(plan: TaskPlan, *, run_id: str | None = None):
+    """Compatibility mapper used by Runtime v2 without adding a second executor."""
+    return map_legacy_task_plan(plan, planner_version="learning-assistant-v1.33")
 
 
 def _public_step(step: PlanStep, status: str, *, sequence: int, latency_ms: float | None = None, result_summary: str | None = None, error: dict[str, Any] | None = None) -> dict[str, Any]:

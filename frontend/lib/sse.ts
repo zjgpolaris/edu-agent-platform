@@ -2,6 +2,7 @@ import { ApiError, apiUrl } from "@/lib/api";
 import { authHeaders, clientSessionHeaders } from "@/lib/auth";
 
 export type SseEvent<TData = Record<string, unknown>> = {
+  id?: string;
   event: string;
   data: TData;
 };
@@ -32,6 +33,7 @@ function getErrorMessage(payload: unknown, fallback: string) {
 }
 
 export function parseSseFrame<TData = Record<string, unknown>>(frame: string): SseEvent<TData> | null {
+  let id: string | undefined;
   let event = "message";
   const dataLines: string[] = [];
 
@@ -40,13 +42,15 @@ export function parseSseFrame<TData = Record<string, unknown>>(frame: string): S
     if (!trimmedLine || trimmedLine.startsWith(":")) continue;
     if (trimmedLine.startsWith("event:")) {
       event = trimmedLine.slice(6).trim() || "message";
+    } else if (trimmedLine.startsWith("id:")) {
+      id = trimmedLine.slice(3).trim() || undefined;
     } else if (trimmedLine.startsWith("data:")) {
       dataLines.push(trimmedLine.slice(5).trimStart());
     }
   }
 
   if (!dataLines.length) return null;
-  return { event, data: JSON.parse(dataLines.join("\n")) as TData };
+  return { id, event, data: JSON.parse(dataLines.join("\n")) as TData };
 }
 
 export async function readSseStream<TData = Record<string, unknown>>(

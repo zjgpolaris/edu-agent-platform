@@ -162,6 +162,9 @@ def _context_metadata(context: ToolExecutionContext) -> dict[str, Any]:
         "student_id": context.student_id,
         "request_source": context.request_source,
         "confirmed": context.confirmed,
+        "run_id": context.run_id,
+        "step_id": context.step_id,
+        "run_revision": context.run_revision,
     }
 
 
@@ -203,8 +206,22 @@ def _confirmation_secret() -> bytes:
     return (os.getenv("JWT_SECRET") or os.getenv("EDU_AGENT_CONFIRMATION_SECRET") or "edu-agent-dev-secret").encode("utf-8")
 
 
-def _confirmation_body(tool_name: str, payload: dict[str, Any], actor_id: str | None, issued_at: int) -> dict[str, Any]:
-    return {"tool_name": tool_name, "payload": payload, "actor_id": actor_id, "issued_at": issued_at}
+def _confirmation_body(
+    tool_name: str,
+    payload: dict[str, Any],
+    actor_id: str | None,
+    issued_at: int,
+    *,
+    run_id: str | None = None,
+    step_id: str | None = None,
+    run_revision: int | None = None,
+) -> dict[str, Any]:
+    body = {"tool_name": tool_name, "payload": payload, "actor_id": actor_id, "issued_at": issued_at}
+    if run_id is not None or step_id is not None or run_revision is not None:
+        if not run_id or not step_id or run_revision is None:
+            raise ValueError("v2 confirmation requires run_id, step_id and run_revision")
+        body.update({"token_version": 2, "run_id": run_id, "step_id": step_id, "run_revision": run_revision})
+    return body
 
 
 def _sign_confirmation_body(body: dict[str, Any]) -> str:
@@ -228,13 +245,38 @@ def _decode_token(token: str) -> dict[str, Any] | None:
         return None
 
 
-def _make_confirmation_token(tool_name: str, payload: dict[str, Any], actor_id: str | None) -> str:
+def _make_confirmation_token(tool_name: str, payload: dict[str, Any], context: ToolExecutionContext) -> str:
     issued_at = int(time.time())
-    body = _confirmation_body(tool_name, payload, actor_id, issued_at)
+    body = _confirmation_body(
+        tool_name,
+        payload,
+        context.actor_id,
+        issued_at,
+        run_id=context.run_id,
+        step_id=context.step_id,
+        run_revision=context.run_revision,
+    )
     return _encode_token({"body": body, "signature": _sign_confirmation_body(body)})
 
 
-def _verify_confirmation_token(token: str | None, tool_name: str, payload: dict[str, Any], actor_id: str | None) -> bool:
+def issue_runtime_confirmation_token(
+    tool_name: str,
+    payload: dict[str, Any],
+    context: ToolExecutionContext,
+) -> str:
+    """Issue a v2 token only for a registered high-risk capability input."""
+    spec = TOOLS.get(tool_name)
+    if spec is None:
+        raise LookupError("tool not found")
+    if not (spec.requires_confirmation or spec.risk_level == "high"):
+        raise ValueError("tool does not require confirmation")
+    validated_payload = spec.input_model.model_validate(payload).model_dump()
+    if not context.run_id or not context.step_id or context.run_revision is None:
+        raise ValueError("runtime confirmation requires run, step and revision")
+    return _make_confirmation_token(tool_name, validated_payload, context)
+
+
+def _verify_confirmation_token(token: str | None, tool_name: str, payload: dict[str, Any], context: ToolExecutionContext) -> bool:
     if not token:
         return False
     decoded = _decode_token(token)
@@ -247,7 +289,18 @@ def _verify_confirmation_token(token: str | None, tool_name: str, payload: dict[
     issued_at = body.get("issued_at")
     if not isinstance(issued_at, int) or time.time() - issued_at > CONFIRMATION_TTL_SECONDS:
         return False
-    expected_body = _confirmation_body(tool_name, payload, actor_id, issued_at)
+    try:
+        expected_body = _confirmation_body(
+            tool_name,
+            payload,
+            context.actor_id,
+            issued_at,
+            run_id=context.run_id,
+            step_id=context.step_id,
+            run_revision=context.run_revision,
+        )
+    except ValueError:
+        return False
     if body != expected_body:
         return False
     return hmac.compare_digest(signature, _sign_confirmation_body(body))
@@ -312,7 +365,18 @@ def run_tool(tool_name: str, payload: dict[str, Any], context: ToolExecutionCont
         needs_confirmation = spec.requires_confirmation or spec.risk_level == "high"
         if needs_confirmation and not context.confirmed:
             duration_ms = (perf_counter() - started_at) * 1000
-            token = _make_confirmation_token(tool_name, validated_payload, context.actor_id)
+            try:
+                token = _make_confirmation_token(tool_name, validated_payload, context)
+            except ValueError:
+                duration_ms = (perf_counter() - started_at) * 1000
+                return _tool_error(
+                    tool_name,
+                    "invalid_runtime_confirmation_context",
+                    "高风险 Run 确认缺少 step/revision 绑定。",
+                    duration_ms=duration_ms,
+                    spec=spec,
+                    context=context,
+                )
             result = _tool_error(
                 tool_name,
                 "confirmation_required",
@@ -327,7 +391,7 @@ def run_tool(tool_name: str, payload: dict[str, Any], context: ToolExecutionCont
             return result
 
         if needs_confirmation and context.confirmed:
-            if not _verify_confirmation_token(context.confirmation_token, tool_name, validated_payload, context.actor_id):
+            if not _verify_confirmation_token(context.confirmation_token, tool_name, validated_payload, context):
                 duration_ms = (perf_counter() - started_at) * 1000
                 result = _tool_error(
                     tool_name,

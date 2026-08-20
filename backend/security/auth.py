@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
@@ -82,6 +83,37 @@ def assert_student_access(actor: Actor, student_id: str) -> None:
     if actor.role == "student" and actor.actor_id == student_id:
         return
     raise HTTPException(status_code=403, detail="无权访问该学生数据。")
+
+
+def teacher_has_student_access(teacher_id: str | None, student_id: str) -> bool:
+    """Use existing assignment ownership as the current class-membership boundary."""
+    if not teacher_id:
+        return False
+    try:
+        from sqlalchemy import inspect as sa_inspect, text
+        from db.engine import get_connection
+
+        with get_connection() as conn:
+            if "assignments" not in set(sa_inspect(conn).get_table_names()):
+                return False
+            rows = conn.execute(
+                text("SELECT assignee_ids_json FROM assignments WHERE teacher_id=:teacher_id"),
+                {"teacher_id": teacher_id},
+            ).scalars().all()
+        return any(student_id in (json.loads(value or "[]") if isinstance(value, str) else []) for value in rows)
+    except Exception:
+        return False
+
+
+def assert_teacher_student_access(actor: Actor, student_id: str, *, resource_owner_id: str | None = None) -> None:
+    if not auth_required() or actor.role == "admin":
+        return
+    if actor.role == "teacher" and (
+        (resource_owner_id and actor.actor_id == resource_owner_id)
+        or teacher_has_student_access(actor.actor_id, student_id)
+    ):
+        return
+    raise HTTPException(status_code=403, detail="教师无权访问该学生或班级资源。")
 
 
 def require_auth(creds: HTTPAuthorizationCredentials = Security(_bearer)) -> Actor:

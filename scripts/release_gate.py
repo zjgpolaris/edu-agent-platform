@@ -61,6 +61,16 @@ PY_COMPILE_TARGETS = [
     "eval/learning_assistant_external_ood_eval.py",
     "eval/production_rag_health_smoke.py",
 ]
+PY_COMPILE_TARGETS.extend(
+    str(path.relative_to(ROOT))
+    for path in sorted((ROOT / "backend" / "agent_runtime").glob("*.py"))
+)
+PY_COMPILE_TARGETS.extend(
+    [
+        "backend/alembic/versions/007_agent_runtime_v2.py",
+        "backend/api/routers/agent_runtime.py",
+    ]
+)
 
 FAST_SUITES = [
     "answer_groundedness_eval",
@@ -88,6 +98,14 @@ FAST_SUITES = [
     "quality_dashboard_smoke",
     "weakpoints_smoke",
     "readiness_smoke",
+    "agent_runtime_contract_smoke",
+    "agent_runtime_checkpoint_smoke",
+    "agent_runtime_concurrency_smoke",
+    "history_character_runtime_smoke",
+    "agent_runtime_stream_parity_smoke",
+    "agent_runtime_security_smoke",
+    "agent_runtime_confirmation_smoke",
+    "agent_runtime_product_routes_smoke",
 ]
 
 

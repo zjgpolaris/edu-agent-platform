@@ -127,6 +127,8 @@ async def stream_debate(topic: str, *, trace_id: str | None = None) -> AsyncIter
     runtime_trace_id = trace_id or create_trace_id()
     with runtime_trace_context(runtime_trace_id):
         rounds: list[dict] = []
+        sources, rag_snippets = await run_in_threadpool(_search_history_sources, topic)
+        shared_evidence = f"\n共享参考史料（只能引用这些标签）：\n{rag_snippets}\n" if rag_snippets else "\n当前没有可用史料，禁止编造具体史实。\n"
         yield {"event": "trace", "data": {"trace_id": runtime_trace_id}}
 
         for round_number in range(1, MAX_ROUNDS + 1):
@@ -135,7 +137,7 @@ async def stream_debate(topic: str, *, trace_id: str | None = None) -> AsyncIter
                 "pro_debater",
                 f"round_{round_number}",
                 llm,
-                f"辩题：{topic}\n你持正方立场，用2-3个历史史实论证。\n辩论记录：{history}\n请发言（200字以内）：",
+                f"辩题：{topic}{shared_evidence}\n你持正方立场，用2-3个可核验史实论证。\n辩论记录：{history}\n请发言（200字以内）：",
                 role="pro",
                 round=round_number,
             )
@@ -147,7 +149,7 @@ async def stream_debate(topic: str, *, trace_id: str | None = None) -> AsyncIter
                 "con_debater",
                 f"round_{round_number}",
                 llm,
-                f"辩题：{topic}\n你持反方立场，用2-3个历史史实反驳正方。\n辩论记录：{history}\n请发言（200字以内）：",
+                f"辩题：{topic}{shared_evidence}\n你持反方立场，用2-3个可核验史实反驳正方。\n辩论记录：{history}\n请发言（200字以内）：",
                 role="con",
                 round=round_number,
             )
@@ -155,7 +157,6 @@ async def stream_debate(topic: str, *, trace_id: str | None = None) -> AsyncIter
             yield {"event": "round", "data": {"side": "con", "argument": con_argument, "round": round_number}}
 
         history_text = "\n".join(f"{r['side']}: {r['argument']}" for r in rounds)
-        sources, rag_snippets = await run_in_threadpool(_search_history_sources, topic)
         fact_prompt = (
             f"辩题：{topic}\n辩论记录：\n{history_text}\n"
             + (f"\n参考史料：\n{rag_snippets}\n" if rag_snippets else "")
@@ -169,14 +170,26 @@ async def stream_debate(topic: str, *, trace_id: str | None = None) -> AsyncIter
             fact_prompt,
             source_count=len(sources),
         )
-        yield {"event": "fact_check", "data": {"result": fact_result, "sources": sources}}
+        known_labels = {str(source.get("citation_label")) for source in sources if source.get("citation_label")}
+        claims = []
+        for index, line in enumerate((item.strip() for item in fact_result.splitlines()), start=1):
+            if not line:
+                continue
+            cited = sorted(label for label in known_labels if label in line)
+            claims.append({
+                "claim_id": f"fact_{index}",
+                "text": line[:500],
+                "source_ids": cited,
+                "supported": bool(cited),
+            })
+        yield {"event": "fact_check", "data": {"result": fact_result, "sources": sources, "claims": claims}}
 
         verdict = await _invoke_role(
             "judge",
             "verdict",
             llm_judge,
-            f"辩题：{topic}\n辩论记录：\n{history_text}\n\n"
-            "从【论点清晰度】【史实准确性】【逻辑严密性】评判双方，给出优劣、获胜方和理由（300字以内）：",
+            f"辩题：{topic}\n辩论记录：\n{history_text}\n\n事实核查：\n{fact_result}\n\n"
+            "从【论点清晰度】【史实准确性】【逻辑严密性】评判双方；不得把核查为错误、夸大或无来源的事实作为获胜依据。给出优劣、获胜方和理由（300字以内）：",
         )
         yield {"event": "verdict", "data": {"verdict": verdict}}
 
@@ -200,3 +213,34 @@ async def stream_debate(topic: str, *, trace_id: str | None = None) -> AsyncIter
             "event": "done",
             "data": {"trace_id": runtime_trace_id, "round_count": MAX_ROUNDS, "source_count": len(sources)},
         }
+
+
+async def run_debate(topic: str, *, trace_id: str | None = None) -> dict:
+    """Non-stream consumer of the exact same execution source as SSE."""
+    result: dict = {
+        "topic": topic,
+        "rounds": [],
+        "sources": [],
+        "fact_check": None,
+        "verdict": "",
+        "coach_summary": "",
+        "completion_status": "failed",
+    }
+    async for item in stream_debate(topic, trace_id=trace_id):
+        event = item["event"]
+        data = item["data"]
+        if event == "trace":
+            result["trace_id"] = data.get("trace_id")
+        elif event == "round":
+            result["rounds"].append(data)
+        elif event == "fact_check":
+            result["fact_check"] = data
+            result["sources"] = data.get("sources") or []
+        elif event == "verdict":
+            result["verdict"] = data.get("verdict", "")
+        elif event == "coach_summary":
+            result["coach_summary"] = data.get("summary", "")
+        elif event == "done":
+            result["completion_status"] = "completed"
+            result["round_count"] = data.get("round_count")
+    return result

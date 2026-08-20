@@ -13,9 +13,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PY_FILES = [
     ROOT / "backend" / "api" / "main.py",
+    ROOT / "backend" / "api" / "routers" / "agent_runtime.py",
+    ROOT / "backend" / "alembic" / "versions" / "007_agent_runtime_v2.py",
     ROOT / "backend" / "rag" / "knowledge_base.py",
     ROOT / "eval" / "run_core_evals.py",
 ]
+PY_FILES.extend(sorted((ROOT / "backend" / "agent_runtime").glob("*.py")))
 
 
 def run(command: list[str]) -> None:

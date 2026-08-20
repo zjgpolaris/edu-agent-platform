@@ -21,6 +21,8 @@ from agent_ops import build_agent_ops_summary
 from security.audit_log import record_audit_event
 from student_profile import LearningEvent, try_record_learning_event
 from trace_store import create_trace_id, emit_trace_event, trace_context
+from agent_runtime.event_store import append_run_event, create_run
+from agent_runtime.models import AgentContext
 
 
 def main() -> None:
@@ -159,6 +161,20 @@ def main() -> None:
             metadata={"operation": "search_history_knowledge"},
         )
 
+    runtime_context = AgentContext(
+        run_id="run-agent-ops-smoke",
+        agent_type="learning_assistant",
+        actor_id="agent-ops-student",
+        actor_role="student",
+        student_id="agent-ops-student",
+        trace_id=trace_id,
+        data_scope="runtime",
+        durability_mode="observable",
+        config_version="agent-ops-runtime-test",
+    )
+    create_run(runtime_context, objective="AgentOps Runtime sample")
+    append_run_event("run-agent-ops-smoke", expected_revision=0, event_type="route_decided", next_status="routed")
+
     summary = build_agent_ops_summary(limit=100)
     production = summary.get("production") or {}
     latency = production.get("latency") or {}
@@ -168,6 +184,7 @@ def main() -> None:
     runtime = production.get("runtime") or {}
     assistant_feedback = summary.get("learning_assistant") or {}
     data_scope = summary.get("data_scope") or {}
+    runtime_v2 = summary.get("runtime_v2") or {}
 
     assert latency.get("p95_ms") is not None
     assert latency.get("llm_p95_ms") == 320
@@ -200,6 +217,14 @@ def main() -> None:
     assert assistant_feedback.get("partial_completion_rate") == 0.5
     assert assistant_feedback.get("session_resume_rate") == 0.5
     assert assistant_feedback.get("autotutor_return_rate") == 0.5
+    assert runtime_v2.get("status") == "ok"
+    assert (runtime_v2.get("by_agent") or {}).get("learning_assistant") == 1
+    assert (runtime_v2.get("by_config_version") or {}).get("agent-ops-runtime-test") == 1
+    assert (runtime_v2.get("by_revision") or {}).get("1") == 1
+    assert (runtime_v2.get("by_runtime_mode") or {}).get("active") == 1
+    assert (runtime_v2.get("event_coverage_by_runtime_mode") or {}).get("active") == 1.0
+    assert runtime_v2.get("invalid_transition_total") == 0
+    assert runtime_v2.get("duplicate_side_effect_prevented_total") == 0
     print("agent_ops_smoke=PASS")
 
 

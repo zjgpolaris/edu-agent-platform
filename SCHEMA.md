@@ -2,7 +2,7 @@
 
 **创建时间：** 2026-06-23
 **项目名称：** EduAgent - K-12 中文/历史 AI 教学平台
-**最后更新：** 2026-07-14
+**最后更新：** 2026-08-20
 
 ---
 
@@ -37,6 +37,7 @@ EduAgent 是一个 K-12 中文/历史 AI 教学平台，采用前后端分离架
 edu-agent-platform/
 ├── backend/                    # 后端服务
 │   ├── agents/                # AI 代理模块
+│   ├── agent_runtime/         # v1.33 统一 Runtime 合同、适配器、CAS/event/checkpoint
 │   ├── api/                   # FastAPI 路由
 │   ├── homework_grading/      # 作业批改模块
 │   ├── materials/             # 多模态资料库
@@ -99,6 +100,15 @@ edu-agent-platform/
 
 ```
 backend/
+├── agent_runtime/             # 统一 Agent Runtime v2
+│   ├── adapters/              # Sequential / Function / LangGraph 事件适配
+│   ├── models.py              # Context / Plan / State / Event / Completion 合同
+│   ├── event_store.py         # run revision CAS 与 append-only milestone
+│   ├── artifact_store.py      # owner-protected 输入/交付物
+│   ├── checkpoint_store.py    # resumable 业务边界 checkpoint
+│   ├── capability_registry.py # capability allowlist 与 ToolSpec 绑定
+│   └── recovery.py            # stale run 恢复/失败收敛
+│
 ├── agents/                    # AI 代理
 │   ├── history_character.py       # 历史人物对话代理
 │   ├── history_games.py           # 历史游戏代理
@@ -475,6 +485,17 @@ frontend/
 | GET | `/api/debug/rag/health` | 生产 RAG 健康检查：验证 PostgreSQL/pgvector、`rag_documents`、embedding API 与直接向量查询 |
 | GET | `/api/traces/{trace_id}` | 获取 Agent 执行轨迹 |
 
+### Agent Runtime v2
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/agent-runs/{run_id}` | owner/admin 查询公共 Run 状态；不返回原始作文或内部 metadata |
+| GET | `/api/agent-runs/{run_id}/events?after=N` | 按持久化 sequence 补发 milestone，返回最新 cursor |
+| POST | `/api/agent-runs/{run_id}/resume` | 使用 `expected_revision` + `correlation_key` 恢复受控产品节点 |
+| POST | `/api/agent-runs/{run_id}/confirm` | 确认绑定 run/step/revision 的高风险步骤 |
+| POST | `/api/agent-runs/{run_id}/cancel` | CAS 取消；保留审计和已写事件 |
+| POST | `/api/admin/agent-runs/recover` | 管理员收敛 stale observable/resumable runs |
+
 ### 评估
 
 | 方法 | 路径 | 说明 |
@@ -542,6 +563,18 @@ frontend/
 | created_at | TEXT | 创建时间 |
 
 AutoTutor 关键事件类型：`auto_tutor_step` 表示教学过程步骤；`auto_tutor_exit_ticket` 表示课后退出票检验结果，用于学生/教师辅导效果聚合、错题/掌握度证据与复习闭环。
+
+#### autotutor_sessions 表
+
+AutoTutor 的兼容业务状态表。v1.33 起由 Alembic 007 与 `db/schema.py` 管理；模块内建表逻辑仅用于本地 SQLite 兼容，PostgreSQL 缺列时会 fail-fast 要求先执行 migration。`revision` 通过数据库 CAS 更新，`start_idempotency_key` 与 answer transition key 防止多实例重复开课或重复判题。
+
+#### agent_runs / agent_run_events 表
+
+`agent_runs` 保存统一 Runtime 当前状态、plan、budget、completion、revision 与 owner 引用；状态更新使用 `WHERE run_id=:id AND revision=:expected_revision` CAS。`agent_run_events` 按 `(run_id, sequence)` append-only 保存 route/plan/step/waiting/verification/terminal milestone。`generation_delta` 与 heartbeat 不写数据库，公共 payload 会移除 prompt、token、正文和 stack。
+
+#### agent_run_artifacts / agent_checkpoints 表
+
+`agent_run_artifacts` 保存受 owner/角色保护的输入和交付物，作文正文仅进入该表，不进入 objective、event 或 trace。默认保留时间按敏感度为 normal 7 天、student_content 30 天、restricted 7 天，可由 Runtime retention 环境变量收窄或调整；过期产物在 purge 前也不可读取。`agent_checkpoints` 只用于 `resumable/queued`，在 waiting、人工复核和已提交业务写边界保存状态与 side-effect ledger；observable 与 trace-only 不计入 checkpoint 覆盖率。terminal checkpoint 默认只保留最近 5 个且最长 30 天。
 
 #### memory_entries 表
 

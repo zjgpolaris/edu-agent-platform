@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import threading
 import time
 from time import perf_counter
@@ -24,7 +25,7 @@ from typing import Any, Iterator, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
 from llm_config import llm_fast, llm_quality
@@ -120,6 +121,7 @@ class EvidenceSummary(BaseModel):
 
 class AutoTutorState(BaseModel):
     session_id: str
+    run_id: str | None = None
     trace_id: str
     student_id: str
     grade: str | None = None
@@ -154,11 +156,14 @@ class _SessionStore:
         self._ttl = ttl_seconds
 
     def save(self, state: AutoTutorState) -> None:
+        self.cache(state)
+        _persist_session(state)
+
+    def cache(self, state: AutoTutorState) -> None:
         with self._lock:
             self._cleanup_locked()
             self._sessions[state.session_id] = state
             self._timestamps[state.session_id] = time.time()
-        _persist_session(state)
 
     def get(self, session_id: str) -> AutoTutorState | None:
         with self._lock:
@@ -192,20 +197,54 @@ _store = _SessionStore()
 
 def _ensure_session_table() -> None:
     with get_connection() as conn:
+        if conn.dialect.name != "sqlite":
+            inspector = sa_inspect(conn)
+            if "autotutor_sessions" not in set(inspector.get_table_names()):
+                raise RuntimeError("autotutor_sessions is not migrated; run Alembic 007")
+            required = {
+                "session_id", "student_id", "trace_id", "run_id", "status",
+                "revision", "state_json", "inflight_idempotency_key",
+                "start_idempotency_key", "last_idempotency_key",
+                "last_response_json", "created_at", "updated_at",
+            }
+            missing = sorted(required - {column["name"] for column in inspector.get_columns("autotutor_sessions")})
+            if missing:
+                raise RuntimeError(f"autotutor_sessions migration 007 is incomplete: {', '.join(missing)}")
+            return
         conn.execute(
             text(
                 """CREATE TABLE IF NOT EXISTS autotutor_sessions (
                     session_id TEXT PRIMARY KEY,
                     student_id TEXT NOT NULL,
                     trace_id TEXT NOT NULL,
+                    run_id TEXT,
                     status TEXT NOT NULL,
+                    revision INTEGER NOT NULL DEFAULT 0,
                     state_json TEXT NOT NULL,
+                    inflight_idempotency_key TEXT,
+                    start_idempotency_key TEXT,
+                    last_idempotency_key TEXT,
+                    last_response_json TEXT,
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 )"""
             )
         )
+        columns = {column["name"] for column in sa_inspect(conn).get_columns("autotutor_sessions")}
+        additions = {
+            "run_id": "TEXT",
+            "revision": "INTEGER NOT NULL DEFAULT 0",
+            "inflight_idempotency_key": "TEXT",
+            "start_idempotency_key": "TEXT",
+            "last_idempotency_key": "TEXT",
+            "last_response_json": "TEXT",
+        }
+        for column_name, column_type in additions.items():
+            if column_name not in columns:
+                conn.execute(text(f"ALTER TABLE autotutor_sessions ADD COLUMN {column_name} {column_type}"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_autotutor_sessions_student_updated ON autotutor_sessions(student_id, updated_at DESC)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_autotutor_sessions_run ON autotutor_sessions(run_id)"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_autotutor_sessions_start_idempotency ON autotutor_sessions(student_id, start_idempotency_key)"))
 
 
 def _restore_state(payload: dict[str, Any]) -> AutoTutorState:
@@ -217,22 +256,27 @@ def _restore_state(payload: dict[str, Any]) -> AutoTutorState:
     return state
 
 
-def _persist_session(state: AutoTutorState) -> None:
+def _persist_session(state: AutoTutorState, *, start_idempotency_key: str | None = None) -> None:
     _ensure_session_table()
     payload = state.model_dump()
     with get_connection() as conn:
         conn.execute(
             text(
                 """INSERT INTO autotutor_sessions (
-                    session_id, student_id, trace_id, status, state_json, created_at, updated_at
+                    session_id, student_id, trace_id, run_id, status, revision, state_json,
+                    start_idempotency_key, created_at, updated_at
                 ) VALUES (
-                    :session_id, :student_id, :trace_id, :status, :state_json, :created_at, :updated_at
+                    :session_id, :student_id, :trace_id, :run_id, :status, :revision, :state_json,
+                    :start_idempotency_key, :created_at, :updated_at
                 )
                 ON CONFLICT(session_id) DO UPDATE SET
                     student_id=excluded.student_id,
                     trace_id=excluded.trace_id,
+                    run_id=excluded.run_id,
                     status=excluded.status,
+                    revision=excluded.revision,
                     state_json=excluded.state_json,
+                    start_idempotency_key=COALESCE(autotutor_sessions.start_idempotency_key, excluded.start_idempotency_key),
                     created_at=excluded.created_at,
                     updated_at=excluded.updated_at"""
             ),
@@ -240,21 +284,26 @@ def _persist_session(state: AutoTutorState) -> None:
                 "session_id": state.session_id,
                 "student_id": state.student_id,
                 "trace_id": state.trace_id,
+                "run_id": state.run_id,
                 "status": state.status,
+                "revision": state.revision,
                 "state_json": json.dumps(payload, ensure_ascii=False),
+                "start_idempotency_key": start_idempotency_key,
                 "created_at": state.created_at,
                 "updated_at": state.updated_at,
             },
         )
 
 
-def _load_persisted_session(session_id: str) -> AutoTutorState | None:
+def _load_start_idempotent_session(student_id: str, idempotency_key: str) -> AutoTutorState | None:
     _ensure_session_table()
     with get_connection() as conn:
-        row = conn.execute(
-            text("SELECT state_json FROM autotutor_sessions WHERE session_id=:session_id"),
-            {"session_id": session_id},
-        ).mappings().first()
+        row = conn.execute(text("""SELECT state_json FROM autotutor_sessions
+            WHERE student_id=:student_id AND start_idempotency_key=:idempotency_key
+            ORDER BY updated_at DESC LIMIT 1"""), {
+            "student_id": student_id,
+            "idempotency_key": idempotency_key,
+        }).mappings().first()
     if not row:
         return None
     try:
@@ -263,9 +312,111 @@ def _load_persisted_session(session_id: str) -> AutoTutorState | None:
         return None
 
 
+def _claim_answer_transition(session_id: str, expected_revision: int, idempotency_key: str) -> tuple[str, AutoTutorState | dict[str, Any] | None]:
+    """Atomically claim one answer transition before any judging side effect."""
+    _ensure_session_table()
+    with get_connection() as conn:
+        row = conn.execute(text("""SELECT state_json, revision, inflight_idempotency_key,
+            last_idempotency_key, last_response_json FROM autotutor_sessions
+            WHERE session_id=:session_id"""), {"session_id": session_id}).mappings().first()
+        if not row:
+            return "missing", None
+        if row.get("last_idempotency_key") == idempotency_key and row.get("last_response_json"):
+            return "replayed", json.loads(row["last_response_json"])
+        state = _restore_state(json.loads(row["state_json"]))
+        state.revision = int(row["revision"] or 0)
+        if int(row["revision"] or 0) != expected_revision:
+            return "stale", state
+        claimed = conn.execute(text("""UPDATE autotutor_sessions
+            SET inflight_idempotency_key=:idempotency_key, updated_at=:updated_at
+            WHERE session_id=:session_id AND revision=:expected_revision
+              AND (inflight_idempotency_key IS NULL OR inflight_idempotency_key='')"""), {
+            "idempotency_key": idempotency_key,
+            "updated_at": time.time(),
+            "session_id": session_id,
+            "expected_revision": expected_revision,
+        })
+        if claimed.rowcount != 1:
+            return "busy", state
+    return "claimed", state
+
+
+def _complete_answer_transition(
+    state: AutoTutorState,
+    *,
+    expected_revision: int,
+    idempotency_key: str,
+    response: dict[str, Any],
+) -> bool:
+    state.revision = expected_revision + 1
+    state.updated_at = time.time()
+    payload = state.model_dump()
+    with get_connection() as conn:
+        result = conn.execute(text("""UPDATE autotutor_sessions SET
+            student_id=:student_id, trace_id=:trace_id, run_id=:run_id, status=:status,
+            revision=revision+1, state_json=:state_json,
+            inflight_idempotency_key=NULL, last_idempotency_key=:idempotency_key,
+            last_response_json=:last_response_json, updated_at=:updated_at
+            WHERE session_id=:session_id AND revision=:expected_revision
+              AND inflight_idempotency_key=:idempotency_key"""), {
+            "student_id": state.student_id,
+            "trace_id": state.trace_id,
+            "run_id": state.run_id,
+            "status": state.status,
+            "state_json": json.dumps(payload, ensure_ascii=False),
+            "idempotency_key": idempotency_key,
+            "last_response_json": json.dumps(response, ensure_ascii=False),
+            "updated_at": state.updated_at,
+            "session_id": state.session_id,
+            "expected_revision": expected_revision,
+        })
+    return result.rowcount == 1
+
+
+def _fail_answer_transition(session_id: str, *, expected_revision: int, idempotency_key: str, error: Exception) -> None:
+    """Close an ambiguous transition so recovery never auto-replays its side effects."""
+    response = {
+        "session_id": session_id,
+        "revision": expected_revision + 1,
+        "transition_failed": True,
+        "retryable": False,
+        "error": {"code": "answer_transition_failed", "type": error.__class__.__name__},
+    }
+    with get_connection() as conn:
+        conn.execute(text("""UPDATE autotutor_sessions SET
+            revision=revision+1, inflight_idempotency_key=NULL,
+            last_idempotency_key=:idempotency_key, last_response_json=:last_response_json,
+            updated_at=:updated_at
+            WHERE session_id=:session_id AND revision=:expected_revision
+              AND inflight_idempotency_key=:idempotency_key"""), {
+            "idempotency_key": idempotency_key,
+            "last_response_json": json.dumps(response, ensure_ascii=False),
+            "updated_at": time.time(),
+            "session_id": session_id,
+            "expected_revision": expected_revision,
+        })
+
+
+def _load_persisted_session(session_id: str) -> AutoTutorState | None:
+    _ensure_session_table()
+    with get_connection() as conn:
+        row = conn.execute(
+            text("SELECT state_json, revision FROM autotutor_sessions WHERE session_id=:session_id"),
+            {"session_id": session_id},
+        ).mappings().first()
+    if not row:
+        return None
+    try:
+        state = _restore_state(json.loads(row["state_json"]))
+        state.revision = int(row["revision"] or 0)
+        return state
+    except Exception:
+        return None
+
+
 def _load_latest_persisted_session(student_id: str, *, include_completed: bool = False) -> AutoTutorState | None:
     _ensure_session_table()
-    sql = "SELECT state_json FROM autotutor_sessions WHERE student_id=:student_id"
+    sql = "SELECT state_json, revision FROM autotutor_sessions WHERE student_id=:student_id"
     if not include_completed:
         sql += " AND status != 'completed'"
     sql += " ORDER BY updated_at DESC LIMIT 1"
@@ -274,7 +425,9 @@ def _load_latest_persisted_session(student_id: str, *, include_completed: bool =
     if not row:
         return None
     try:
-        return _restore_state(json.loads(row["state_json"]))
+        state = _restore_state(json.loads(row["state_json"]))
+        state.revision = int(row["revision"] or 0)
+        return state
     except Exception:
         return None
 
@@ -1031,6 +1184,7 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         }
     return {
         "session_id": state.session_id,
+        "run_id": state.run_id,
         "trace_id": state.trace_id,
         "student_id": state.student_id,
         "grade": state.grade,
@@ -1061,6 +1215,257 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
     }
 
 
+def _autotutor_runtime_plan():
+    from agent_runtime.models import AgentPlan, AgentStep
+
+    return AgentPlan(
+        plan_id=f"plan_{uuid4().hex}",
+        objective="完成一次有界自主辅导课",
+        strategy="subgraph",
+        generated_by="template",
+        planner_version="auto-tutor-v2",
+        steps=[
+            AgentStep(step_id="plan", kind="control", operation="auto_tutor.plan", side_effect="none", risk_level="low"),
+            AgentStep(step_id="teach", kind="generation", operation="auto_tutor.teach", depends_on=["plan"], side_effect="external_call", risk_level="low", timeout_seconds=30),
+            AgentStep(step_id="observe", kind="control", operation="auto_tutor.observe_judge", depends_on=["teach"], side_effect="none", risk_level="low"),
+            AgentStep(step_id="finalize", kind="control", operation="auto_tutor.finalize", depends_on=["observe"], side_effect="none", risk_level="low"),
+        ],
+    )
+
+
+def _autotutor_checkpoint_state(state: AutoTutorState, *, event_cursor: int | None = None) -> dict[str, Any]:
+    """Persist recovery pointers without copying question or student content."""
+    if state.phase == "exit_ticket" and state.exit_ticket:
+        question = state.exit_ticket.question
+        question_kind = "exit_ticket"
+    elif state.current_step_index < len(state.lesson_plan):
+        question = state.lesson_plan[state.current_step_index].question or {}
+        question_kind = "lesson"
+    else:
+        question = {}
+        question_kind = "none"
+    question_digest = hashlib.sha256(
+        json.dumps(question, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "autotutor_session_id": state.session_id,
+        "autotutor_revision": state.revision,
+        "phase": state.phase,
+        "current_step_index": state.current_step_index,
+        "question_kind": question_kind,
+        "question_sha256": question_digest,
+        **({"event_cursor": event_cursor} if event_cursor is not None else {}),
+    }
+
+
+def _sync_runtime_milestones(state: AutoTutorState, run: dict[str, Any]) -> dict[str, Any]:
+    """Dual-write new legacy state-machine steps as sanitized v2 milestones."""
+    from agent_runtime.event_store import append_run_event, get_run, list_run_events
+
+    emitted = {
+        int(event.data["autotutor_step_sequence"])
+        for event in list_run_events(state.run_id or "", limit=500)
+        if isinstance(event.data.get("autotutor_step_sequence"), int)
+    }
+    allowlisted_metadata = {
+        "knowledge_point",
+        "difficulty",
+        "attempt",
+        "is_correct",
+        "adjustment",
+        "replans",
+        "generated_from",
+        "wrote_memory",
+    }
+    current = run
+    for step in state.runtime_steps:
+        if step.sequence in emitted:
+            continue
+        metadata = {
+            key: value
+            for key, value in step.metadata.items()
+            if key in allowlisted_metadata and isinstance(value, (str, int, float, bool, type(None)))
+        }
+        append_run_event(
+            state.run_id or "",
+            expected_revision=current["revision"],
+            event_type="autotutor_milestone",
+            public_payload={
+                "autotutor_step_sequence": step.sequence,
+                "step_id": step.step_id,
+                "step_name": step.step_name,
+                "event_type": step.event_type,
+                "status": step.status,
+                "latency_ms": step.latency_ms,
+                "metadata": metadata,
+            },
+            step_id=step.step_id,
+            operation=f"auto_tutor.{step.event_type}",
+        )
+        current = get_run(state.run_id or "")
+    return current
+
+
+def _autotutor_side_effect_ledger(state: AutoTutorState) -> list[dict[str, Any]]:
+    if state.status != "completed" or state.evidence is None:
+        return []
+    records: list[dict[str, Any]] = []
+    for event_type in state.evidence.learning_event_types:
+        records.append({
+            "step_id": "finalize",
+            "operation": f"learning_event.{event_type}",
+            "idempotency_key": f"autotutor:{state.session_id}:{event_type}:{state.revision}",
+            "status": "committed",
+        })
+    if state.evidence.weakpoint_action not in {"not_recorded", "record_failed"}:
+        records.append({
+            "step_id": "finalize",
+            "operation": "weakpoint.update",
+            "idempotency_key": f"autotutor:{state.session_id}:weakpoint:{state.revision}",
+            "status": "committed",
+        })
+    records.append({
+        "step_id": "finalize",
+        "operation": "memory.record_review_goal",
+        "idempotency_key": f"autotutor:{state.session_id}:memory:{state.revision}",
+        "status": "committed",
+    })
+    return records
+
+
+def _start_runtime_run(state: AutoTutorState, *, actor_id: str | None, actor_role: str | None) -> None:
+    if not state.run_id:
+        return
+    from agent_runtime.context import RuntimeV2Settings
+
+    settings = RuntimeV2Settings.from_env()
+    active, _ = settings.rollout_decision("auto_tutor", str(actor_id or state.student_id))
+    if not active or not settings.resumable_ready:
+        # Database CAS/idempotency remains active as the safe legacy path. The
+        # resumable Runtime only starts after artifact/checkpoint readiness is
+        # explicitly enabled.
+        state.run_id = None
+        return
+    from agent_runtime.checkpoint_store import save_checkpoint
+    from agent_runtime.event_store import append_run_event, create_run, get_run
+    from agent_runtime.models import AgentBudget, AgentContext
+
+    context = AgentContext(
+        run_id=state.run_id,
+        agent_type="auto_tutor",
+        actor_id=actor_id,
+        actor_role=(actor_role if actor_role in {"anonymous", "student", "teacher", "admin"} else "student"),
+        student_id=state.student_id,
+        session_id=state.session_id,
+        trace_id=state.trace_id,
+        data_scope="runtime",
+        durability_mode="resumable",
+        config_version=settings.config_version,
+    )
+    run = create_run(
+        context,
+        objective="AutoTutor 有界教学会话",
+        budget=AgentBudget(max_steps=4, max_tool_calls=2, max_llm_calls=3, max_replans=1, max_wall_time_ms=300_000),
+        idempotency_key=f"autotutor:{state.session_id}",
+        runtime_mode="shadow" if settings.shadow_mode else "active",
+    )
+    append_run_event(state.run_id, expected_revision=run["revision"], event_type="route_decided", public_payload={"agent_type": "auto_tutor"}, next_status="routed")
+    routed = get_run(state.run_id)
+    plan = _autotutor_runtime_plan()
+    append_run_event(state.run_id, expected_revision=routed["revision"], event_type="plan_created", public_payload={"plan_id": plan.plan_id, "step_count": len(plan.steps)}, next_status="planned", plan=plan.model_dump())
+    planned = get_run(state.run_id)
+    append_run_event(state.run_id, expected_revision=planned["revision"], event_type="step_started", public_payload={"step_id": "teach", "phase": state.phase}, next_status="running", current_step_id="teach")
+    running = _sync_runtime_milestones(state, get_run(state.run_id))
+    waiting = append_run_event(
+        state.run_id,
+        expected_revision=running["revision"],
+        event_type="waiting_input",
+        public_payload={"kind": "answer", "autotutor_revision": state.revision, "phase": state.phase},
+        next_status="waiting_input",
+        current_step_id="observe",
+    )
+    save_checkpoint(
+        state.run_id,
+        revision=get_run(state.run_id)["revision"],
+        node_name="question_displayed",
+        state=_autotutor_checkpoint_state(state, event_cursor=waiting.sequence),
+    )
+
+
+def _checkpoint_runtime_transition(state: AutoTutorState) -> bool:
+    if not state.run_id:
+        return False
+    from agent_runtime.checkpoint_store import prune_terminal_checkpoints, save_checkpoint
+    from agent_runtime.event_store import append_run_event, get_run
+    from agent_runtime.completion import CompletionEvaluator
+
+    try:
+        run = get_run(state.run_id)
+        if run["status"] in {"completed", "partial", "failed", "cancelled"}:
+            return True
+        if run["status"] == "waiting_input":
+            append_run_event(
+                state.run_id,
+                expected_revision=run["revision"],
+                event_type="step_started",
+                public_payload={"step_id": "observe", "autotutor_revision": state.revision},
+                next_status="running",
+                current_step_id="observe",
+            )
+            run = get_run(state.run_id)
+        run = _sync_runtime_milestones(state, run)
+        append_run_event(
+            state.run_id,
+            expected_revision=run["revision"],
+            event_type="step_completed",
+            public_payload={
+                "step_id": "observe",
+                "autotutor_revision": state.revision,
+                "phase": state.phase,
+                "status": state.status,
+            },
+            current_step_id="finalize" if state.status == "completed" else "observe",
+        )
+        current = get_run(state.run_id)
+        if state.status == "completed":
+            save_checkpoint(
+                state.run_id,
+                revision=current["revision"],
+                node_name="finalize",
+                state=_autotutor_checkpoint_state(state),
+                side_effect_ledger=_autotutor_side_effect_ledger(state),
+            )
+            append_run_event(state.run_id, expected_revision=current["revision"], event_type="verification_result", public_payload={"status": "teaching_evidence_recorded"}, next_status="verifying")
+            verifying = get_run(state.run_id)
+            decision = CompletionEvaluator().from_outcome(
+                status="completed",
+                completed_steps=4,
+                total_steps=4,
+                verification_status="not_required",
+                reason_codes=["autotutor_finalized"],
+            )
+            append_run_event(state.run_id, expected_revision=verifying["revision"], event_type="run_completed", public_payload={"completion": decision.model_dump()}, next_status="completed", completion=decision)
+            prune_terminal_checkpoints(state.run_id)
+        else:
+            waiting = append_run_event(
+                state.run_id,
+                expected_revision=current["revision"],
+                event_type="waiting_input",
+                public_payload={"kind": "answer", "autotutor_revision": state.revision, "phase": state.phase},
+                next_status="waiting_input",
+                current_step_id="observe",
+            )
+            save_checkpoint(
+                state.run_id,
+                revision=get_run(state.run_id)["revision"],
+                node_name="question_displayed",
+                state=_autotutor_checkpoint_state(state, event_cursor=waiting.sequence),
+            )
+        return True
+    except Exception:
+        return False
+
+
 def start_session(
     student_id: str,
     *,
@@ -1070,12 +1475,21 @@ def start_session(
     trace_id: str | None = None,
     focus_tags: list[str] | None = None,
     focus_reason: str | None = None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
+    if idempotency_key:
+        existing = _load_start_idempotent_session(student_id, idempotency_key)
+        if existing is not None:
+            _store.cache(existing)
+            replay = _public_state(existing)
+            replay["idempotent_replay"] = True
+            return replay
     trace_id = trace_id or current_trace_id() or uuid4().hex
     set_trace_id(trace_id)
     now = time.time()
     state = AutoTutorState(
         session_id=f"at_{uuid4().hex[:12]}",
+        run_id=f"run_{uuid4().hex}",
         trace_id=trace_id,
         student_id=student_id,
         grade=grade,
@@ -1117,7 +1531,19 @@ def start_session(
     ctx = _tool_context(student_id, actor_id, actor_role)
     _act(state, state.lesson_plan[0], ctx)
     state.updated_at = time.time()
-    _store.save(state)
+    _start_runtime_run(state, actor_id=actor_id, actor_role=actor_role)
+    _store.cache(state)
+    try:
+        _persist_session(state, start_idempotency_key=idempotency_key)
+    except Exception:
+        if idempotency_key:
+            existing = _load_start_idempotent_session(student_id, idempotency_key)
+            if existing is not None:
+                _store.cache(existing)
+                replay = _public_state(existing)
+                replay["idempotent_replay"] = True
+                return replay
+        raise
     return _public_state(state)
 
 
@@ -1128,6 +1554,7 @@ def submit_answer(
     actor_id: str | None = None,
     actor_role: str | None = None,
     expected_revision: int | None = None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     # FastAPI runs this function in a threadpool. Serialize each session so two
     # rapid clicks cannot judge the same question twice or write duplicate events.
@@ -1138,6 +1565,7 @@ def submit_answer(
             actor_id=actor_id,
             actor_role=actor_role,
             expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
         )
 
 
@@ -1148,91 +1576,125 @@ def _submit_answer_locked(
     actor_id: str | None = None,
     actor_role: str | None = None,
     expected_revision: int | None = None,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
-    state = _store.get(session_id)
+    state = _load_persisted_session(session_id)
     if state is None:
         raise LookupError("autotutor session not found")
     if state.status == "completed":
         return _public_state(state)
-    if expected_revision is not None and expected_revision != state.revision:
+    claimed_revision = state.revision if expected_revision is None else expected_revision
+    if claimed_revision != state.revision:
         result = _public_state(state)
         result["stale_answer_ignored"] = True
         return result
+    transition_key = idempotency_key or (
+        f"answer:{session_id}:{claimed_revision}:"
+        f"{hashlib.sha256(str(answer).encode('utf-8')).hexdigest()[:16]}"
+    )
+    claim_status, claim_payload = _claim_answer_transition(session_id, claimed_revision, transition_key)
+    if claim_status == "missing":
+        raise LookupError("autotutor session not found")
+    if claim_status == "replayed":
+        replay = dict(claim_payload or {})
+        replay["idempotent_replay"] = True
+        return replay
+    if claim_status in {"stale", "busy"}:
+        latest = _load_persisted_session(session_id) or state
+        result = _public_state(latest)
+        result["stale_answer_ignored"] = True
+        result["transition_in_progress"] = claim_status == "busy"
+        return result
+    if not isinstance(claim_payload, AutoTutorState):
+        raise RuntimeError("autotutor transition claim returned invalid state")
+    state = claim_payload
     set_trace_id(state.trace_id)
     ctx = _tool_context(state.student_id, actor_id, actor_role)
+    try:
+        if state.phase == "exit_ticket":
+            is_correct, _correct_letter = _submit_exit_ticket_answer(state, answer)
+            _finalize(state)
+            state.revision = claimed_revision + 1
+            result = _public_state(state)
+            result["last_answer_correct"] = is_correct
+            if not _complete_answer_transition(state, expected_revision=claimed_revision, idempotency_key=transition_key, response=result):
+                latest = _load_persisted_session(session_id) or state
+                stale = _public_state(latest)
+                stale["stale_answer_ignored"] = True
+                return stale
+            result["runtime_checkpoint_saved"] = _checkpoint_runtime_transition(state)
+            _store.cache(state)
+            return result
 
-    if state.phase == "exit_ticket":
-        is_correct, _correct_letter = _submit_exit_ticket_answer(state, answer)
-        _finalize(state)
-        state.revision += 1
-        state.updated_at = time.time()
-        _store.save(state)
-        result = _public_state(state)
-        result["last_answer_correct"] = is_correct
-        return result
+        step = state.lesson_plan[state.current_step_index]
+        step.attempts += 1
 
-    step = state.lesson_plan[state.current_step_index]
-    step.attempts += 1
+        is_correct, correct_letter = _judge(step, answer)
+        _emit(
+            state,
+            "judge",
+            "Judge · 判分",
+            "judge",
+            "success" if is_correct else "failed",
+            metadata={
+                "knowledge_point": step.knowledge_point,
+                "answer": (answer or "")[:1].upper(),
+                "correct": correct_letter,
+                "is_correct": is_correct,
+                "attempt": step.attempts,
+                "result_summary": "答对，进入下一步" if is_correct else "答错，触发反思",
+            },
+        )
+        state.step_history.append(
+            {
+                "step_index": state.current_step_index,
+                "knowledge_point": step.knowledge_point,
+                "answer": (answer or "")[:1].upper(),
+                "is_correct": is_correct,
+                "attempt": step.attempts,
+            }
+        )
 
-    is_correct, correct_letter = _judge(step, answer)
-    _emit(
-        state,
-        "judge",
-        "Judge · 判分",
-        "judge",
-        "success" if is_correct else "failed",
-        metadata={
-            "knowledge_point": step.knowledge_point,
-            "answer": (answer or "")[:1].upper(),
-            "correct": correct_letter,
-            "is_correct": is_correct,
-            "attempt": step.attempts,
-            "result_summary": "答对，进入下一步" if is_correct else "答错，触发反思",
-        },
-    )
-    state.step_history.append(
-        {
-            "step_index": state.current_step_index,
-            "knowledge_point": step.knowledge_point,
-            "answer": (answer or "")[:1].upper(),
-            "is_correct": is_correct,
-            "attempt": step.attempts,
-        }
-    )
-
-    last_reflection: ReflectionRecord | None = None
-    if is_correct:
-        step.status = "mastered"
-        state.mastery_delta[step.knowledge_point] = round(0.3 if step.replanned else 0.4, 2)
-        _advance(state, ctx)
-    else:
-        # 反思 + 重规划（带护栏）
-        if step.attempts < MAX_ATTEMPTS_PER_STEP and state.replans < MAX_REPLANS:
-            last_reflection = _reflect_and_replan(state, step, answer, ctx)
-        else:
-            step.status = "struggling"
-            state.mastery_delta[step.knowledge_point] = -0.2
-            _emit(
-                state,
-                "give_up_step",
-                "Re-plan · 标记薄弱并前进",
-                "re_plan",
-                metadata={
-                    "knowledge_point": step.knowledge_point,
-                    "reason": "已达单步重试上限或全局重规划上限",
-                    "result_summary": f"「{step.knowledge_point}」仍未掌握，记入错题本，继续下一步",
-                },
-            )
+        last_reflection: ReflectionRecord | None = None
+        if is_correct:
+            step.status = "mastered"
+            state.mastery_delta[step.knowledge_point] = round(0.3 if step.replanned else 0.4, 2)
             _advance(state, ctx)
+        else:
+            if step.attempts < MAX_ATTEMPTS_PER_STEP and state.replans < MAX_REPLANS:
+                last_reflection = _reflect_and_replan(state, step, answer, ctx)
+            else:
+                step.status = "struggling"
+                state.mastery_delta[step.knowledge_point] = -0.2
+                _emit(
+                    state,
+                    "give_up_step",
+                    "Re-plan · 标记薄弱并前进",
+                    "re_plan",
+                    metadata={
+                        "knowledge_point": step.knowledge_point,
+                        "reason": "已达单步重试上限或全局重规划上限",
+                        "result_summary": f"「{step.knowledge_point}」仍未掌握，记入错题本，继续下一步",
+                    },
+                )
+                _advance(state, ctx)
 
-    state.revision += 1
-    state.updated_at = time.time()
-    _store.save(state)
-    result = _public_state(state)
-    if last_reflection is not None:
-        result["reflection"] = last_reflection.model_dump()
-    result["last_answer_correct"] = is_correct
-    return result
+        state.revision = claimed_revision + 1
+        result = _public_state(state)
+        if last_reflection is not None:
+            result["reflection"] = last_reflection.model_dump()
+        result["last_answer_correct"] = is_correct
+        if not _complete_answer_transition(state, expected_revision=claimed_revision, idempotency_key=transition_key, response=result):
+            latest = _load_persisted_session(session_id) or state
+            stale = _public_state(latest)
+            stale["stale_answer_ignored"] = True
+            return stale
+        result["runtime_checkpoint_saved"] = _checkpoint_runtime_transition(state)
+        _store.cache(state)
+        return result
+    except Exception as exc:
+        _fail_answer_transition(session_id, expected_revision=claimed_revision, idempotency_key=transition_key, error=exc)
+        raise
 
 
 def _advance(state: AutoTutorState, ctx: ToolExecutionContext) -> None:

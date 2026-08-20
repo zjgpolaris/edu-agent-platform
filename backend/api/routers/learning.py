@@ -27,6 +27,7 @@ class LearningAssistantRequest(BaseModel):
     confirmation_decision: str | None = None
     regenerate_message_id: str | None = Field(default=None, max_length=128)
     reuse_last_user: bool = False
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
 
 
 class LearningAssistantSessionCreateRequest(BaseModel):
@@ -64,6 +65,7 @@ class AutoTutorStartRequest(BaseModel):
     grade: str | None = None
     focus_tags: list[str] | None = None
     focus_reason: str | None = Field(default=None, max_length=200)
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
 
 
 class AutoTutorAnswerRequest(BaseModel):
@@ -71,6 +73,7 @@ class AutoTutorAnswerRequest(BaseModel):
     answer: str = Field(min_length=1, max_length=8)
     student_id: str | None = None
     expected_revision: int | None = Field(default=None, ge=0)
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
 
 
 @router.get("/api/learning/assistant/tools")
@@ -408,6 +411,8 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                         "completion_status": final.get("completion_status"),
                         "rollout_summary": final.get("rollout_summary") or {},
                         "verification_summary": final.get("verification_summary") or {},
+                        "run_id": final.get("run_id"),
+                        "run_revision": final.get("run_revision"),
                     },
                 )
                 final["message_id"] = persisted["message_id"]
@@ -460,6 +465,8 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                                 "completion_status": data.get("completion_status"),
                                 "rollout_summary": data.get("rollout_summary") or {},
                                 "verification_summary": data.get("verification_summary") or {},
+                                "run_id": data.get("run_id"),
+                                "run_revision": data.get("run_revision"),
                             },
                         )
                         data = {**data, "message_id": persisted["message_id"]}
@@ -481,7 +488,7 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
     with trace_context(name="POST /api/autotutor/start", metadata=trace_meta("auto_tutor", "/api/autotutor/start", student_id=req.student_id, grade=req.grade), user_id=req.student_id, input_data={"student_id": req.student_id}):
         trace_id = current_trace_id()
         record_audit_event(actor_id=actor.actor_id, action="autotutor.start", resource_type="student", resource_id=req.student_id, metadata={"grade": req.grade})
-        return await run_in_threadpool(autotutor_start, req.student_id, grade=req.grade, actor_id=actor.actor_id, actor_role=actor_role, trace_id=trace_id, focus_tags=req.focus_tags or None, focus_reason=req.focus_reason or None)
+        return await run_in_threadpool(autotutor_start, req.student_id, grade=req.grade, actor_id=actor.actor_id, actor_role=actor_role, trace_id=trace_id, focus_tags=req.focus_tags or None, focus_reason=req.focus_reason or None, idempotency_key=req.idempotency_key)
 
 
 @router.post("/api/autotutor/answer")
@@ -506,6 +513,7 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
             actor_id=actor.actor_id,
             actor_role=actor_role,
             expected_revision=req.expected_revision,
+            idempotency_key=req.idempotency_key,
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="辅导会话不存在或已过期，请重新开始")

@@ -25,6 +25,7 @@ from api.routers.learning import router as learning_router
 from api.routers.review_checkin import router as review_router
 from api.routers.assignments import router as assignments_router
 from api.routers.eval_ops import router as eval_ops_router
+from api.routers.agent_runtime import router as agent_runtime_router
 
 
 @asynccontextmanager
@@ -72,3 +73,4 @@ app.include_router(learning_router)
 app.include_router(review_router)
 app.include_router(assignments_router)
 app.include_router(eval_ops_router)
+app.include_router(agent_runtime_router)

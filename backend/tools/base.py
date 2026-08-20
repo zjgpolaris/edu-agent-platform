@@ -31,6 +31,9 @@ class ToolExecutionContext(BaseModel):
     confirmed: bool = False
     confirmation_token: str | None = None
     request_source: str = "unknown"
+    run_id: str | None = None
+    step_id: str | None = None
+    run_revision: int | None = Field(default=None, ge=0)
 
 
 class ToolSpec(BaseModel):

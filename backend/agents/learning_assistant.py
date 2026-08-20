@@ -19,7 +19,7 @@ from trace_store import emit_trace_event
 from student_profile import LearningEvent, get_student_profile, suggest_review_plan, try_record_learning_event
 from tools.base import ToolExecutionContext
 from user_memory import get_used_memory_entries
-from tools.registry import run_tool
+from tools.registry import issue_runtime_confirmation_token, run_tool
 
 LearningIntent = Literal[
     "textbook_qa",
@@ -51,6 +51,7 @@ class LearningAssistantRequestData(TypedDict, total=False):
     source_feature: str | None
     source_session_id: str | None
     trace_id: str | None
+    idempotency_key: str | None
 
 
 def detect_learning_intent(req: LearningAssistantRequestData) -> dict[str, Any]:
@@ -778,7 +779,7 @@ def _final_from_execution(
     return response, suggestions, generation_mode, tool_results
 
 
-def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Iterator[tuple[str, dict[str, Any]]]:
+def _stream_learning_assistant_events_legacy(req: LearningAssistantRequestData) -> Iterator[tuple[str, dict[str, Any]]]:
     # Ensure trace_id is set for this call; generate a fresh one if the caller (e.g. eval) didn't provide one.
     request_trace_id = req.get("trace_id") or uuid4().hex
     req["trace_id"] = request_trace_id
@@ -883,6 +884,7 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
     composition_enabled = rollout.planner_mode == "composition_active"
     plan = build_task_plan(route, dict(req), enable_composition=composition_enabled)
     plan_payload = public_plan(plan)
+    yield "runtime_plan", {"legacy_plan": plan.model_dump(mode="json")}
     yield _runtime_step("plan_build", "Plan Build", "plan", "success", sequence=4, started_at=plan_started, metadata={"step_count": len(plan.steps), "tool_step_count": sum(1 for step in plan.steps if step.kind == "tool"), "generation_step_count": sum(1 for step in plan.steps if step.kind == "generation"), "composition_enabled": composition_enabled})
     if composition_enabled:
         yield "plan", plan_payload
@@ -997,3 +999,278 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
         "context_usage": {"history_messages": len(history), "source_feature": req.get("source_feature"), "source_session_id": req.get("source_session_id")}, "trace_id": trace_id,
     }
     yield "suggestions", {"suggestions": suggestions, "trace_id": trace_id}
+
+
+def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Single execution source with optional Runtime v2 milestone persistence."""
+    from agent_runtime.context import RuntimeV2Settings
+
+    settings = RuntimeV2Settings.from_env()
+    subject = str(req.get("actor_id") or req.get("student_id") or req.get("session_id") or req.get("trace_id") or uuid4().hex)
+    active, bucket = settings.rollout_decision("learning_assistant", subject)
+    if not active or not settings.observable_ready:
+        for event, data in _stream_learning_assistant_events_legacy(req):
+            if event != "runtime_plan":
+                yield event, data
+        return
+
+    from agents.learning_assistant_runtime import map_task_plan_to_agent_plan
+    from agent_runtime.artifact_store import create_artifact, list_run_artifacts
+    from agent_runtime.event_store import append_run_event, create_run, get_run
+    from agent_runtime.completion import CompletionEvaluator
+    from agent_runtime.models import AgentBudget, AgentContext
+
+    requested_run_id = f"run_{uuid4().hex}"
+    run_id = requested_run_id
+    trace_id = str(req.get("trace_id") or uuid4().hex)
+    actor_role = str(req.get("actor_role") or "anonymous")
+    if actor_role not in {"anonymous", "student", "teacher", "admin"}:
+        actor_role = "anonymous"
+    context = AgentContext(
+        run_id=run_id,
+        agent_type="learning_assistant",
+        actor_id=req.get("actor_id"),
+        actor_role=actor_role,
+        student_id=req.get("student_id"),
+        session_id=req.get("session_id"),
+        source_feature=req.get("source_feature"),
+        source_session_id=req.get("source_session_id"),
+        trace_id=trace_id,
+        data_scope="runtime",
+        durability_mode="observable",
+        config_version=settings.config_version,
+        rollout_bucket=bucket,
+    )
+    run = create_run(
+        context,
+        objective="学习助手受控问答",
+        budget=AgentBudget(max_steps=3, max_tool_calls=3, max_llm_calls=3),
+        idempotency_key=req.get("idempotency_key"),
+        runtime_mode="shadow" if settings.shadow_mode else "active",
+    )
+    run_id = str(run["run_id"])
+    trace_id = str(run["trace_id"])
+    yield "run_started", {
+        "schema_version": 2,
+        "run_id": run_id,
+        "run_revision": run["revision"],
+        "event_cursor": run["last_event_sequence"],
+        "trace_id": trace_id,
+    }
+    if run_id != requested_run_id or run["status"] != "received":
+        if run["status"] in {"completed", "partial", "failed", "cancelled"}:
+            artifacts = list_run_artifacts(run_id, actor_id=req.get("actor_id"), actor_role=actor_role)
+            final_artifact = next((item for item in reversed(artifacts) if item.get("artifact_type") == "final_output"), None)
+            if final_artifact:
+                final_data = dict((final_artifact.get("content") or {}).get("final") or {})
+                final_data.update(
+                    run_id=run_id,
+                    run_revision=run["revision"],
+                    event_cursor=run["last_event_sequence"],
+                    idempotent_replay=True,
+                )
+                yield "final", final_data
+            else:
+                yield "final", {
+                    "run_id": run_id,
+                    "run_revision": run["revision"],
+                    "event_cursor": run["last_event_sequence"],
+                    "completion_status": run["status"],
+                    "output_expired": True,
+                    "idempotent_replay": True,
+                }
+        else:
+            yield "runtime_status", {
+                "run_id": run_id,
+                "run_revision": run["revision"],
+                "event_cursor": run["last_event_sequence"],
+                "status": run["status"],
+                "idempotent_replay": True,
+            }
+        return
+    runtime_legacy_plan = None
+    runtime_confirmation: dict[str, str] | None = None
+    try:
+        for event, data in _stream_learning_assistant_events_legacy(req):
+            if event == "route":
+                current = get_run(run_id)
+                persisted = append_run_event(
+                    run_id,
+                    expected_revision=current["revision"],
+                    event_type="route_decided",
+                    public_payload={"mode": data.get("mode"), "reason_code": data.get("reason_code"), "task_count": len(data.get("tasks") or [])},
+                    next_status="routed",
+                )
+                data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": persisted.sequence}
+            elif event == "runtime_plan":
+                from agents.learning_assistant_planner import TaskPlan
+
+                legacy_plan = TaskPlan.model_validate(data["legacy_plan"])
+                runtime_legacy_plan = legacy_plan
+                plan = map_task_plan_to_agent_plan(legacy_plan, run_id=run_id)
+                current = get_run(run_id)
+                append_run_event(
+                    run_id,
+                    expected_revision=current["revision"],
+                    event_type="plan_created",
+                    public_payload={"plan_id": plan.plan_id, "step_count": len(plan.steps)},
+                    next_status="planned",
+                    plan=plan.model_dump(),
+                )
+                current = get_run(run_id)
+                append_run_event(
+                    run_id,
+                    expected_revision=current["revision"],
+                    event_type="step_started",
+                    public_payload={"step_id": plan.steps[0].step_id, "operation": plan.steps[0].operation},
+                    next_status="running",
+                    current_step_id=plan.steps[0].step_id,
+                )
+                continue
+            elif event == "clarification":
+                current = get_run(run_id)
+                persisted = append_run_event(
+                    run_id,
+                    expected_revision=current["revision"],
+                    event_type="waiting_input",
+                    public_payload={"missing_slots": data.get("missing_slots") or [], "reason_code": data.get("reason_code")},
+                    next_status="waiting_input",
+                )
+                data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": persisted.sequence}
+            elif event in {"tool_start", "tool_result", "repair_attempt", "verification_result"}:
+                current = get_run(run_id)
+                if current["status"] == "waiting_confirmation" and event == "verification_result":
+                    data = {**data, "run_id": run_id, "run_revision": current["revision"], "event_cursor": current["last_event_sequence"]}
+                    yield event, data
+                    continue
+                event_type = {"tool_start": "tool_started", "repair_attempt": "repair_attempted"}.get(event, event)
+                waiting_for_confirmation = (
+                    event == "tool_result"
+                    and isinstance(data.get("error"), dict)
+                    and data["error"].get("code") == "confirmation_required"
+                )
+                if waiting_for_confirmation:
+                    step_id = str(data.get("step_id") or "")
+                    legacy_step = next(
+                        (step for step in (runtime_legacy_plan.steps if runtime_legacy_plan else []) if step.step_id == step_id),
+                        None,
+                    )
+                    if legacy_step is None or str(legacy_step.operation) != str(data.get("tool_name") or ""):
+                        raise ValueError("confirmation step does not match persisted plan")
+                    waiting_revision = int(current["revision"]) + 2
+                    token = issue_runtime_confirmation_token(
+                        str(legacy_step.operation),
+                        dict(legacy_step.input),
+                        ToolExecutionContext(
+                            actor_id=req.get("actor_id"),
+                            role=actor_role,
+                            student_id=req.get("student_id"),
+                            request_source="learning_assistant_runtime_v2",
+                            run_id=run_id,
+                            step_id=step_id,
+                            run_revision=waiting_revision,
+                        ),
+                    )
+                    metadata = {**(data.get("metadata") or {}), "confirmation_token": token}
+                    data = {**data, "metadata": metadata, "confirmation_token": token}
+                    runtime_confirmation = {"tool_name": str(legacy_step.operation), "step_id": step_id, "token": token}
+                persisted = append_run_event(
+                    run_id,
+                    expected_revision=current["revision"],
+                    event_type=event_type,
+                    public_payload=data,
+                )
+                if waiting_for_confirmation:
+                    waiting = append_run_event(
+                        run_id,
+                        expected_revision=get_run(run_id)["revision"],
+                        event_type="waiting_confirmation",
+                        public_payload={"step_id": runtime_confirmation["step_id"], "tool_name": runtime_confirmation["tool_name"]},
+                        next_status="waiting_confirmation",
+                        current_step_id=runtime_confirmation["step_id"],
+                    )
+                    data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": waiting.sequence}
+                else:
+                    data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": persisted.sequence}
+            elif event == "final":
+                completion_status = str(data.get("completion_status") or "failed")
+                if completion_status == "needs_clarification":
+                    current = get_run(run_id)
+                    data = {**data, "run_id": run_id, "run_revision": current["revision"], "event_cursor": current["last_event_sequence"]}
+                    yield event, data
+                    continue
+                current = get_run(run_id)
+                completed_steps = int((data.get("plan_summary") or {}).get("completed_steps") or 0)
+                total_steps = int((data.get("plan_summary") or {}).get("total_steps") or 0)
+                verification = data.get("verification_summary") or {}
+                verification_status = str(verification.get("status") or "not_required")
+                if verification_status not in {"verified", "partial", "failed", "not_required"}:
+                    verification_status = "failed"
+                if completion_status in {"completed", "partial"}:
+                    append_run_event(run_id, expected_revision=current["revision"], event_type="verification_result", public_payload={"status": verification_status}, next_status="verifying")
+                    current = get_run(run_id)
+                decision_status = completion_status if completion_status in {"completed", "partial", "waiting_confirmation", "failed", "cancelled"} else "failed"
+                if decision_status == "waiting_confirmation" and runtime_confirmation:
+                    patched_results = []
+                    for item in data.get("tool_results") or []:
+                        if str(item.get("tool_name") or "") == runtime_confirmation["tool_name"]:
+                            metadata = {**(item.get("metadata") or {}), "confirmation_token": runtime_confirmation["token"]}
+                            item = {**item, "metadata": metadata}
+                        patched_results.append(item)
+                    data = {**data, "tool_results": patched_results}
+                deliverable_refs: list[str] = []
+                if decision_status in {"completed", "partial", "failed", "cancelled"}:
+                    artifact = create_artifact(
+                        run_id,
+                        owner_actor_id=req.get("actor_id"),
+                        student_id=req.get("student_id"),
+                        artifact_type="final_output",
+                        sensitivity="student_content" if req.get("student_id") else "normal",
+                        content={"final": data},
+                    )
+                    deliverable_refs.append(artifact["artifact_id"])
+                decision = CompletionEvaluator().from_outcome(
+                    status=decision_status,
+                    completion_allowed=decision_status == "completed" and bool(verification.get("completion_allowed", True)),
+                    completed_steps=completed_steps,
+                    total_steps=total_steps,
+                    verification_status=verification_status,
+                    reason_codes=list(verification.get("reason_codes") or ([str((data.get("plan_summary") or {}).get("partial_reason"))] if decision_status != "completed" else ["completion_criteria_satisfied"])),
+                    deliverable_refs=deliverable_refs,
+                )
+                if decision_status == "waiting_confirmation" and current["status"] == "waiting_confirmation":
+                    data = {**data, "run_id": run_id, "run_revision": current["revision"], "event_cursor": current["last_event_sequence"]}
+                else:
+                    terminal_event = "run_completed" if decision_status in {"completed", "partial"} else ("waiting_confirmation" if decision_status == "waiting_confirmation" else "run_failed")
+                    persisted = append_run_event(
+                        run_id,
+                        expected_revision=current["revision"],
+                        event_type=terminal_event,
+                        public_payload={"completion": decision.model_dump()},
+                        next_status=decision_status,
+                        completion=decision if decision_status in {"completed", "partial", "failed", "cancelled"} else None,
+                    )
+                    current = get_run(run_id)
+                    data = {**data, "run_id": run_id, "run_revision": current["revision"], "event_cursor": persisted.sequence}
+            yield event, data
+    except Exception as exc:
+        current = get_run(run_id)
+        if current["status"] not in {"completed", "partial", "failed", "cancelled", "waiting_input", "waiting_confirmation"}:
+            state = current["state"]
+            total_steps = len(((state.get("plan") or {}).get("steps") or []))
+            decision = CompletionEvaluator().from_outcome(
+                status="failed",
+                completed_steps=0,
+                total_steps=total_steps,
+                verification_status="failed",
+                reason_codes=["runtime_wrapper_exception"],
+            )
+            append_run_event(
+                run_id,
+                expected_revision=current["revision"],
+                event_type="run_failed",
+                public_payload={"error": {"code": "runtime_wrapper_exception", "message": str(exc)[:240]}},
+                next_status="failed",
+                completion=decision,
+            )
+        raise

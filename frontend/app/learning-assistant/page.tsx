@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Archive, ArrowUp, BookOpen, Check, ChevronDown, History, Pencil, Plus, RotateCcw, Square, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import { readSseStream, type SseEvent } from "@/lib/sse";
 import { Select, type SelectOption } from "./Select";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import { assistantCompletionLabel, assistantToolStatus, buildTextbookRequestFields, dedupeAssistantTools, shouldSubmitComposerKey, updateAssistantPlanStep, type AssistantPlanStep } from "@/components/learningAssistantComposer";
@@ -13,7 +14,6 @@ import { assistantCompletionLabel, assistantToolStatus, buildTextbookRequestFiel
 type Textbook = { id: string; grade: string; book: string; status: string };
 type TocLesson = { id: string; title: string };
 type TocUnit = { title?: string; unit?: string; lessons: TocLesson[] };
-type StreamEvent = { event: string; data: Record<string, unknown> };
 type ToolResult = {
   tool_name: string;
   ok: boolean;
@@ -169,17 +169,6 @@ const toolLabels: Record<string, string> = {
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function parseSseFrame(frame: string): StreamEvent | null {
-  let event = "message";
-  const dataLines: string[] = [];
-  for (const line of frame.split("\n")) {
-    if (line.startsWith("event: ")) event = line.slice(7).trim();
-    if (line.startsWith("data: ")) dataLines.push(line.slice(6));
-  }
-  if (!dataLines.length) return null;
-  return { event, data: JSON.parse(dataLines.join("\n")) as Record<string, unknown> };
 }
 
 function asToolResult(value: unknown): ToolResult | null {
@@ -833,12 +822,7 @@ function LearningAssistantContent() {
   }
 
   async function handleStream(response: Response, assistantId: string) {
-    if (!response.body) throw new Error("浏览器没有收到流式响应，请稍后重试。");
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    async function handleEvent(streamEvent: StreamEvent) {
+    async function handleEvent(streamEvent: SseEvent<Record<string, unknown>>) {
       const { event, data } = streamEvent;
       if (event === "trace") {
         if (typeof data.trace_id === "string") setTraceId(data.trace_id);
@@ -1011,17 +995,7 @@ function LearningAssistantContent() {
       if (event === "error") throw new Error(typeof data.message === "string" ? data.message : "学习助手请求失败");
     }
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const frames = buffer.split("\n\n");
-      buffer = frames.pop() || "";
-      for (const frame of frames) {
-        const parsed = parseSseFrame(frame.trim());
-        if (parsed) await handleEvent(parsed);
-      }
-    }
+    await readSseStream(response, handleEvent);
   }
 
   async function submit(nextMessage?: string, options: SubmitOptions = {}) {

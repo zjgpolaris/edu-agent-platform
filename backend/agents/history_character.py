@@ -2,6 +2,7 @@
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, Annotated, Any, Iterator
 from llm_config import llm_fast as llm, llm_quality as llm_opus
+import hashlib
 import operator
 from datetime import datetime, timezone
 import re
@@ -20,6 +21,26 @@ COUNTERFACTUAL_TRIGGERS = ["如果", "假如", "要是", "若是", "倘若", "�
 _CITATION_LABEL_RE = re.compile(r"\[史料\d+\]")
 
 
+def _text_fingerprint(value: str) -> dict[str, Any]:
+    return {
+        "chars": len(value),
+        "sha256": hashlib.sha256(value.encode("utf-8")).hexdigest()[:16],
+    }
+
+
+def _trace_safe_inspector(inspector: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "retrieval_strategy",
+        "source_count",
+        "total_chunks_retrieved",
+        "top_score",
+        "top_mode",
+        "diagnosis_code",
+        "failure_stage",
+    }
+    return {key: inspector.get(key) for key in allowed if key in inspector}
+
+
 def detect_mode(message: str) -> str:
     return "counterfactual" if any(t in message for t in COUNTERFACTUAL_TRIGGERS) else "factual"
 
@@ -35,6 +56,10 @@ class CharacterState(TypedDict, total=False):
     rag_inspector: dict[str, Any]
     response_draft: str
     verified: bool
+    verification_status: str
+    verification_reason: str | None
+    fact_card: dict[str, Any] | None
+    memory_updated: bool
     mode: str
 
 
@@ -259,7 +284,7 @@ def retrieve_facts(state: CharacterState, rag_retriever=None) -> CharacterState:
                 resource_type="character",
                 resource_id=state.get("character"),
                 success=True,
-                metadata={"query": primary_query, "source_count": len(sources)},
+                metadata={"query_fingerprint": _text_fingerprint(primary_query), "source_count": len(sources)},
             )
         else:
             raise RuntimeError("tool returned no sources")
@@ -281,7 +306,7 @@ def retrieve_facts(state: CharacterState, rag_retriever=None) -> CharacterState:
                 resource_type="character",
                 resource_id=state.get("character"),
                 success=True,
-                metadata={"queries": expanded_queries, "source_count": len(sources)},
+                metadata={"query_fingerprints": [_text_fingerprint(item) for item in expanded_queries], "source_count": len(sources)},
             )
         except Exception:
             retrieval_strategy = "retriever_fallback"
@@ -446,18 +471,35 @@ def generate_response(state: CharacterState) -> CharacterState:
 
 
 def verify_response(state: CharacterState) -> CharacterState:
+    draft = state.get("response_draft") or _fallback_response_from_facts(state)
     try:
         verified = llm_opus.invoke(build_verification_prompt(state))
-    except Exception:
+    except Exception as exc:
         return {
-            "response_draft": state.get("response_draft") or _fallback_response_from_facts(state),
-            "verified": True,
-            "retrieved_sources": _mark_used_sources(state.get("response_draft", ""), state.get("retrieved_sources", [])),
+            "response_draft": draft,
+            "verified": False,
+            "verification_status": "failed",
+            "verification_reason": f"verifier_exception:{exc.__class__.__name__}",
+            "retrieved_sources": _mark_used_sources(draft, state.get("retrieved_sources", [])),
         }
+    content = str(getattr(verified, "content", "") or "").strip()
+    if not content:
+        return {
+            "response_draft": draft,
+            "verified": False,
+            "verification_status": "failed",
+            "verification_reason": "verifier_empty_response",
+            "retrieved_sources": _mark_used_sources(draft, state.get("retrieved_sources", [])),
+        }
+    sources = _mark_used_sources(content, state.get("retrieved_sources", []))
+    groundedness = _citation_groundedness(content, sources)
+    verified_ok = bool(sources) and bool(groundedness["grounded"])
     return {
-        "response_draft": verified.content,
-        "verified": True,
-        "retrieved_sources": _mark_used_sources(verified.content, state.get("retrieved_sources", [])),
+        "response_draft": content,
+        "verified": verified_ok,
+        "verification_status": "verified" if verified_ok else "failed",
+        "verification_reason": None if verified_ok else "deterministic_evidence_check_failed",
+        "retrieved_sources": sources,
     }
 
 
@@ -470,6 +512,8 @@ _CARD_PROMPT = (
 
 
 def generate_fact_card(state: CharacterState) -> dict:
+    if not state.get("verified"):
+        return {}
     prompt = _CARD_PROMPT.format(
         question=state["messages"][-1]["content"],
         facts="\n".join(state.get("retrieved_facts", [])[:3]),
@@ -506,7 +550,7 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         step_name="receive_query",
         event_type="start",
         status="success",
-        metadata={"character": character, "question": question[:100]}
+        metadata={"character": character, "question_fingerprint": _text_fingerprint(question)}
     )
 
     # Step 2: Retrieval
@@ -522,7 +566,7 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         metadata={
             "source_count": len(state.get("retrieved_sources", [])),
             "retrieval_strategy": state.get("rag_inspector", {}).get("retrieval_strategy"),
-            "rag_inspector": state.get("rag_inspector", {}),
+            "rag_inspector": _trace_safe_inspector(state.get("rag_inspector", {})),
         }
     )
     yield {"event": "sources", "data": {"sources": state.get("retrieved_sources", []), "inspector": state.get("rag_inspector", {})}}
@@ -565,9 +609,15 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         verified = verify_response(state)
         final_response = verified["response_draft"]
         verified_ok = verified["verified"]
-    except Exception:
+    except Exception as exc:
         final_response = state["response_draft"]
         verified_ok = False
+        verified = {
+            "response_draft": final_response,
+            "verified": False,
+            "verification_status": "failed",
+            "verification_reason": f"verifier_exception:{exc.__class__.__name__}",
+        }
 
     emit_trace_event(
         agent_name="history_character",
@@ -584,6 +634,7 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         }
     )
 
+    state.update(verified)
     state["response_draft"] = final_response
     state["retrieved_sources"] = _mark_used_sources(final_response, state.get("retrieved_sources", []))
     state["rag_inspector"] = _history_inspector_diagnosis(
@@ -601,12 +652,16 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
             "sources": state.get("retrieved_sources", []),
             "rag_inspector": state.get("rag_inspector", {}),
             "verified": verified_ok,
+            "verification_status": state.get("verification_status", "failed"),
+            "verification_reason": state.get("verification_reason"),
+            "completion_status": "completed" if verified_ok else "partial",
             "mode": state.get("mode", "factual"),
         },
     }
 
     # Step 5: Fact Card
     fact_card = generate_fact_card(state)
+    state["fact_card"] = fact_card or None
     emit_trace_event(
         agent_name="history_character",
         step_name="fact_card_generation",
@@ -614,27 +669,43 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
         status="success",
         metadata={"fact_count": len(fact_card.get("key_facts", []))}
     )
-    yield {"event": "fact_card", "data": {"card": fact_card}}
+    if fact_card:
+        yield {"event": "fact_card", "data": {"card": fact_card}}
 
     # Step 6: Memory Update
-    record_character_interaction(state.get("student_id"), state["character"], state.get("grade"))
-    update_memory_after_chat(state.get("student_id"), state["character"], state.get("messages"), state.get("grade"))
+    memory_updated = _apply_character_memory(state)
+    state["memory_updated"] = memory_updated
     emit_trace_event(
         agent_name="history_character",
         step_name="memory_update",
         event_type="memory",
-        status="success",
-        metadata={"student_id": state.get("student_id")}
+        status="success" if memory_updated else "skipped",
+        metadata={"student_id": state.get("student_id"), "verified": state.get("verified")}
     )
 
 
+def _apply_character_memory(state: CharacterState) -> bool:
+    if state.get("memory_updated"):
+        return True
+    if not state.get("verified") or not state.get("student_id"):
+        return False
+    record_character_interaction(state.get("student_id"), state["character"], state.get("grade"))
+    update_memory_after_chat(state.get("student_id"), state["character"], state.get("messages"), state.get("grade"))
+    return True
+
+
 def build_character_graph(rag_retriever) -> StateGraph:
+    """Compatibility graph delegating to the single stream/non-stream flow."""
+    def execute(state: CharacterState) -> CharacterState:
+        working: CharacterState = dict(state)
+        for _ in stream_character_response(working, rag_retriever):
+            pass
+        # ``messages`` uses an additive reducer; returning the original list
+        # would duplicate the conversation when LangGraph merges this update.
+        return {key: value for key, value in working.items() if key != "messages"}
+
     g = StateGraph(CharacterState)
-    g.add_node("retrieve", lambda s: retrieve_facts(s, rag_retriever))
-    g.add_node("generate", generate_response)
-    g.add_node("verify", verify_response)
-    g.set_entry_point("retrieve")
-    g.add_edge("retrieve", "generate")
-    g.add_edge("generate", "verify")
-    g.add_edge("verify", END)
+    g.add_node("character_runtime", execute)
+    g.set_entry_point("character_runtime")
+    g.add_edge("character_runtime", END)
     return g.compile()

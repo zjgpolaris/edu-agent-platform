@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState, useRef, ReactNode } from "react";
+import { readSseStream } from "@/lib/sse";
 
 function inlineMd(raw: string): string {
   return raw
@@ -170,49 +171,34 @@ export default function HistoryDebatePage() {
         signal: ctrl.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const blocks = buf.split("\n\n");
-        buf = blocks.pop() ?? "";
-        for (const block of blocks) {
-          const eventLine = block.match(/^event: (.+)/m)?.[1];
-          const dataLine = block.match(/^data: (.+)/m)?.[1];
-          if (!eventLine || !dataLine) continue;
-          const data = JSON.parse(dataLine);
-          if (eventLine === "round") {
+      await readSseStream<Record<string, unknown>>(res, ({ event, data }) => {
+          if (event === "round") {
             const rd = data as DebateRound;
             setRounds(prev => [...prev, rd]);
             markAgent(rd.side === "pro" ? "pro_debater" : "con_debater", "done");
             const nextAgent = rd.side === "pro" ? "con_debater" : "pro_debater";
             markAgent(nextAgent, "running");
-          } else if (eventLine === "fact_check") {
+          } else if (event === "fact_check") {
             markAgent("pro_debater", "done");
             markAgent("con_debater", "done");
             markAgent("fact_checker", "running");
             setPhase("fact_checking");
-            setFactCheck(data as FactCheck);
+            setFactCheck(data as unknown as FactCheck);
             markAgent("fact_checker", "done");
             markAgent("judge", "running");
-          } else if (eventLine === "verdict") {
+          } else if (event === "verdict") {
             setPhase("judging");
-            setVerdict(data.verdict);
+            setVerdict(String(data.verdict || ""));
             markAgent("judge", "done");
             markAgent("learning_coach", "running");
-          } else if (eventLine === "coach_summary") {
-            setCoachSummary(data.summary);
+          } else if (event === "coach_summary") {
+            setCoachSummary(String(data.summary || ""));
             markAgent("learning_coach", "done");
             setPhase("coaching");
-          } else if (eventLine === "done") {
+          } else if (event === "done") {
             setPhase("done");
           }
-        }
-      }
+      });
     } catch (e: unknown) {
       if ((e as Error).name !== "AbortError") {
         setError(e instanceof Error ? e.message : "辩论失败");
