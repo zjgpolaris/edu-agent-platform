@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { authHeaders } from "@/lib/auth";
-import { normalizeError } from "@/lib/api";
+import { fetchApiJson, normalizeError } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -15,9 +14,17 @@ type Question = { id: string; type: string; question: string; options: string[] 
 type Answer = { questionId: string; value: string };
 type GradeResult = { questionId: string; correct: boolean; explanation: string };
 
+function quizError(error: unknown, fallback: string) {
+  const message = normalizeError(error, fallback);
+  return message.includes("Failed to fetch")
+    ? "暂时连接不到出题服务，请确认后端服务已启动后重试"
+    : message;
+}
+
 export default function QuizPracticePage() {
   const { user } = useAuth();
   const studentId = user?.actorId ?? "";
+  const token = user?.token ?? "";
   const [books, setBooks] = useState<Textbook[]>([]);
   const [bookId, setBookId] = useState("");
   const [units, setUnits] = useState<TocUnit[]>([]);
@@ -40,14 +47,12 @@ export default function QuizPracticePage() {
     setBooksLoading(true);
     setBooksError("");
     try {
-      const res = await fetch(`${API}/api/textbooks`, { signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await fetchApiJson<{ textbooks?: Textbook[] }>(`${API}/api/textbooks`, { signal, token });
       setBooks((data.textbooks || []).filter((b: Textbook) => b.status === "ready"));
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       setBooks([]);
-      setBooksError(normalizeError(e, "教材列表加载失败，请稍后重试"));
+      setBooksError(quizError(e, "教材列表加载失败，请稍后重试"));
     } finally {
       if (!signal?.aborted) setBooksLoading(false);
     }
@@ -58,16 +63,14 @@ export default function QuizPracticePage() {
     setUnitsLoading(true);
     setUnitsError("");
     try {
-      const res = await fetch(`${API}/api/textbooks/${nextBookId}/toc`, { signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await fetchApiJson<{ units?: TocUnit[] }>(`${API}/api/textbooks/${nextBookId}/toc`, { signal, token });
       setUnits(data.units || []);
       setLessonId("");
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       setUnits([]);
       setLessonId("");
-      setUnitsError(normalizeError(e, "课次目录加载失败，请稍后重试"));
+      setUnitsError(quizError(e, "课次目录加载失败，请稍后重试"));
     } finally {
       if (!signal?.aborted) setUnitsLoading(false);
     }
@@ -77,7 +80,8 @@ export default function QuizPracticePage() {
     const controller = new AbortController();
     void loadBooks(controller.signal);
     return () => controller.abort();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   useEffect(() => {
     if (!bookId) { setUnits([]); setLessonId(""); setUnitsError(""); return; }
@@ -85,24 +89,24 @@ export default function QuizPracticePage() {
     void loadUnits(bookId, controller.signal);
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookId]);
+  }, [bookId, token]);
 
   async function startQuiz() {
     if (!bookId || !lessonId) { setError("请选择教材和课次"); return; }
     setError(""); setLoading(true);
     try {
-      const res = await fetch(`${API}/api/textbook-learning/quiz`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ book_id: bookId, lesson_id: lessonId, count, student_id: studentId || null }),
+      const data = await fetchApiJson<{ questions?: Question[] }>(`${API}/api/textbook-learning/quiz`, {
+        method: "POST",
+        token,
+        body: { book_id: bookId, lesson_id: lessonId, count, student_id: studentId || null },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
       const qs: Question[] = data.questions || [];
+      if (qs.length !== count) throw new Error("出题数量不完整，请重试");
       setQuestions(qs);
       setAnswers(qs.map((q) => ({ questionId: q.id, value: "" })));
       setResults([]); setCurrentQ(0); setPhase("quiz");
     } catch (e: unknown) {
-      setError(normalizeError(e, "出题失败，请稍后重试"));
+      setError(quizError(e, "出题失败，请稍后重试"));
     } finally { setLoading(false); }
   }
 
@@ -123,14 +127,15 @@ export default function QuizPracticePage() {
     if (studentId.trim()) {
       const score = graded.filter((r) => r.correct).length / questions.length;
       await Promise.all([
-        fetch(`${API}/api/students/${studentId}/events`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ student_id: studentId, feature: "quiz_practice", event_type: "quiz_completed", book_id: bookId, lesson_id: lessonId, score, success: score >= 0.6 }),
-        }).catch(() => {}),
-        fetch(`${API}/api/textbook-learning/quiz/submit`, {
+        fetchApiJson(`${API}/api/students/${studentId}/events`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) },
-          body: JSON.stringify({ book_id: bookId, lesson_id: lessonId, student_id: studentId, answers: answers.map((a) => ({ question_id: a.questionId, user_answer: a.value.trim(), source_item_ids: questions.find((q) => q.id === a.questionId)?.source_item_ids ?? [] })) }),
+          token,
+          body: { student_id: studentId, feature: "quiz_practice", event_type: "quiz_completed", book_id: bookId, lesson_id: lessonId, score, success: score >= 0.6 },
+        }).catch(() => {}),
+        fetchApiJson(`${API}/api/textbook-learning/quiz/submit`, {
+          method: "POST",
+          token,
+          body: { book_id: bookId, lesson_id: lessonId, student_id: studentId, answers: answers.map((a) => ({ question_id: a.questionId, user_answer: a.value.trim(), source_item_ids: questions.find((q) => q.id === a.questionId)?.source_item_ids ?? [] })) },
         }).catch(() => {}),
       ]);
     }

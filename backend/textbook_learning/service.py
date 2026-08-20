@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import logging
+import re
 from time import perf_counter
 from typing import Iterator
 
@@ -19,6 +22,9 @@ from textbook_learning.schema import (
 )
 from trace_store import emit_trace_event
 from utils.cost_estimator import estimate_cost_from_chars
+
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_question(req: TextbookAskRequest) -> str:
@@ -355,40 +361,195 @@ def stream_summary_events(req: TextbookSummaryRequest) -> Iterator[tuple[str, di
     yield "status", {"phase": "done", "message": "已完成"}
 
 
+def _safe_quiz_reason(exc: Exception) -> str:
+    message = str(exc).lower()
+    if "credential" in message or "api key" in message or "disabled" in message:
+        return "model_unavailable"
+    if "timeout" in message or "timed out" in message:
+        return "model_timeout"
+    return "model_output_invalid"
+
+
+def _clean_quiz_text(value: object, max_chars: int = 180) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip(" ，,；;。")
+    if len(text) <= max_chars:
+        return text
+    shortened = text[:max_chars]
+    boundary = max(shortened.rfind("，"), shortened.rfind("；"), shortened.rfind("。"))
+    return shortened[:boundary].strip(" ，,；;。") if boundary >= max_chars // 2 else shortened.rstrip(" ，,；;。")
+
+
+def _choice_claim(value: object) -> str:
+    return _clean_quiz_text(value, 76)
+
+
+def _normalize_choice_option(value: object) -> str:
+    return re.sub(r"^[A-DＡ-Ｄ][.、．:：]\s*", "", _clean_quiz_text(value, 90), flags=re.IGNORECASE)
+
+
+def _grounded_choice_options(lesson, target_item, index: int) -> tuple[list[str], str]:
+    correct = _choice_claim(target_item.text)
+    distractors: list[str] = []
+    for item in lesson.items:
+        if item.id == target_item.id or target_item.topic in item.text:
+            continue
+        claim = _choice_claim(item.text)
+        if claim and claim != correct and claim not in distractors:
+            distractors.append(claim)
+        if len(distractors) >= 3:
+            break
+
+    generic = [
+        "这一知识点与本课涉及的人物、政权和制度完全无关",
+        "教材认为该事件没有产生任何政治、经济或社会影响",
+        "这一事件发生在中国近代史时期，与本课时代背景无关",
+    ]
+    for claim in generic:
+        if len(distractors) >= 3:
+            break
+        if claim != correct and claim not in distractors:
+            distractors.append(claim)
+
+    offset = hashlib.sha256(f"{target_item.id}|{index}".encode("utf-8")).digest()[0] % 4
+    options = distractors[:3]
+    options.insert(offset, correct)
+    return options, "ABCD"[offset]
+
+
+def _build_grounded_quiz(lesson, req: TextbookQuizRequest, count: int) -> list[TextbookQuizQuestion]:
+    items = list(lesson.items)
+    if not items:
+        return []
+    if req.focus_item_id:
+        focused = next((item for item in items if item.id == req.focus_item_id), None)
+        if focused:
+            items = [focused, *(item for item in items if item.id != focused.id)]
+
+    question_types = list(req.question_types) or ["single_choice"]
+    questions: list[TextbookQuizQuestion] = []
+    for index in range(count):
+        item = items[index % len(items)]
+        question_type = question_types[index % len(question_types)]
+        source_note = f"教材同步条目「{item.topic}」指出：{_clean_quiz_text(item.text)}。"
+
+        if question_type == "single_choice":
+            options, answer = _grounded_choice_options(lesson, item, index)
+            question = f"下列史实中，与「{item.topic}」直接对应的是？"
+        elif question_type == "fill_blank":
+            options = None
+            answer = item.topic
+            question = f"阅读材料并填写对应的历史主题：{_choice_claim(item.text)}。这一史实是____。"
+        elif question_type == "explanation":
+            options = None
+            answer = _clean_quiz_text(item.text)
+            question = f"结合教材，说明「{item.topic}」的主要内容及其历史作用。"
+        else:
+            options = None
+            answer = _clean_quiz_text(item.text)
+            question = f"根据教材，简述「{item.topic}」的核心史实。"
+
+        questions.append(
+            TextbookQuizQuestion(
+                id=f"grounded-{item.id}-{index + 1}",
+                type=question_type,
+                question=question,
+                options=options,
+                answer=answer,
+                explanation=source_note,
+                source_item_ids=[item.id],
+            )
+        )
+    return questions
+
+
+def _validate_model_quiz(data: dict, lesson, req: TextbookQuizRequest, count: int) -> list[TextbookQuizQuestion]:
+    raw_questions = data.get("questions")
+    if not isinstance(raw_questions, list) or len(raw_questions) != count:
+        raise ValueError("question count mismatch")
+
+    allowed_item_ids = {item.id for item in lesson.items}
+    allowed_types = set(req.question_types) or {"single_choice"}
+    seen_ids: set[str] = set()
+    questions: list[TextbookQuizQuestion] = []
+    for index, item in enumerate(raw_questions, start=1):
+        if not isinstance(item, dict):
+            raise ValueError("question must be an object")
+        question_id = _clean_quiz_text(item.get("id") or f"q{index}", 80)
+        question_type = _clean_quiz_text(item.get("type") or "", 30)
+        question = _clean_quiz_text(item.get("question"), 300)
+        answer = _clean_quiz_text(item.get("answer"), 240)
+        explanation = _clean_quiz_text(item.get("explanation"), 320)
+        source_item_ids = [str(value) for value in item.get("source_item_ids") or []]
+        if (
+            not question_id
+            or question_id in seen_ids
+            or question_type not in allowed_types
+            or not question
+            or not answer
+            or not explanation
+            or not source_item_ids
+            or not set(source_item_ids) <= allowed_item_ids
+        ):
+            raise ValueError("question is not grounded or is incomplete")
+
+        options = None
+        if question_type == "single_choice":
+            raw_options = item.get("options")
+            if not isinstance(raw_options, list) or len(raw_options) != 4 or answer[:1].upper() not in "ABCD":
+                raise ValueError("single choice question is invalid")
+            options = [_normalize_choice_option(value) for value in raw_options]
+            if not all(options) or len(set(options)) != 4:
+                raise ValueError("single choice options are invalid")
+
+        questions.append(
+            TextbookQuizQuestion(
+                id=question_id,
+                type=question_type,
+                question=question,
+                options=options,
+                answer=answer,
+                explanation=explanation,
+                source_item_ids=source_item_ids,
+            )
+        )
+        seen_ids.add(question_id)
+    return questions
+
+
 def generate_quiz(req: TextbookQuizRequest) -> TextbookQuizResponse:
     lesson = get_lesson(req.book_id, req.lesson_id)
     focus_text = find_item_text(lesson, req.focus_item_id)
     count = max(1, min(req.count, 10))
-    response = llm_fast.invoke(quiz_messages(lesson, list(req.question_types), count, focus_text)).content
     try:
-        data = parse_json_object(response)
-    except StructuredOutputError as exc:
+        response = llm_fast.invoke(quiz_messages(lesson, list(req.question_types), count, focus_text)).content
         try:
-            data = parse_json_object(repair_json_with_llm(llm_fast, response, expect="object", schema_name="TextbookQuizResponse", error=str(exc)))
-        except StructuredOutputError:
-            return TextbookQuizResponse(raw_text=response)
-    if not isinstance(data.get("questions"), list):
-        return TextbookQuizResponse(raw_text=response)
-
-    questions = []
-    for index, item in enumerate(data["questions"], start=1):
-        if not isinstance(item, dict):
-            continue
-        try:
-            questions.append(
-                TextbookQuizQuestion(
-                    id=str(item.get("id") or f"q{index}"),
-                    type=str(item.get("type") or "short_answer"),
-                    question=str(item.get("question") or ""),
-                    options=item.get("options") if isinstance(item.get("options"), list) else None,
-                    answer=str(item.get("answer") or ""),
-                    explanation=str(item.get("explanation") or ""),
-                    source_item_ids=item.get("source_item_ids") if isinstance(item.get("source_item_ids"), list) else [],
-                )
+            data = parse_json_object(response)
+        except StructuredOutputError as exc:
+            repaired = repair_json_with_llm(
+                llm_fast,
+                response,
+                expect="object",
+                schema_name="TextbookQuizResponse",
+                error=str(exc),
             )
-        except Exception:
-            continue
-    return TextbookQuizResponse(questions=questions, raw_text=None if questions else response)
+            data = parse_json_object(repaired)
+        questions = _validate_model_quiz(data, lesson, req, count)
+        return TextbookQuizResponse(questions=questions, generation_source="llm")
+    except Exception as exc:
+        reason = _safe_quiz_reason(exc)
+        logger.warning(
+            "textbook_quiz_grounded_fallback book_id=%s lesson_id=%s count=%s reason=%s",
+            req.book_id,
+            req.lesson_id,
+            count,
+            reason,
+        )
+        questions = _build_grounded_quiz(lesson, req, count)
+        return TextbookQuizResponse(
+            questions=questions,
+            generation_source="trusted_lesson",
+            generation_reason=reason,
+        )
 
 
 def submit_quiz_answers(req: TextbookQuizSubmitRequest) -> dict:

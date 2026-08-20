@@ -103,6 +103,8 @@ class TextbookQuizQuestion(BaseModel):
 class TextbookQuizResponse(BaseModel):
     questions: list[TextbookQuizQuestion] = Field(default_factory=list)
     raw_text: str | None = None
+    generation_source: Literal["llm", "trusted_lesson"] = "llm"
+    generation_reason: str | None = None
 
 
 class TextbookQuizSubmitRequest(BaseModel):

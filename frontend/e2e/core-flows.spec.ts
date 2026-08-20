@@ -74,6 +74,19 @@ test("学生可打开 AutoTutor 自主辅导入口", async ({ page }) => {
   await expect(page.getByRole("button", { name: "开始本节课" })).toBeVisible();
 });
 
+test("智能练习在模型不可用时仍可按教材出题", async ({ page }) => {
+  await enterDemo(page, "student");
+  await page.goto("/student/quiz");
+  const selectors = page.getByRole("combobox");
+  await selectors.nth(0).selectOption({ label: "七年级下 · 中国历史七年级下册（人教版）" });
+  await selectors.nth(1).selectOption({ label: "第7课 辽、西夏与北宋的并立" });
+  await page.getByRole("button", { name: "3 题" }).click();
+  await page.getByRole("button", { name: /开始练习/ }).click();
+  await expect(page.locator(".quiz-card-question")).toBeVisible();
+  await expect(page.locator(".quiz-dot")).toHaveCount(3);
+  await expect(page.getByText("Failed to fetch")).toHaveCount(0);
+});
+
 test("学生打开随问后可直接提问或按需添加教材", async ({ page }) => {
   await enterDemo(page, "student");
   await page.goto("/student/assistant");
