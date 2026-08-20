@@ -28,8 +28,14 @@ def validate_plan_policy(
             binding = registry.resolve(step.operation, caller)
         except (LookupError, PermissionError) as exc:
             raise PlanPolicyError(str(exc)) from exc
+        if (binding.kind == "tool") != (step.kind == "tool"):
+            raise PlanPolicyError("plan step kind does not match capability binding")
         if binding.kind == "tool":
             spec = TOOLS[str(binding.tool_name)]
+            try:
+                step.input = spec.input_model.model_validate(step.input).model_dump()
+            except Exception as exc:
+                raise PlanPolicyError("tool step input does not match ToolSpec") from exc
             if step.side_effect != spec.side_effect or step.risk_level != spec.risk_level:
                 raise PlanPolicyError("tool step risk and side effect must match ToolSpec")
             if step.timeout_seconds != spec.timeout_seconds:

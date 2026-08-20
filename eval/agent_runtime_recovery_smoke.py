@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import tempfile
@@ -18,6 +19,7 @@ from sqlalchemy import text  # noqa: E402
 from agent_runtime.event_store import append_run_event, create_run, get_run  # noqa: E402
 from agent_runtime.models import AgentContext  # noqa: E402
 from agent_runtime.recovery import recover_stale_runs  # noqa: E402
+from agent_runtime.recovery_worker import recovery_worker_enabled, recovery_worker_loop  # noqa: E402
 from db.engine import get_connection  # noqa: E402
 
 
@@ -51,6 +53,23 @@ def main() -> None:
     assert result["awaiting_resume"] == 1, result
     assert get_run("run_observable_recovery")["status"] == "failed"
     assert get_run("run_resumable_recovery")["status"] == "running"
+
+    os.environ["EDU_AGENT_RUNTIME_V2_RECOVERY_ENABLED"] = "true"
+    assert recovery_worker_enabled()
+    start_running("run_worker_recovery", "observable")
+
+    async def run_worker_once() -> None:
+        stop = asyncio.Event()
+        task = asyncio.create_task(recovery_worker_loop(stop, poll_seconds=0.05, stale_seconds=60))
+        for _ in range(50):
+            if get_run("run_worker_recovery")["status"] == "failed":
+                break
+            await asyncio.sleep(0.01)
+        stop.set()
+        await task
+
+    asyncio.run(run_worker_once())
+    assert get_run("run_worker_recovery")["status"] == "failed"
     print("agent_runtime_recovery_smoke=PASS")
 
 

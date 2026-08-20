@@ -97,6 +97,9 @@ class SequentialPlanAdapter:
                 run_id=context.run_id,
                 step_id=step.step_id,
                 run_revision=run_revision,
+                idempotency_key=step.idempotency_key,
+                capability_operation=step.operation,
+                data_scope=context.data_scope,
             ))
             return result.model_dump()
         raise LookupError(f"no executor registered for operation: {step.operation}")

@@ -68,6 +68,7 @@ PY_COMPILE_TARGETS.extend(
 PY_COMPILE_TARGETS.extend(
     [
         "backend/alembic/versions/007_agent_runtime_v2.py",
+        "backend/alembic/versions/008_agent_side_effect_ledger.py",
         "backend/api/routers/agent_runtime.py",
     ]
 )
@@ -101,6 +102,8 @@ FAST_SUITES = [
     "agent_runtime_contract_smoke",
     "agent_runtime_checkpoint_smoke",
     "agent_runtime_concurrency_smoke",
+    "agent_runtime_lifecycle_smoke",
+    "agent_runtime_idempotency_smoke",
     "history_character_runtime_smoke",
     "agent_runtime_stream_parity_smoke",
     "agent_runtime_security_smoke",

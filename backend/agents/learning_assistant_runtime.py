@@ -13,7 +13,7 @@ from trace_store import emit_trace_event
 from agent_runtime.adapters.sequential import map_legacy_task_plan
 
 
-ToolRunner = Callable[[str, dict[str, Any]], Any]
+ToolRunner = Callable[[str, dict[str, Any], PlanStep], Any]
 ToolSummary = Callable[[Any], dict[str, Any]]
 GenerationRunner = Callable[[str, PlanStep, dict[str, dict[str, Any]]], dict[str, Any]]
 
@@ -123,7 +123,7 @@ def stream_task_plan(
                 if step.operation not in ALLOWED_TOOL_OPERATIONS:
                     raise ValueError(f"tool operation is not allowed: {step.operation}")
                 yield "tool_start", {"tool_name": step.operation, "step_id": step.step_id}
-                raw = run_tool(step.operation, step.input)
+                raw = run_tool(step.operation, step.input, step)
                 used_tool_count += 1
                 payload = raw.model_dump() if hasattr(raw, "model_dump") else dict(raw)
                 tool_results.append(payload)
@@ -163,7 +163,7 @@ def stream_task_plan(
                         metadata=repair_payload,
                     )
                     yield "repair_attempt", repair_payload
-                    retried_raw = run_tool(step.operation, retry_payload)
+                    retried_raw = run_tool(step.operation, retry_payload, step)
                     used_tool_count += 1
                     retried_payload = retried_raw.model_dump() if hasattr(retried_raw, "model_dump") else dict(retried_raw)
                     tool_results[-1] = retried_payload

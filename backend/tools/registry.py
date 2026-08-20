@@ -165,6 +165,9 @@ def _context_metadata(context: ToolExecutionContext) -> dict[str, Any]:
         "run_id": context.run_id,
         "step_id": context.step_id,
         "run_revision": context.run_revision,
+        "idempotency_key": context.idempotency_key,
+        "capability_operation": context.capability_operation,
+        "data_scope": context.data_scope,
     }
 
 
@@ -319,12 +322,31 @@ def _audit_tool(action: str, tool_name: str, spec: ToolSpec, context: ToolExecut
         resource_type="tool",
         resource_id=tool_name,
         success=success,
+        data_scope=context.data_scope,
         metadata={"tool_name": tool_name, **_tool_policy_metadata(spec), **_context_metadata(context), **(metadata or {})},
     )
 
 
 def _has_required_role(context: ToolExecutionContext, spec: ToolSpec) -> bool:
     return ROLE_RANK.get(context.role, 0) >= ROLE_RANK.get(spec.required_role, 0)
+
+
+def _mark_claim_unknown(context: ToolExecutionContext, claim: Any, *, error_type: str) -> None:
+    if not claim or not claim.acquired or not context.run_id or not context.idempotency_key:
+        return
+    try:
+        from agent_runtime.side_effect_store import get_side_effect, mark_side_effect_unknown
+
+        current = get_side_effect(context.run_id, context.idempotency_key)
+        if current and current.get("status") == "started":
+            mark_side_effect_unknown(
+                context.run_id,
+                context.idempotency_key,
+                {"code": "handler_or_commit_exception", "type": error_type},
+            )
+    except Exception:
+        # Never replace the governed tool error with a secondary ledger error.
+        pass
 
 
 def run_tool(tool_name: str, payload: dict[str, Any], context: ToolExecutionContext | None = None) -> ToolResult:
@@ -345,6 +367,7 @@ def run_tool(tool_name: str, payload: dict[str, Any], context: ToolExecutionCont
         },
     )
     validated_payload: dict[str, Any] = {}
+    side_effect_claim = None
     try:
         validated = spec.input_model.model_validate(payload)
         validated_payload = validated.model_dump()
@@ -406,9 +429,73 @@ def run_tool(tool_name: str, payload: dict[str, Any], context: ToolExecutionCont
                 return result
             _audit_tool("tool.confirmation_confirmed", tool_name, spec, context, metadata={"confirmed_tool_name": tool_name, "input_summary": validated_payload})
 
-        result = spec.handler(validated)
+        if context.run_id and spec.side_effect in {"write", "session_create"}:
+            from agent_runtime.side_effect_store import claim_side_effect
+
+            if not context.step_id or not context.idempotency_key:
+                duration_ms = (perf_counter() - started_at) * 1000
+                result = _tool_error(
+                    tool_name,
+                    "missing_side_effect_idempotency",
+                    "Runtime 副作用步骤缺少 step 或幂等键。",
+                    duration_ms=duration_ms,
+                    spec=spec,
+                    context=context,
+                )
+                _audit_tool("tool.denied", tool_name, spec, context, success=False, metadata={"reason": "missing_side_effect_idempotency"})
+                end_span(span, output={"ok": False, "error": "missing_side_effect_idempotency"}, metadata={"tool_name": tool_name, "success": False, **_tool_policy_metadata(spec), **_context_metadata(context)}, level="WARNING", status_message="missing_side_effect_idempotency")
+                return result
+            side_effect_claim = claim_side_effect(
+                run_id=context.run_id,
+                step_id=context.step_id,
+                operation=context.capability_operation or tool_name,
+                idempotency_key=context.idempotency_key,
+                input_payload=validated_payload,
+            )
+            if side_effect_claim.replayable:
+                stored = side_effect_claim.record.get("result")
+                if not isinstance(stored, dict):
+                    return _tool_error(
+                        tool_name,
+                        "side_effect_replay_missing_result",
+                        "已执行的副作用缺少可重放结果。",
+                        spec=spec,
+                        context=context,
+                    )
+                result = ToolResult.model_validate(stored)
+                result.metadata = {**result.metadata, **_result_metadata(spec, context), "idempotent_replay": True}
+                _audit_tool("tool.idempotent_replay", tool_name, spec, context, success=result.ok)
+                end_span(span, output={"ok": result.ok, "idempotent_replay": True}, metadata={"tool_name": tool_name, "success": result.ok, "idempotent_replay": True, **_tool_policy_metadata(spec), **_context_metadata(context)})
+                return result
+            if not side_effect_claim.acquired:
+                status = str(side_effect_claim.record.get("status") or "unknown")
+                error_code = "side_effect_in_progress" if status == "started" else "side_effect_outcome_unknown"
+                result = _tool_error(
+                    tool_name,
+                    error_code,
+                    "副作用仍在执行中。" if status == "started" else "副作用结果不确定，禁止自动重试。",
+                    retryable=False,
+                    spec=spec,
+                    context=context,
+                )
+                _audit_tool("tool.denied", tool_name, spec, context, success=False, metadata={"reason": error_code})
+                end_span(span, output={"ok": False, "error": error_code}, metadata={"tool_name": tool_name, "success": False, **_tool_policy_metadata(spec), **_context_metadata(context)}, level="WARNING", status_message=error_code)
+                return result
+
+        try:
+            result = spec.handler(validated)
+        except Exception as exc:
+            _mark_claim_unknown(context, side_effect_claim, error_type=type(exc).__name__)
+            raise
         duration_ms = (perf_counter() - started_at) * 1000
         result.metadata = {**_result_metadata(spec, context, duration_ms), **result.metadata}
+        if side_effect_claim and side_effect_claim.acquired and context.run_id and context.idempotency_key:
+            from agent_runtime.side_effect_store import commit_side_effect, fail_side_effect
+
+            if result.ok:
+                commit_side_effect(context.run_id, context.idempotency_key, result.model_dump())
+            else:
+                fail_side_effect(context.run_id, context.idempotency_key, result.model_dump())
         if result.ok:
             _audit_tool("tool.allowed", tool_name, spec, context, metadata={"duration_ms": round(duration_ms, 2), "input_summary": validated_payload})
         else:
@@ -432,6 +519,7 @@ def run_tool(tool_name: str, payload: dict[str, Any], context: ToolExecutionCont
         )
         return result
     except LookupError as exc:
+        _mark_claim_unknown(context, side_effect_claim, error_type=type(exc).__name__)
         duration_ms = (perf_counter() - started_at) * 1000
         message = safe_error_message(exc)
         result = _tool_error(tool_name, "not_found", message, duration_ms=duration_ms, spec=spec, context=context)
@@ -444,6 +532,7 @@ def run_tool(tool_name: str, payload: dict[str, Any], context: ToolExecutionCont
         )
         return result
     except ValueError as exc:
+        _mark_claim_unknown(context, side_effect_claim, error_type=type(exc).__name__)
         duration_ms = (perf_counter() - started_at) * 1000
         message = safe_error_message(exc)
         result = _tool_error(tool_name, "invalid_request", message, duration_ms=duration_ms, spec=spec, context=context)
@@ -456,6 +545,7 @@ def run_tool(tool_name: str, payload: dict[str, Any], context: ToolExecutionCont
         )
         return result
     except Exception as exc:
+        _mark_claim_unknown(context, side_effect_claim, error_type=type(exc).__name__)
         duration_ms = (perf_counter() - started_at) * 1000
         message = safe_error_message(exc)
         result = _tool_error(tool_name, "tool_failed", message or "工具执行失败。", retryable=True, duration_ms=duration_ms, spec=spec, context=context)

@@ -1,4 +1,4 @@
-"""SQLite upgrade/downgrade coverage for Agent Runtime v2 migration 007."""
+"""SQLite upgrade/downgrade coverage for Agent Runtime v2 migrations 007/008."""
 from __future__ import annotations
 
 import os
@@ -16,6 +16,7 @@ RUNTIME_TABLES = {
     "agent_run_events",
     "agent_run_artifacts",
     "agent_checkpoints",
+    "agent_side_effects",
 }
 LEGACY_AUTOTUTOR_COLUMNS = {
     "session_id",

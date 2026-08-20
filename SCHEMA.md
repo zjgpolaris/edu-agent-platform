@@ -103,11 +103,14 @@ backend/
 ├── agent_runtime/             # 统一 Agent Runtime v2
 │   ├── adapters/              # Sequential / Function / LangGraph 事件适配
 │   ├── models.py              # Context / Plan / State / Event / Completion 合同
+│   ├── lifecycle.py           # 产品 Agent 统一计划准入与状态写入边界
 │   ├── event_store.py         # run revision CAS 与 append-only milestone
 │   ├── artifact_store.py      # owner-protected 输入/交付物
 │   ├── checkpoint_store.py    # resumable 业务边界 checkpoint
+│   ├── side_effect_store.py   # write/session_create 持久化幂等与不确定态账本
 │   ├── capability_registry.py # capability allowlist 与 ToolSpec 绑定
-│   └── recovery.py            # stale run 恢复/失败收敛
+│   ├── recovery.py            # stale run 恢复/失败收敛
+│   └── recovery_worker.py     # opt-in 后台自动恢复循环
 │
 ├── agents/                    # AI 代理
 │   ├── history_character.py       # 历史人物对话代理
@@ -575,6 +578,10 @@ AutoTutor 的兼容业务状态表。v1.33 起由 Alembic 007 与 `db/schema.py`
 #### agent_run_artifacts / agent_checkpoints 表
 
 `agent_run_artifacts` 保存受 owner/角色保护的输入和交付物，作文正文仅进入该表，不进入 objective、event 或 trace。默认保留时间按敏感度为 normal 7 天、student_content 30 天、restricted 7 天，可由 Runtime retention 环境变量收窄或调整；过期产物在 purge 前也不可读取。`agent_checkpoints` 只用于 `resumable/queued`，在 waiting、人工复核和已提交业务写边界保存状态与 side-effect ledger；observable 与 trace-only 不计入 checkpoint 覆盖率。terminal checkpoint 默认只保留最近 5 个且最长 30 天。
+
+#### agent_side_effects 表
+
+`agent_side_effects` 由 migration 008 创建，按 `(run_id, idempotency_key)` 唯一记录 `write/session_create` 工具步骤的 `started/committed/failed/unknown` 状态。工具执行前会校验 step、operation 与幂等键均匹配已准入 plan；已提交或明确失败的结果只重放、不重复执行，`started/unknown` 一律 fail-closed。恢复 worker 会把超时的 `started` 收敛到 `unknown`，避免进程中断后自动重放可能已生效的外部写。
 
 #### memory_entries 表
 

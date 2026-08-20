@@ -1260,13 +1260,15 @@ def _autotutor_checkpoint_state(state: AutoTutorState, *, event_cursor: int | No
 
 def _sync_runtime_milestones(state: AutoTutorState, run: dict[str, Any]) -> dict[str, Any]:
     """Dual-write new legacy state-machine steps as sanitized v2 milestones."""
-    from agent_runtime.event_store import append_run_event, get_run, list_run_events
+    from agent_runtime.event_store import get_run, list_run_events
+    from agent_runtime.lifecycle import RuntimeRunController
 
     emitted = {
         int(event.data["autotutor_step_sequence"])
         for event in list_run_events(state.run_id or "", limit=500)
         if isinstance(event.data.get("autotutor_step_sequence"), int)
     }
+    controller = RuntimeRunController.attach(state.run_id or "", policy_caller="auto_tutor")
     allowlisted_metadata = {
         "knowledge_point",
         "difficulty",
@@ -1286,10 +1288,8 @@ def _sync_runtime_milestones(state: AutoTutorState, run: dict[str, Any]) -> dict
             for key, value in step.metadata.items()
             if key in allowlisted_metadata and isinstance(value, (str, int, float, bool, type(None)))
         }
-        append_run_event(
-            state.run_id or "",
-            expected_revision=current["revision"],
-            event_type="autotutor_milestone",
+        controller.event(
+            "autotutor_milestone",
             public_payload={
                 "autotutor_step_sequence": step.sequence,
                 "step_id": step.step_id,
@@ -1347,8 +1347,9 @@ def _start_runtime_run(state: AutoTutorState, *, actor_id: str | None, actor_rol
         state.run_id = None
         return
     from agent_runtime.checkpoint_store import save_checkpoint
-    from agent_runtime.event_store import append_run_event, create_run, get_run
-    from agent_runtime.models import AgentBudget, AgentContext
+    from agent_runtime.event_store import get_run
+    from agent_runtime.lifecycle import RuntimeRunController
+    from agent_runtime.models import AgentBudget, AgentContext, default_data_scope
 
     context = AgentContext(
         run_id=state.run_id,
@@ -1358,31 +1359,29 @@ def _start_runtime_run(state: AutoTutorState, *, actor_id: str | None, actor_rol
         student_id=state.student_id,
         session_id=state.session_id,
         trace_id=state.trace_id,
-        data_scope="runtime",
+        data_scope=default_data_scope(),
         durability_mode="resumable",
         config_version=settings.config_version,
     )
-    run = create_run(
+    controller, run = RuntimeRunController.create(
         context,
         objective="AutoTutor 有界教学会话",
         budget=AgentBudget(max_steps=4, max_tool_calls=2, max_llm_calls=3, max_replans=1, max_wall_time_ms=300_000),
+        policy_caller="auto_tutor",
         idempotency_key=f"autotutor:{state.session_id}",
         runtime_mode="shadow" if settings.shadow_mode else "active",
     )
-    append_run_event(state.run_id, expected_revision=run["revision"], event_type="route_decided", public_payload={"agent_type": "auto_tutor"}, next_status="routed")
-    routed = get_run(state.run_id)
+    state.run_id = controller.run_id
+    if run["status"] != "received":
+        return
     plan = _autotutor_runtime_plan()
-    append_run_event(state.run_id, expected_revision=routed["revision"], event_type="plan_created", public_payload={"plan_id": plan.plan_id, "step_count": len(plan.steps)}, next_status="planned", plan=plan.model_dump())
-    planned = get_run(state.run_id)
-    append_run_event(state.run_id, expected_revision=planned["revision"], event_type="step_started", public_payload={"step_id": "teach", "phase": state.phase}, next_status="running", current_step_id="teach")
-    running = _sync_runtime_milestones(state, get_run(state.run_id))
-    waiting = append_run_event(
-        state.run_id,
-        expected_revision=running["revision"],
-        event_type="waiting_input",
-        public_payload={"kind": "answer", "autotutor_revision": state.revision, "phase": state.phase},
-        next_status="waiting_input",
-        current_step_id="observe",
+    controller.route({"agent_type": "auto_tutor"})
+    controller.admit_plan(plan)
+    controller.start_step("teach", "auto_tutor.teach", phase=state.phase)
+    _sync_runtime_milestones(state, get_run(state.run_id))
+    waiting = controller.wait_for_input(
+        {"kind": "answer", "autotutor_revision": state.revision, "phase": state.phase},
+        step_id="observe",
     )
     save_checkpoint(
         state.run_id,
@@ -1396,28 +1395,21 @@ def _checkpoint_runtime_transition(state: AutoTutorState) -> bool:
     if not state.run_id:
         return False
     from agent_runtime.checkpoint_store import prune_terminal_checkpoints, save_checkpoint
-    from agent_runtime.event_store import append_run_event, get_run
+    from agent_runtime.event_store import get_run
+    from agent_runtime.lifecycle import RuntimeRunController
     from agent_runtime.completion import CompletionEvaluator
 
     try:
         run = get_run(state.run_id)
+        controller = RuntimeRunController.attach(state.run_id, policy_caller="auto_tutor")
         if run["status"] in {"completed", "partial", "failed", "cancelled"}:
             return True
         if run["status"] == "waiting_input":
-            append_run_event(
-                state.run_id,
-                expected_revision=run["revision"],
-                event_type="step_started",
-                public_payload={"step_id": "observe", "autotutor_revision": state.revision},
-                next_status="running",
-                current_step_id="observe",
-            )
+            controller.start_step("observe", "auto_tutor.observe_judge", autotutor_revision=state.revision)
             run = get_run(state.run_id)
         run = _sync_runtime_milestones(state, run)
-        append_run_event(
-            state.run_id,
-            expected_revision=run["revision"],
-            event_type="step_completed",
+        controller.event(
+            "step_completed",
             public_payload={
                 "step_id": "observe",
                 "autotutor_revision": state.revision,
@@ -1435,8 +1427,7 @@ def _checkpoint_runtime_transition(state: AutoTutorState) -> bool:
                 state=_autotutor_checkpoint_state(state),
                 side_effect_ledger=_autotutor_side_effect_ledger(state),
             )
-            append_run_event(state.run_id, expected_revision=current["revision"], event_type="verification_result", public_payload={"status": "teaching_evidence_recorded"}, next_status="verifying")
-            verifying = get_run(state.run_id)
+            controller.event("verification_result", public_payload={"status": "teaching_evidence_recorded"}, next_status="verifying")
             decision = CompletionEvaluator().from_outcome(
                 status="completed",
                 completed_steps=4,
@@ -1444,16 +1435,12 @@ def _checkpoint_runtime_transition(state: AutoTutorState) -> bool:
                 verification_status="not_required",
                 reason_codes=["autotutor_finalized"],
             )
-            append_run_event(state.run_id, expected_revision=verifying["revision"], event_type="run_completed", public_payload={"completion": decision.model_dump()}, next_status="completed", completion=decision)
+            controller.event("run_completed", public_payload={"completion": decision.model_dump()}, next_status="completed", completion=decision)
             prune_terminal_checkpoints(state.run_id)
         else:
-            waiting = append_run_event(
-                state.run_id,
-                expected_revision=current["revision"],
-                event_type="waiting_input",
-                public_payload={"kind": "answer", "autotutor_revision": state.revision, "phase": state.phase},
-                next_status="waiting_input",
-                current_step_id="observe",
+            waiting = controller.wait_for_input(
+                {"kind": "answer", "autotutor_revision": state.revision, "phase": state.phase},
+                step_id="observe",
             )
             save_checkpoint(
                 state.run_id,

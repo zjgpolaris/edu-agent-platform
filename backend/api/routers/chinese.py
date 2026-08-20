@@ -11,12 +11,14 @@ from agent_runtime.artifact_store import create_artifact, list_run_artifacts
 from agent_runtime.checkpoint_store import prune_terminal_checkpoints, save_checkpoint
 from agent_runtime.completion import CompletionEvaluator
 from agent_runtime.context import RuntimeV2Settings
-from agent_runtime.event_store import append_run_event, create_run, get_run
+from agent_runtime.event_store import get_run
+from agent_runtime.lifecycle import RuntimeRunController
 from agent_runtime.models import (
     AgentBudget,
     AgentContext,
     AgentPlan,
     AgentStep,
+    default_data_scope,
 )
 from security.audit_log import record_audit_event
 from security.auth import Actor, assert_student_access, assert_teacher_student_access, require_auth
@@ -88,15 +90,16 @@ async def grade_essay(req: EssayRequest, actor: Actor = Depends(require_auth)):
         student_id=req.student_id,
         session_id=run_id,
         trace_id=trace_id,
-        data_scope="runtime",
+        data_scope=default_data_scope(),
         durability_mode="resumable" if review_resume_enabled else "observable",
         config_version=runtime_settings.config_version,
     )
     budget = AgentBudget(max_steps=4, max_tool_calls=0, max_llm_calls=3, max_replans=1, max_wall_time_ms=120_000)
-    created = create_run(
+    controller, _ = RuntimeRunController.create(
         context,
         objective="作文结构化批改",
         budget=budget,
+        policy_caller="chinese_api",
         idempotency_key=None,
         runtime_mode=("shadow" if runtime_settings.shadow_mode else "active") if runtime_active else "control",
     )
@@ -109,11 +112,9 @@ async def grade_essay(req: EssayRequest, actor: Actor = Depends(require_auth)):
         content={"essay": req.essay},
     )
     plan = _essay_plan(run_id)
-    append_run_event(run_id, expected_revision=created["revision"], event_type="route_decided", public_payload={"agent_type": "essay_grader"}, next_status="routed", input_artifact_refs=[input_artifact["artifact_id"]])
-    routed = get_run(run_id)
-    append_run_event(run_id, expected_revision=routed["revision"], event_type="plan_created", public_payload={"plan_id": plan.plan_id, "step_count": len(plan.steps)}, next_status="planned", plan=plan.model_dump())
-    planned = get_run(run_id)
-    append_run_event(run_id, expected_revision=planned["revision"], event_type="step_started", public_payload={"step_id": "grade"}, next_status="running", current_step_id="grade")
+    controller.route({"agent_type": "essay_grader"}, input_artifact_refs=[input_artifact["artifact_id"]])
+    controller.admit_plan(plan)
+    controller.start_step("grade", "essay.grade_structured")
 
     with trace_context(
         name="POST /api/chinese/essay/grade",
@@ -151,20 +152,15 @@ async def grade_essay(req: EssayRequest, actor: Actor = Depends(require_auth)):
             "review_reason": result.get("review_reason"),
         },
     )
-    running = get_run(run_id)
     refs = [input_artifact["artifact_id"], structured_artifact["artifact_id"]]
     if result.get("needs_human_review") and review_resume_enabled:
-        append_run_event(
-            run_id,
-            expected_revision=running["revision"],
-            event_type="waiting_input",
-            public_payload={
+        controller.wait_for_input(
+            {
                 "reason": result.get("review_reason") or "critic_disagreement",
                 "draft_score": result.get("draft_score") or {},
                 "revision_count": int(result.get("revision_count") or 0),
             },
-            next_status="waiting_input",
-            current_step_id="finalize",
+            step_id="finalize",
             input_artifact_refs=refs,
         )
         waiting = get_run(run_id)
@@ -176,8 +172,7 @@ async def grade_essay(req: EssayRequest, actor: Actor = Depends(require_auth)):
         )
         completion_status = "waiting_input"
     elif result.get("needs_human_review"):
-        append_run_event(run_id, expected_revision=running["revision"], event_type="verification_result", public_payload={"status": "partial", "reason": "human_review_resume_disabled"}, next_status="verifying", input_artifact_refs=refs)
-        verifying = get_run(run_id)
+        controller.event("verification_result", public_payload={"status": "partial", "reason": "human_review_resume_disabled"}, next_status="verifying", input_artifact_refs=refs)
         decision = CompletionEvaluator().from_outcome(
             status="partial",
             completed_steps=3,
@@ -187,11 +182,10 @@ async def grade_essay(req: EssayRequest, actor: Actor = Depends(require_auth)):
             deliverable_refs=[structured_artifact["artifact_id"]],
             unresolved_items=["teacher_review"],
         )
-        append_run_event(run_id, expected_revision=verifying["revision"], event_type="run_completed", public_payload={"completion": decision.model_dump()}, next_status="partial", completion=decision)
+        controller.event("run_completed", public_payload={"completion": decision.model_dump()}, next_status="partial", completion=decision)
         completion_status = "partial"
     else:
-        append_run_event(run_id, expected_revision=running["revision"], event_type="verification_result", public_payload={"status": "verified"}, next_status="verifying", input_artifact_refs=refs)
-        verifying = get_run(run_id)
+        controller.event("verification_result", public_payload={"status": "verified"}, next_status="verifying", input_artifact_refs=refs)
         decision = CompletionEvaluator().from_outcome(
             status="completed",
             completed_steps=4,
@@ -200,7 +194,7 @@ async def grade_essay(req: EssayRequest, actor: Actor = Depends(require_auth)):
             reason_codes=["rubric_and_critic_passed"],
             deliverable_refs=[structured_artifact["artifact_id"]],
         )
-        append_run_event(run_id, expected_revision=verifying["revision"], event_type="run_completed", public_payload={"completion": decision.model_dump(), "score": result.get("final_score") or {}}, next_status="completed", completion=decision)
+        controller.event("run_completed", public_payload={"completion": decision.model_dump(), "score": result.get("final_score") or {}}, next_status="completed", completion=decision)
         completion_status = "completed"
 
     comments = result.get("final_comments") or result.get("draft_comments") or ""
@@ -256,10 +250,9 @@ async def submit_essay_review(req: EssayReviewRequest, actor: Actor = Depends(re
             "teacher_id": actor.actor_id,
         },
     )
-    append_run_event(req.session_id, expected_revision=expected_revision, event_type="step_started", public_payload={"step_id": "teacher_review"}, next_status="running", current_step_id="finalize")
-    resumed = get_run(req.session_id)
-    append_run_event(req.session_id, expected_revision=resumed["revision"], event_type="verification_result", public_payload={"status": "teacher_reviewed", "decision": req.decision}, next_status="verifying")
-    verifying = get_run(req.session_id)
+    controller = RuntimeRunController.attach(req.session_id, policy_caller="chinese_api")
+    controller.start_step("finalize", "essay.finalize", review_step_id="teacher_review", expected_revision=expected_revision)
+    controller.event("verification_result", public_payload={"status": "teacher_reviewed", "decision": req.decision}, next_status="verifying")
     terminal_status = "completed" if req.approved and req.decision != "rejected" else "partial"
     decision = CompletionEvaluator().from_outcome(
         status=terminal_status,
@@ -270,10 +263,8 @@ async def submit_essay_review(req: EssayReviewRequest, actor: Actor = Depends(re
         deliverable_refs=[output_artifact["artifact_id"]],
         unresolved_items=[] if terminal_status == "completed" else ["teacher_rejected"],
     )
-    append_run_event(
-        req.session_id,
-        expected_revision=verifying["revision"],
-        event_type="run_completed",
+    controller.event(
+        "run_completed",
         public_payload={"completion": decision.model_dump(), "score": final_score},
         next_status=terminal_status,
         completion=decision,

@@ -113,6 +113,14 @@ def build_default_registry() -> CapabilityRegistry:
         ("quiz_from_sources", "generation", ["learning_assistant"], True, "observable"),
         ("quiz_from_lesson", "generation", ["learning_assistant"], True, "observable"),
         ("chat_answer", "generation", ["learning_assistant"], False, "observable"),
+        ("auto_tutor.plan", "function", ["auto_tutor"], False, "resumable"),
+        ("auto_tutor.teach", "generation", ["auto_tutor"], True, "resumable"),
+        ("auto_tutor.observe_judge", "function", ["auto_tutor"], False, "resumable"),
+        ("auto_tutor.finalize", "function", ["auto_tutor"], False, "resumable"),
+        ("essay.grade_structured", "generation", ["chinese_api"], False, "resumable"),
+        ("essay.critic", "function", ["chinese_api"], False, "resumable"),
+        ("essay.revise", "generation", ["chinese_api"], False, "resumable"),
+        ("essay.finalize", "function", ["chinese_api"], False, "resumable"),
     ]:
         registry.register(CapabilityBinding(
             name=name,

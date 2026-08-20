@@ -1,5 +1,6 @@
 """Framework-independent Agent Runtime v2 contracts and persistence."""
 
+from agent_runtime.lifecycle import RuntimeRunController
 from agent_runtime.models import (
     AgentBudget,
     AgentContext,
@@ -23,5 +24,6 @@ __all__ = [
     "EvidenceClaim",
     "ResumeSignal",
     "RuntimeEvent",
+    "RuntimeRunController",
     "StepResult",
 ]

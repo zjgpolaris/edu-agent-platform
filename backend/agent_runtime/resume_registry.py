@@ -55,7 +55,8 @@ async def _confirm_learning_assistant(run: dict[str, Any], signal: ResumeSignal,
         raise ValueError("学习助手高风险步骤需要 confirmation token")
     from agent_runtime.artifact_store import create_artifact
     from agent_runtime.capability_registry import build_default_registry
-    from agent_runtime.event_store import append_run_event, get_run
+    from agent_runtime.event_store import get_run
+    from agent_runtime.lifecycle import RuntimeRunController
     from agent_runtime.completion import CompletionEvaluator
     from agent_runtime.models import AgentPlan, StepResult
     from tools.base import ToolExecutionContext
@@ -69,13 +70,12 @@ async def _confirm_learning_assistant(run: dict[str, Any], signal: ResumeSignal,
     if binding.kind != "tool" or not binding.tool_name:
         raise ValueError("等待确认的步骤不是受控工具")
 
-    append_run_event(
-        str(run["run_id"]),
+    controller = RuntimeRunController.attach(str(run["run_id"]), policy_caller="learning_assistant")
+    controller.start_step(
+        step.step_id,
+        step.operation,
         expected_revision=signal.expected_revision,
-        event_type="step_started",
-        public_payload={"step_id": step.step_id, "operation": step.operation, "resume": "confirmation"},
-        next_status="running",
-        current_step_id=step.step_id,
+        resume="confirmation",
     )
     result = run_tool(
         binding.tool_name,
@@ -90,17 +90,15 @@ async def _confirm_learning_assistant(run: dict[str, Any], signal: ResumeSignal,
             run_id=str(run["run_id"]),
             step_id=step.step_id,
             run_revision=signal.expected_revision,
+            idempotency_key=step.idempotency_key,
+            capability_operation=step.operation,
+            data_scope=str(((run.get("state") or {}).get("context_refs") or {}).get("data_scope") or "runtime"),
         ),
     )
     if not result.ok:
-        current = get_run(str(run["run_id"]))
-        append_run_event(
-            str(run["run_id"]),
-            expected_revision=current["revision"],
-            event_type="waiting_confirmation",
-            public_payload={"step_id": step.step_id, "error": result.error.model_dump() if result.error else {}},
-            next_status="waiting_confirmation",
-            current_step_id=step.step_id,
+        controller.wait_for_confirmation(
+            {"step_id": step.step_id, "error": result.error.model_dump() if result.error else {}},
+            step_id=step.step_id,
         )
         waiting_run = get_run(str(run["run_id"]))
         result_payload = result.model_dump()
@@ -142,23 +140,16 @@ async def _confirm_learning_assistant(run: dict[str, Any], signal: ResumeSignal,
         output=result.model_dump(),
         side_effect_committed=step.side_effect in {"write", "session_create"},
     )
-    current = get_run(str(run["run_id"]))
-    append_run_event(
-        str(run["run_id"]),
-        expected_revision=current["revision"],
-        event_type="step_completed",
+    controller.event(
+        "step_completed",
         public_payload={"step_result": step_result.model_dump()},
         step_results={step.step_id: step_result.model_dump()},
     )
-    current = get_run(str(run["run_id"]))
-    append_run_event(
-        str(run["run_id"]),
-        expected_revision=current["revision"],
-        event_type="verification_result",
+    controller.event(
+        "verification_result",
         public_payload={"status": "not_required"},
         next_status="verifying",
     )
-    current = get_run(str(run["run_id"]))
     decision = CompletionEvaluator().from_outcome(
         status="completed",
         completed_steps=1,
@@ -167,10 +158,8 @@ async def _confirm_learning_assistant(run: dict[str, Any], signal: ResumeSignal,
         reason_codes=["confirmed_side_effect_completed"],
         deliverable_refs=[artifact["artifact_id"]],
     )
-    append_run_event(
-        str(run["run_id"]),
-        expected_revision=current["revision"],
-        event_type="run_completed",
+    controller.event(
+        "run_completed",
         public_payload={"completion": decision.model_dump()},
         next_status="completed",
         completion=decision,

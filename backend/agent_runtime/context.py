@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from uuid import uuid4
 
-from agent_runtime.models import ActorRole, AgentContext, DataScope, DurabilityMode
+from agent_runtime.models import ActorRole, AgentContext, DataScope, DurabilityMode, default_data_scope
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _AGENT_BPS_ENV = {
@@ -93,7 +93,7 @@ def create_agent_context(
     durability_mode: DurabilityMode,
     source_feature: str | None = None,
     source_session_id: str | None = None,
-    data_scope: DataScope = "runtime",
+    data_scope: DataScope | None = None,
     settings: RuntimeV2Settings | None = None,
 ) -> AgentContext:
     settings = settings or RuntimeV2Settings.from_env()
@@ -111,7 +111,7 @@ def create_agent_context(
         source_feature=source_feature,
         source_session_id=source_session_id,
         trace_id=trace_id or f"trace_{uuid4().hex}",
-        data_scope=data_scope,
+        data_scope=data_scope or default_data_scope(),
         durability_mode=durability_mode,
         config_version=settings.config_version,
         rollout_bucket=bucket,

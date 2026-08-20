@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from game_store import init_db
 from materials.store import init_material_store
 from agent_job_worker import worker_loop as agent_job_worker_loop
+from agent_runtime.recovery_worker import recovery_worker_enabled, recovery_worker_loop
 from tracing import safe_shutdown
 from contextlib import asynccontextmanager
 
@@ -34,11 +35,16 @@ async def lifespan(app: FastAPI):
     init_material_store()
     job_worker_stop = asyncio.Event()
     job_worker_task = asyncio.create_task(agent_job_worker_loop(job_worker_stop))
+    recovery_stop = asyncio.Event()
+    recovery_task = asyncio.create_task(recovery_worker_loop(recovery_stop)) if recovery_worker_enabled() else None
     try:
         yield
     finally:
         job_worker_stop.set()
+        recovery_stop.set()
         await job_worker_task
+        if recovery_task is not None:
+            await recovery_task
         safe_shutdown()
 
 

@@ -15,6 +15,7 @@ PY_FILES = [
     ROOT / "backend" / "api" / "main.py",
     ROOT / "backend" / "api" / "routers" / "agent_runtime.py",
     ROOT / "backend" / "alembic" / "versions" / "007_agent_runtime_v2.py",
+    ROOT / "backend" / "alembic" / "versions" / "008_agent_side_effect_ledger.py",
     ROOT / "backend" / "rag" / "knowledge_base.py",
     ROOT / "eval" / "run_core_evals.py",
 ]

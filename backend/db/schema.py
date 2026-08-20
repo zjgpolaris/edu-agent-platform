@@ -420,3 +420,21 @@ agent_checkpoints = Table(
     Column("created_at", Text, nullable=False),
     Index("idx_agent_checkpoints_run_revision", "run_id", "revision"),
 )
+
+agent_side_effects = Table(
+    "agent_side_effects", metadata,
+    Column("side_effect_id", Text, primary_key=True),
+    Column("run_id", Text, nullable=False),
+    Column("step_id", Text, nullable=False),
+    Column("operation", Text, nullable=False),
+    Column("idempotency_key", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("resource_ref", Text),
+    Column("result_json", Text),
+    Column("error_json", Text),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+    Index("uq_agent_side_effects_run_key", "run_id", "idempotency_key", unique=True),
+    Index("idx_agent_side_effects_run_step", "run_id", "step_id"),
+    Index("idx_agent_side_effects_status_updated", "status", "updated_at"),
+)

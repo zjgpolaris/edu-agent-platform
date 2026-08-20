@@ -18,7 +18,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
 
         with get_connection() as conn:
             tables = set(sa_inspect(conn).get_table_names())
-            required = {"agent_runs", "agent_run_events", "agent_checkpoints"}
+            required = {"agent_runs", "agent_run_events", "agent_checkpoints", "agent_side_effects"}
             if not required.issubset(tables):
                 return {"status": "unknown", "reason": "runtime_v2_schema_unavailable", "run_count": None}
             runs = [dict(row) for row in conn.execute(text("""SELECT r.* FROM agent_runs r
@@ -31,6 +31,12 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
                 GROUP BY run_id"""), {"since": since, "data_scope": data_scope}).mappings().all()
             checkpoint_rows = conn.execute(text("""SELECT run_id, COUNT(*) AS checkpoint_count
                 FROM agent_checkpoints WHERE created_at>=:since GROUP BY run_id"""), {"since": since}).mappings().all()
+            side_effect_rows = conn.execute(text("""SELECT s.status, COUNT(*) AS count
+                FROM agent_side_effects s
+                WHERE s.created_at>=:since AND EXISTS (
+                    SELECT 1 FROM agent_run_events e
+                    WHERE e.run_id=s.run_id AND e.data_scope=:data_scope
+                ) GROUP BY s.status"""), {"since": since, "data_scope": data_scope}).mappings().all()
             event_types = conn.execute(text("""SELECT event_type, COUNT(*) AS count
                 FROM agent_run_events WHERE created_at>=:since AND data_scope=:data_scope
                 GROUP BY event_type"""), {"since": since, "data_scope": data_scope}).mappings().all()
@@ -43,8 +49,9 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
             runtime_audits = []
             if "audit_events" in tables:
                 runtime_audits = conn.execute(text("""SELECT action, COUNT(*) AS count
-                    FROM audit_events WHERE created_at>=:since AND action LIKE 'agent_runtime.%'
-                    GROUP BY action"""), {"since": since}).mappings().all()
+                    FROM audit_events WHERE created_at>=:since AND data_scope=:data_scope
+                    AND (action LIKE 'agent_runtime.%' OR action='tool.idempotent_replay')
+                    GROUP BY action"""), {"since": since, "data_scope": data_scope}).mappings().all()
     except Exception as exc:
         return {"status": "unknown", "reason": "runtime_v2_query_failed", "error_type": exc.__class__.__name__, "run_count": None}
 
@@ -61,6 +68,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
             "waiting_run_count": None,
             "recovery_interrupted_total": None,
             "duplicate_side_effect_prevented_total": None,
+            "side_effects_by_status": {},
             "invalid_transition_total": None,
             "legacy_v2_disagreement_total": None,
         }
@@ -93,7 +101,11 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
     resumable = [run for run in runs if run.get("durability_mode") == "resumable"]
     audit_counts = {str(row["action"]): int(row["count"] or 0) for row in runtime_audits}
     recovery_interrupted = 0
-    duplicate_prevented = audit_counts.get("agent_runtime.duplicate_side_effect_prevented", 0)
+    duplicate_prevented = (
+        audit_counts.get("agent_runtime.duplicate_side_effect_prevented", 0)
+        + audit_counts.get("tool.idempotent_replay", 0)
+    )
+    side_effect_counts = {str(row["status"]): int(row["count"] or 0) for row in side_effect_rows}
     legacy_v2_disagreement = 0
     for event in runtime_event_details:
         try:
@@ -136,6 +148,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
         "waiting_run_count": status_counts.get("waiting_input", 0) + status_counts.get("waiting_confirmation", 0),
         "recovery_interrupted_total": recovery_interrupted,
         "duplicate_side_effect_prevented_total": duplicate_prevented,
+        "side_effects_by_status": side_effect_counts,
         "invalid_transition_total": audit_counts.get("agent_runtime.invalid_transition", 0),
         "legacy_v2_disagreement_total": legacy_v2_disagreement,
         "by_event_type": {str(row["event_type"]): int(row["count"] or 0) for row in event_types},

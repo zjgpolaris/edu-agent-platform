@@ -7,12 +7,14 @@ from uuid import uuid4
 from agent_runtime.artifact_store import create_artifact, list_run_artifacts
 from agent_runtime.completion import CompletionEvaluator
 from agent_runtime.context import RuntimeV2Settings
-from agent_runtime.event_store import append_run_event, create_run, get_run
+from agent_runtime.event_store import get_run
+from agent_runtime.lifecycle import RuntimeRunController
 from agent_runtime.models import (
     AgentBudget,
     AgentContext,
     AgentPlan,
     StepResult,
+    default_data_scope,
 )
 
 
@@ -57,12 +59,16 @@ class ObservableProductRun:
             student_id=student_id,
             session_id=session_id,
             trace_id=trace_id,
-            data_scope="runtime",
+            data_scope=default_data_scope(),
             durability_mode="observable",
             config_version=settings.config_version,
             rollout_bucket=bucket,
         )
-        created = create_run(
+        policy_caller = {
+            "history_character": "history_ui",
+            "debate": "debate_api",
+        }.get(agent_type, agent_type)
+        controller, created = RuntimeRunController.create(
             context,
             objective=objective,
             budget=AgentBudget(
@@ -70,6 +76,7 @@ class ObservableProductRun:
                 max_tool_calls=sum(step.kind == "tool" for step in plan.steps),
                 max_llm_calls=sum(step.kind in {"generation", "subgraph"} or step.side_effect == "external_call" for step in plan.steps),
             ),
+            policy_caller=policy_caller,
             idempotency_key=idempotency_key,
             runtime_mode="shadow" if settings.shadow_mode else "active",
         )
@@ -85,16 +92,9 @@ class ObservableProductRun:
         )
         if instance.replay:
             return instance
-        append_run_event(instance.run_id, expected_revision=0, event_type="route_decided", public_payload={"agent_type": agent_type}, next_status="routed")
-        append_run_event(instance.run_id, expected_revision=1, event_type="plan_created", public_payload={"plan_id": plan.plan_id, "step_count": len(plan.steps)}, next_status="planned", plan=plan.model_dump())
-        append_run_event(
-            instance.run_id,
-            expected_revision=2,
-            event_type="step_started",
-            public_payload={"step_id": instance.step_id, "operation": instance.operation},
-            next_status="running",
-            current_step_id=instance.step_id,
-        )
+        controller.route({"agent_type": agent_type})
+        controller.admit_plan(plan)
+        controller.start_step(instance.step_id, instance.operation)
         return instance
 
     def replay_output(self) -> dict[str, Any] | None:
@@ -124,10 +124,11 @@ class ObservableProductRun:
         run = get_run(self.run_id)
         if run["status"] in {"completed", "partial", "failed", "cancelled"}:
             return int(run["last_event_sequence"])
-        event = append_run_event(
+        event = RuntimeRunController.attach(
             self.run_id,
-            expected_revision=run["revision"],
-            event_type=event_type,
+            policy_caller={"history_character": "history_ui", "debate": "debate_api"}.get(self.agent_type, self.agent_type),
+        ).event(
+            event_type,
             public_payload=payload,
             step_id=self.step_id,
             operation=self.operation,
@@ -160,19 +161,18 @@ class ObservableProductRun:
             output={"artifact_id": artifact["artifact_id"]},
             source_ids=list(dict.fromkeys(source_ids or [])),
         )
-        run = get_run(self.run_id)
-        append_run_event(
+        controller = RuntimeRunController.attach(
             self.run_id,
-            expected_revision=run["revision"],
-            event_type="step_completed" if status == "completed" else "step_failed",
+            policy_caller={"history_character": "history_ui", "debate": "debate_api"}.get(self.agent_type, self.agent_type),
+        )
+        controller.event(
+            "step_completed" if status == "completed" else "step_failed",
             public_payload={"step_result": step_result.model_dump()},
             step_id=self.step_id,
             operation=self.operation,
             step_results={self.step_id: step_result.model_dump()},
         )
-        run = get_run(self.run_id)
-        append_run_event(self.run_id, expected_revision=run["revision"], event_type="verification_result", public_payload={"status": verification_status}, next_status="verifying")
-        run = get_run(self.run_id)
+        controller.event("verification_result", public_payload={"status": verification_status}, next_status="verifying")
         decision = CompletionEvaluator().from_outcome(
             status=status,
             completed_steps=1 if status == "completed" else 0,
@@ -182,10 +182,8 @@ class ObservableProductRun:
             deliverable_refs=[artifact["artifact_id"]],
             unresolved_items=[] if status == "completed" else [self.step_id],
         )
-        terminal = append_run_event(
-            self.run_id,
-            expected_revision=run["revision"],
-            event_type="run_completed",
+        terminal = controller.event(
+            "run_completed",
             public_payload={"completion": decision.model_dump()},
             next_status=status,
             completion=decision,
@@ -212,10 +210,11 @@ class ObservableProductRun:
             reason_codes=["product_runtime_exception"],
             unresolved_items=[self.step_id],
         )
-        append_run_event(
+        RuntimeRunController.attach(
             self.run_id,
-            expected_revision=run["revision"],
-            event_type="run_failed",
+            policy_caller={"history_character": "history_ui", "debate": "debate_api"}.get(self.agent_type, self.agent_type),
+        ).event(
+            "run_failed",
             public_payload={"error": {"code": "product_runtime_exception", "message": str(exc)[:240]}},
             next_status="failed",
             completion=decision,

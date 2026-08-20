@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -38,6 +39,11 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def default_data_scope() -> DataScope:
+    value = os.getenv("EDU_AGENT_DATA_SCOPE", "runtime")
+    return value if value in {"runtime", "eval", "demo"} else "runtime"
+
+
 class AgentContext(BaseModel):
     schema_version: Literal[1] = 1
     run_id: str = Field(min_length=5, max_length=96)
@@ -49,7 +55,7 @@ class AgentContext(BaseModel):
     source_feature: str | None = Field(default=None, max_length=80)
     source_session_id: str | None = Field(default=None, max_length=128)
     trace_id: str = Field(min_length=1, max_length=128)
-    data_scope: DataScope = "runtime"
+    data_scope: DataScope = Field(default_factory=default_data_scope)
     durability_mode: DurabilityMode
     config_version: str = Field(min_length=1, max_length=120)
     rollout_bucket: int | None = Field(default=None, ge=0, le=9999)

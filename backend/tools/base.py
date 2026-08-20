@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field
@@ -24,6 +25,11 @@ ToolSideEffect = Literal["none", "read", "write", "session_create", "external_ca
 ToolRole = Literal["anonymous", "student", "teacher", "admin"]
 
 
+def _default_data_scope() -> Literal["runtime", "eval", "demo"]:
+    value = os.getenv("EDU_AGENT_DATA_SCOPE", "runtime")
+    return value if value in {"runtime", "eval", "demo"} else "runtime"
+
+
 class ToolExecutionContext(BaseModel):
     actor_id: str | None = None
     role: ToolRole = "anonymous"
@@ -34,6 +40,9 @@ class ToolExecutionContext(BaseModel):
     run_id: str | None = None
     step_id: str | None = None
     run_revision: int | None = Field(default=None, ge=0)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=200)
+    capability_operation: str | None = Field(default=None, min_length=1, max_length=160)
+    data_scope: Literal["runtime", "eval", "demo"] = Field(default_factory=_default_data_scope)
 
 
 class ToolSpec(BaseModel):

@@ -104,7 +104,10 @@ def _runtime_step(
     }
 
 
-def _tool_context(req: LearningAssistantRequestData, tool_name: str | None) -> ToolExecutionContext:
+def _tool_context(req: LearningAssistantRequestData, tool_name: str | None, step_id: str | None = None) -> ToolExecutionContext:
+    runtime_contracts = req.get("_runtime_step_contracts") or {}
+    contract = runtime_contracts.get(step_id or "") if isinstance(runtime_contracts, dict) else None
+    runtime_run_id = req.get("_runtime_run_id")
     return ToolExecutionContext(
         actor_id=req.get("actor_id"),
         role=req.get("actor_role") or "anonymous",
@@ -112,6 +115,11 @@ def _tool_context(req: LearningAssistantRequestData, tool_name: str | None) -> T
         confirmed=req.get("confirmation_decision") == "confirmed" and req.get("confirmed_tool_name") == tool_name,
         confirmation_token=req.get("confirmation_token"),
         request_source="learning_assistant",
+        run_id=runtime_run_id,
+        step_id=step_id if runtime_run_id else None,
+        run_revision=req.get("_runtime_run_revision") if runtime_run_id else None,
+        idempotency_key=(contract or {}).get("idempotency_key") if runtime_run_id and isinstance(contract, dict) else None,
+        capability_operation=(contract or {}).get("operation") if runtime_run_id and isinstance(contract, dict) else None,
     )
 
 
@@ -897,7 +905,7 @@ def _stream_learning_assistant_events_legacy(req: LearningAssistantRequestData) 
     execution: dict[str, Any] = {}
     runtime = stream_task_plan(
         plan,
-        run_tool=lambda name, payload: run_tool(name, payload, context=_tool_context(req, name)),
+        run_tool=lambda name, payload, step: run_tool(name, payload, context=_tool_context(req, name, step.step_id)),
         summarize_tool=_tool_summary,
         run_generation=lambda operation, step, outputs: _run_generation_operation(operation, step, outputs, req=req, history=history, source_context=source_context),
     )
@@ -1016,9 +1024,10 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
 
     from agents.learning_assistant_runtime import map_task_plan_to_agent_plan
     from agent_runtime.artifact_store import create_artifact, list_run_artifacts
-    from agent_runtime.event_store import append_run_event, create_run, get_run
+    from agent_runtime.event_store import get_run
+    from agent_runtime.lifecycle import RuntimeRunController
     from agent_runtime.completion import CompletionEvaluator
-    from agent_runtime.models import AgentBudget, AgentContext
+    from agent_runtime.models import AgentBudget, AgentContext, default_data_scope
 
     requested_run_id = f"run_{uuid4().hex}"
     run_id = requested_run_id
@@ -1036,15 +1045,16 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
         source_feature=req.get("source_feature"),
         source_session_id=req.get("source_session_id"),
         trace_id=trace_id,
-        data_scope="runtime",
+        data_scope=default_data_scope(),
         durability_mode="observable",
         config_version=settings.config_version,
         rollout_bucket=bucket,
     )
-    run = create_run(
+    controller, run = RuntimeRunController.create(
         context,
         objective="学习助手受控问答",
         budget=AgentBudget(max_steps=3, max_tool_calls=3, max_llm_calls=3),
+        policy_caller="learning_assistant",
         idempotency_key=req.get("idempotency_key"),
         runtime_mode="shadow" if settings.shadow_mode else "active",
     )
@@ -1093,14 +1103,7 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
     try:
         for event, data in _stream_learning_assistant_events_legacy(req):
             if event == "route":
-                current = get_run(run_id)
-                persisted = append_run_event(
-                    run_id,
-                    expected_revision=current["revision"],
-                    event_type="route_decided",
-                    public_payload={"mode": data.get("mode"), "reason_code": data.get("reason_code"), "task_count": len(data.get("tasks") or [])},
-                    next_status="routed",
-                )
+                persisted = controller.route({"mode": data.get("mode"), "reason_code": data.get("reason_code"), "task_count": len(data.get("tasks") or [])})
                 data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": persisted.sequence}
             elif event == "runtime_plan":
                 from agents.learning_assistant_planner import TaskPlan
@@ -1108,34 +1111,17 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
                 legacy_plan = TaskPlan.model_validate(data["legacy_plan"])
                 runtime_legacy_plan = legacy_plan
                 plan = map_task_plan_to_agent_plan(legacy_plan, run_id=run_id)
-                current = get_run(run_id)
-                append_run_event(
-                    run_id,
-                    expected_revision=current["revision"],
-                    event_type="plan_created",
-                    public_payload={"plan_id": plan.plan_id, "step_count": len(plan.steps)},
-                    next_status="planned",
-                    plan=plan.model_dump(),
-                )
-                current = get_run(run_id)
-                append_run_event(
-                    run_id,
-                    expected_revision=current["revision"],
-                    event_type="step_started",
-                    public_payload={"step_id": plan.steps[0].step_id, "operation": plan.steps[0].operation},
-                    next_status="running",
-                    current_step_id=plan.steps[0].step_id,
-                )
+                req["_runtime_run_id"] = run_id
+                req["_runtime_step_contracts"] = {
+                    step.step_id: {"idempotency_key": step.idempotency_key, "operation": step.operation}
+                    for step in plan.steps
+                }
+                controller.admit_plan(plan)
+                controller.start_step(plan.steps[0].step_id, plan.steps[0].operation)
+                req["_runtime_run_revision"] = get_run(run_id)["revision"]
                 continue
             elif event == "clarification":
-                current = get_run(run_id)
-                persisted = append_run_event(
-                    run_id,
-                    expected_revision=current["revision"],
-                    event_type="waiting_input",
-                    public_payload={"missing_slots": data.get("missing_slots") or [], "reason_code": data.get("reason_code")},
-                    next_status="waiting_input",
-                )
+                persisted = controller.wait_for_input({"missing_slots": data.get("missing_slots") or [], "reason_code": data.get("reason_code")})
                 data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": persisted.sequence}
             elif event in {"tool_start", "tool_result", "repair_attempt", "verification_result"}:
                 current = get_run(run_id)
@@ -1174,20 +1160,13 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
                     metadata = {**(data.get("metadata") or {}), "confirmation_token": token}
                     data = {**data, "metadata": metadata, "confirmation_token": token}
                     runtime_confirmation = {"tool_name": str(legacy_step.operation), "step_id": step_id, "token": token}
-                persisted = append_run_event(
-                    run_id,
-                    expected_revision=current["revision"],
-                    event_type=event_type,
-                    public_payload=data,
-                )
+                persisted = controller.event(event_type, public_payload=data)
+                if event == "tool_start":
+                    req["_runtime_run_revision"] = get_run(run_id)["revision"]
                 if waiting_for_confirmation:
-                    waiting = append_run_event(
-                        run_id,
-                        expected_revision=get_run(run_id)["revision"],
-                        event_type="waiting_confirmation",
-                        public_payload={"step_id": runtime_confirmation["step_id"], "tool_name": runtime_confirmation["tool_name"]},
-                        next_status="waiting_confirmation",
-                        current_step_id=runtime_confirmation["step_id"],
+                    waiting = controller.wait_for_confirmation(
+                        {"step_id": runtime_confirmation["step_id"], "tool_name": runtime_confirmation["tool_name"]},
+                        step_id=runtime_confirmation["step_id"],
                     )
                     data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": waiting.sequence}
                 else:
@@ -1207,7 +1186,7 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
                 if verification_status not in {"verified", "partial", "failed", "not_required"}:
                     verification_status = "failed"
                 if completion_status in {"completed", "partial"}:
-                    append_run_event(run_id, expected_revision=current["revision"], event_type="verification_result", public_payload={"status": verification_status}, next_status="verifying")
+                    controller.event("verification_result", public_payload={"status": verification_status}, next_status="verifying")
                     current = get_run(run_id)
                 decision_status = completion_status if completion_status in {"completed", "partial", "waiting_confirmation", "failed", "cancelled"} else "failed"
                 if decision_status == "waiting_confirmation" and runtime_confirmation:
@@ -1242,10 +1221,8 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
                     data = {**data, "run_id": run_id, "run_revision": current["revision"], "event_cursor": current["last_event_sequence"]}
                 else:
                     terminal_event = "run_completed" if decision_status in {"completed", "partial"} else ("waiting_confirmation" if decision_status == "waiting_confirmation" else "run_failed")
-                    persisted = append_run_event(
-                        run_id,
-                        expected_revision=current["revision"],
-                        event_type=terminal_event,
+                    persisted = controller.event(
+                        terminal_event,
                         public_payload={"completion": decision.model_dump()},
                         next_status=decision_status,
                         completion=decision if decision_status in {"completed", "partial", "failed", "cancelled"} else None,
@@ -1265,10 +1242,8 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
                 verification_status="failed",
                 reason_codes=["runtime_wrapper_exception"],
             )
-            append_run_event(
-                run_id,
-                expected_revision=current["revision"],
-                event_type="run_failed",
+            controller.event(
+                "run_failed",
                 public_payload={"error": {"code": "runtime_wrapper_exception", "message": str(exc)[:240]}},
                 next_status="failed",
                 completion=decision,
