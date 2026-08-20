@@ -58,6 +58,7 @@ _COUNT_WORDS = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六
 _HIGH_RISK_TERMS = ("演示高风险工具", "删除演示记忆", "删除demomemory", "确认删除记忆")
 _QUIZ_TERMS = ("出题", "题目", "练习题", "选择题", "简答题", "测验", "小测", "考考我", "刷题", "来几道", "来一道", "的题")
 _REVIEW_TERMS = ("复习计划", "复习建议", "制定复习", "学习计划", "帮我复习", "安排复习", "安排一下复习", "怎么复习", "如何复习", "复习安排", "排接下来")
+_TARGETED_REVIEW_TERMS = ("复习知识点", "帮我复习")
 _CHARACTER_TERMS = ("推荐人物", "和谁聊", "历史人物", "人物推荐", "推荐一个人", "推荐一位", "谁适合讲")
 _GAME_TERMS = ("时间线", "时间巨轮", "时间排序", "历史排序", "来一局", "玩一局", "闯关游戏")
 _TEXTBOOK_REFERENCES = ("这节课", "这一课", "本课", "课文", "教材")
@@ -300,6 +301,15 @@ def deterministic_route(req: dict[str, Any]) -> RoutingDecision:
             reason_code="explicit_quiz_request",
         )
 
+    quoted_topic = bool(re.search(r"[「『\"]([^」』\"]{2,80})[」』\"]", message))
+    targeted_review = bool(
+        topic
+        and topic not in {"复习", "知识点", "历史"}
+        and _contains_any(compact, _TARGETED_REVIEW_TERMS)
+        and (quoted_topic or _contains_any(compact, _HISTORY_MARKERS))
+    )
+    if targeted_review:
+        return RoutingDecision(mode="rule", tasks=[_task("task_1", IntentName.history_search, topic=topic, req=req)], confidence=0.93, reason_code="targeted_knowledge_review")
     if _contains_any(compact, _REVIEW_TERMS):
         return RoutingDecision(mode="rule", tasks=[_task("task_1", IntentName.review_plan, topic=topic, req=req)], confidence=0.93, reason_code="review_plan_request")
     if _contains_any(compact, _CHARACTER_TERMS):

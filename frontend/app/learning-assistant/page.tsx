@@ -385,6 +385,7 @@ function LearningAssistantContent() {
   const studentId = user?.actorId ?? "";
   const sourceAutoTutorId = searchParams.get("autotutor_session_id") ?? "";
   const requestedSessionId = searchParams.get("session_id") ?? "";
+  const startFreshSession = searchParams.get("new") === "1";
   const queryBookId = searchParams.get("book_id") ?? "";
   const queryLessonId = searchParams.get("lesson_id") ?? "";
   const debugMode = searchParams.get("debug") === "1" || process.env.NODE_ENV === "development";
@@ -598,6 +599,9 @@ function LearningAssistantContent() {
         } else if (requestedSessionId) {
           const session = await fetchSession(requestedSessionId);
           if (!cancelled) hydrateSession(session);
+        } else if (startFreshSession) {
+          const session = await createSession();
+          if (!cancelled) hydrateSession(session);
         } else {
           const response = await fetch(`${apiBaseUrl}/api/learning/assistant/students/${studentId}/latest-session`, { headers: requestHeaders });
           if (response.ok) {
@@ -612,7 +616,7 @@ function LearningAssistantContent() {
       }
     })();
     return () => { cancelled = true; };
-  }, [studentId, user?.token, sourceAutoTutorId, requestedSessionId, sessionReady, requestHeaders, createSession, fetchSession, hydrateSession]);
+  }, [studentId, user?.token, sourceAutoTutorId, requestedSessionId, startFreshSession, sessionReady, requestHeaders, createSession, fetchSession, hydrateSession]);
 
   async function startNewConversation() {
     if (!studentId || loading) return;

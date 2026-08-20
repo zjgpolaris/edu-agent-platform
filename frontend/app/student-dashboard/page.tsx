@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import { buildKnowledgeReviewAssistantHref } from "@/lib/assistantLinks";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -247,7 +248,7 @@ export default function StudentDashboardPage() {
                         key={t}
                         className="dv2-brick dv2-brick-weak"
                         style={{ animationDelay: `${i * 50}ms`, textDecoration: "none" }}
-                        href={`/learning-assistant?q=${encodeURIComponent(`帮我复习知识点「${t}」`)}`}
+                        href={buildKnowledgeReviewAssistantHref(t)}
                       >
                         <span className="dv2-brick-rank">{point ? `×${point.wrong_count}` : String(i + 1).padStart(2, "0")}</span>
                         <span className="dv2-brick-text">{t}</span>
@@ -339,12 +340,12 @@ export default function StudentDashboardPage() {
               ) : (
                 <div className="dv2-topic-bricks">
                   {priorityWeakpoints.map((wp, i) => (
-                    <a key={wp.knowledge_tag} className="dv2-brick dv2-brick-weak" style={{ animationDelay: `${i * 40}ms`, textDecoration: "none", cursor: "pointer" }}
-                      href={`/learning-assistant?q=${encodeURIComponent(`帮我复习知识点「${wp.knowledge_tag}」`)}`}>
+                    <Link key={wp.knowledge_tag} className="dv2-brick dv2-brick-weak" style={{ animationDelay: `${i * 40}ms`, textDecoration: "none", cursor: "pointer" }}
+                      href={buildKnowledgeReviewAssistantHref(wp.knowledge_tag)}>
                       <span className="dv2-brick-rank">×{wp.wrong_count}</span>
                       <span className="dv2-brick-text">{wp.knowledge_tag}</span>
                       <span className="dv2-brick-arrow" title={wp.source}>复习 →</span>
-                    </a>
+                    </Link>
                   ))}
                 </div>
               )}

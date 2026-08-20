@@ -117,6 +117,26 @@ test("随问可执行解释后出题的三步受限计划", async ({ page }) => 
   await expect(plannedAnswer).not.toContainText(/灰度决策|路由方式|reason_code|bucket|置信度/);
 });
 
+test("学情薄弱点进入新随问会话并围绕指定知识点讲解", async ({ page }) => {
+  test.setTimeout(60_000);
+  await enterDemo(page, "student");
+  await page.goto("/student/dashboard");
+  await page.getByRole("button", { name: /薄弱点/ }).click();
+  const reviewLink = page.getByRole("link", { name: /洋务运动目的.*复习/ });
+  await expect(reviewLink).toBeVisible();
+  await reviewLink.click();
+
+  await expect(page).toHaveURL(/\/student\/assistant\?.*new=1/);
+  const composer = page.getByRole("textbox", { name: "学习问题" });
+  await expect(composer).toHaveValue(/洋务运动目的/);
+  await page.getByRole("button", { name: "发送问题" }).click();
+
+  const answer = page.locator(".learning-message.assistant").last();
+  await expect(answer).toContainText("洋务运动", { timeout: 45_000 });
+  await expect(answer).not.toContainText("分析下长平之战");
+  await expect(answer).not.toContainText("suggest_review_plan");
+});
+
 test("教师可查看作业管理与 Pilot 作业", async ({ page }) => {
   await enterDemo(page, "teacher");
   await page.goto("/teacher/assignments");

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { buildKnowledgeReviewAssistantHref } from "@/lib/assistantLinks";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 
@@ -239,7 +240,7 @@ function WeakpointList({ points }: { points: WeakpointSummary[] }) {
         {points.map((wp, i) => (
           <Link
             key={wp.tag}
-            href={`/student/assistant?q=${encodeURIComponent(`帮我复习知识点「${wp.tag}」`)}`}
+            href={buildKnowledgeReviewAssistantHref(wp.tag)}
             className="rpt-weak-row"
           >
             <span className="rpt-weak-rank">#{i + 1}</span>

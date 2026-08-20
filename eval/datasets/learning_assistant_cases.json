@@ -25,6 +25,15 @@
     "needs_tool": true
   },
   {
+    "name": "targeted_knowledge_review",
+    "message": "帮我复习知识点「洋务运动目的」",
+    "grade": "八年级上册",
+    "student_id": "eval-student",
+    "actor_role": "student",
+    "expected_intent": "history_search",
+    "needs_tool": true
+  },
+  {
     "name": "history_knowledge_search",
     "message": "唐太宗贞观之治有什么历史意义？",
     "grade": "七年级下册",
