@@ -197,6 +197,12 @@ export default function HistoryMapClient() {
           setMapCenter([action.lat, action.lng]);
           setMapZoom(action.zoom || 6);
         }
+        source.close();
+      } else if (data.event === "error") {
+        const message = data.data?.message || "地图讲解暂不可用，请稍后重试。";
+        narrationRef.current = message;
+        setNarration(message);
+        source.close();
       }
     };
 

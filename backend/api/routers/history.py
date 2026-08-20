@@ -1,5 +1,6 @@
 """历史功能路由：/api/history/*（人物、游戏、地图、辩论）"""
 import asyncio
+import logging
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -11,6 +12,7 @@ from tracing import current_trace_id, trace_context
 from ._shared import sse_frame, record_event_if_student, enforce_guardrails, trace_meta
 
 router = APIRouter(tags=["history"])
+logger = logging.getLogger(__name__)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -478,9 +480,23 @@ async def narrate_geo_event(event_id: str, user_query: str = "", actor: Actor = 
     if user_query:
         enforce_guardrails(user_query, actor=actor, route="/api/history/geo/narrate", resource_type="geo_event", resource_id=event_id)
     async def event_stream():
-        for chunk in stream_map_narrate(event_id, user_query):
-            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+        try:
+            iterator = stream_map_narrate(event_id, user_query)
+            while True:
+                chunk = await run_in_threadpool(_next, iterator)
+                if chunk is None:
+                    break
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0)
+        except Exception:
+            logger.exception("history_geo_narration_stream_failed event_id=%s", event_id)
+            error = {"event": "error", "data": {"message": "地图讲解暂不可用，请稍后重试。"}}
+            yield f"data: {json.dumps(error, ensure_ascii=False)}\n\n"
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/api/history/geo/chat")

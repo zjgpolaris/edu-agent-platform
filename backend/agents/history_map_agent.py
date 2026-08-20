@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Iterator
@@ -10,6 +11,9 @@ from llm_config import llm_fast as llm, llm_quality as llm_opus
 from rag.knowledge_base import search_with_scores
 from structured_output import StructuredOutputError, parse_json_object
 from tracing import truncate_text
+
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_geo_events_path() -> Path:
@@ -70,6 +74,16 @@ def _retrieve_context(event: dict, user_query: str) -> list[str]:
         return []
 
 
+def _fallback_narration(event: dict[str, Any], year: str) -> str:
+    """Build a useful, catalog-grounded narration when the LLM is unavailable."""
+    character = str(event.get("character") or "").strip()
+    location = str(event.get("location_name") or "这一地点").strip()
+    summary = str(event.get("summary") or f"这里发生了{event.get('title', '这一历史事件')}。功过影响还需结合史料判断。").strip()
+    opening = f"{year}，我是{character}，此刻身处{location}。" if character else f"让我们回到{year}的{location}。"
+    closing = "还可以沿着时间线继续查看同一时期的相关事件。"
+    return f"{opening}{summary}{closing}"[:150]
+
+
 _NARRATE_PROMPT = """你是中国历史教学助手。请根据以下史料，用生动的第一人称（以历史人物{character}的视角，若无人物则用旁白者视角）讲述"{title}"这一历史事件。
 
 要求：
@@ -116,11 +130,31 @@ def stream_map_narrate(event_id: str, user_query: str = "") -> Iterator[dict[str
     )
 
     full_text = []
-    for chunk in llm.stream([{"role": "user", "content": narrate_prompt}]):
-        full_text.append(chunk)
-        yield {"event": "delta", "data": {"text": chunk}}
+    generation_error = None
+    fallback_used = False
+    try:
+        for chunk in llm.stream([{"role": "user", "content": narrate_prompt}]):
+            full_text.append(chunk)
+            yield {"event": "delta", "data": {"text": chunk}}
+    except Exception as exc:
+        generation_error = exc.__class__.__name__
+        logger.warning("history_map_narration_degraded event_id=%s reason=%s", event_id, generation_error)
 
-    yield {"event": "final", "data": {"response": "".join(full_text), "event": event}}
+    if not full_text:
+        fallback = _fallback_narration(event, year_str)
+        full_text.append(fallback)
+        fallback_used = True
+        yield {"event": "delta", "data": {"text": fallback}}
+
+    yield {
+        "event": "final",
+        "data": {
+            "response": "".join(full_text),
+            "event": event,
+            "generation_mode": "fallback" if fallback_used else "llm_partial" if generation_error else "llm",
+            "degraded": generation_error is not None,
+        },
+    }
 
     # 生成 map_actions
     all_events_brief = [{"id": e["id"], "title": e["title"], "dynasty": e["dynasty"]} for e in events]
