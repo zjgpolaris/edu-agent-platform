@@ -226,7 +226,7 @@ def _history_inspector_diagnosis(
         failure_stage = "generation"
     elif generation_degraded:
         diagnosis_code = "generation_fallback_used"
-        diagnosis_summary = "生成阶段已降级为模板化回答，建议检查模型服务状态。"
+        diagnosis_summary = "当前回答由检索史料直接整理，适合先理解要点，再结合教材原文核对。"
         failure_stage = "generation"
     elif used_count == 0:
         diagnosis_code = "generation_uncited_sources"
@@ -428,37 +428,141 @@ def _fallback_topic_guidance(question: str, character: str) -> str:
     return ""
 
 
+def _fallback_fact_entries(facts: list[str], limit: int = 3) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    for index, fact in enumerate(facts[:limit], start=1):
+        text = re.sub(r"\s+", " ", str(fact or "")).strip()
+        match = re.match(r"^(\[史料\d+\])\s*(.*)$", text)
+        label = match.group(1) if match else f"[史料{index}]"
+        content = (match.group(2) if match else text).strip()
+        if content:
+            entries.append((label, content))
+    return entries
+
+
+def _short_evidence(text: str, max_chars: int = 130) -> str:
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    candidate = normalized[:max_chars]
+    boundary = max(candidate.rfind("。"), candidate.rfind("；"))
+    if boundary >= max_chars // 2:
+        return candidate[:boundary + 1]
+    return candidate.rstrip("，、； ") + "……"
+
+
+def _entry_label(entries: list[tuple[str, str]], *keywords: str) -> str:
+    for label, content in entries:
+        if any(keyword in content for keyword in keywords):
+            return label
+    return ""
+
+
+def _joined_labels(*labels: str) -> str:
+    return "".join(dict.fromkeys(label for label in labels if label))
+
+
+def _fallback_shang_yang_answer(question: str, entries: list[tuple[str, str]]) -> tuple[str, str] | None:
+    source_text = " ".join(content for _, content in entries)
+    if "变法" not in question or "变法" not in source_text or "秦" not in source_text:
+        return None
+    result_label = _entry_label(entries, "国力", "战斗力", "统一", "富国强兵")
+    measure_label = _entry_label(entries, "县制", "世袭特权", "户籍", "法度")
+    law_label = _entry_label(entries, "法令", "公平无私", "太子", "赏", "罚")
+
+    if ("阻力" in question or "反对" in question) and measure_label and law_label:
+        return (
+            "变法会遇到阻力，主要因为它改变了原有的利益和权力分配。"
+            f"我推行县制、废除贵族的世袭特权，这会直接触动旧贵族的利益。{measure_label}"
+            f"法令又要求赏罚不避权贵，连太子相关人员也不能例外。{law_label}\n"
+            "因此，阻力不是因为改革没有目标，而是因为改革要求既得利益者也接受新规则。"
+            "这里的第一人称是根据史料进行的教学模拟，并不是商鞅留下的原话。",
+            f"想一想：为什么“废除贵族世袭特权”容易引起反对？请用{measure_label or '上方史料'}说明。",
+        )
+    if ("影响" in question or "意义" in question or "重要" in question) and result_label and measure_label:
+        return (
+            "从长远看，变法一方面加强了秦国的治理能力，另一方面增强了国力和军队战斗力。"
+            f"县制、户籍和严明法度让国家能更直接地管理地方。{measure_label}"
+            f"改革的结果则使秦国逐渐强盛，并为后来统一六国奠定基础。{result_label}\n"
+            "但评价变法也要看到，它打破旧制度的同时采用了严格的法令。"
+            "这里的第一人称是根据史料进行的教学模拟，并不是商鞅留下的原话。",
+            "学习时可以用“措施—直接作用—长远影响”三步概括商鞅变法。",
+        )
+    if ("为什么" in question or "目的" in question or "原因" in question) and result_label and measure_label:
+        return (
+            "我推动变法，核心目标是让秦国富强起来，并建立更有执行力的国家治理秩序。\n"
+            f"为此，我推行县制、废除贵族世袭特权、改革户籍并严明法度。{measure_label}\n"
+            f"从结果看，这些措施增强了秦国国力和军队战斗力，为统一六国奠定了基础。{result_label}\n"
+            "所以，与其把变法理解成个人的一时决定，不如把它看成秦国为了富国强兵而进行的一整套制度改革。"
+            "这里的第一人称是根据史料进行的教学模拟，并不是商鞅留下的原话。",
+            "想一想：县制、废除世袭特权和严明法度，分别怎样帮助秦国变强？",
+        )
+    return None
+
+
+def _fallback_generic_answer(
+    character: str,
+    question: str,
+    entries: list[tuple[str, str]],
+) -> tuple[str, str]:
+    claims = "；".join(f"{_short_evidence(content, 90)}{label}" for label, content in entries[:2])
+    guidance = _fallback_topic_guidance(question, character)
+    if guidance:
+        answer = f"{guidance}{_joined_labels(*(label for label, _ in entries[:2]))}"
+    elif not entries:
+        answer = "目前没有检索到足以回答这个问题的史料。为了不把猜测当成史实，我暂时不能替这位人物给出确定答案。"
+    elif "为什么" in question or "原因" in question or "目的" in question:
+        answer = (
+            f"史料没有保存{character}回答这个问题的原话。根据现有材料，可以从相关做法和结果来判断其历史动因：{claims}。"
+            "这里的第一人称只能作为帮助理解的教学模拟。"
+        )
+    elif "影响" in question or "意义" in question or "重要" in question:
+        answer = f"从现有史料看，最值得抓住的影响是：{claims}。评价影响时，还要区分当时的直接变化和后来的长远作用。"
+    elif "如何" in question or "怎么" in question or "哪些" in question:
+        answer = f"现有史料能够确认的主要做法或经过是：{claims}。没有被史料直接说明的细节，不应补写成历史事实。"
+    else:
+        answer = f"这个问题可以先从两条可核对的史实理解：{claims}。这些材料能说明的部分可以确认，材料没有说明的部分则要保留。"
+    return answer, "学习时先用一句话概括结论，再从上方史料中找出能够支持结论的关键词。"
+
+
 def _fallback_response_from_facts(state: CharacterState, reason: str | None = None) -> str:
     character = state.get("character") or "这位历史人物"
-    question = str(state["messages"][-1].get("content", "")) if state.get("messages") else ""
+    raw_question = str(state["messages"][-1].get("content", "")) if state.get("messages") else ""
+    question = re.sub(r"[。！？?!]+$", "", raw_question.strip())
     facts = state.get("retrieved_facts", [])
-    fact_lines = facts[:3] or ["当前可用史料不足，下面只做有限的课堂解释。"]
-    guidance = _fallback_topic_guidance(question, character)
+    entries = _fallback_fact_entries(facts)
     if state.get("mode") == "counterfactual":
+        evidence_basis = "；".join(f"{_short_evidence(content, 90)}{label}" for label, content in entries[:2])
+        answer_body = (
+            f"这个问题讨论的是没有真实发生的情况。现有史料只能确认：{evidence_basis or '目前没有足够的史料基础'}。"
+            "（推演）如果相关历史条件改变，政治、经济、军事和社会力量都可能随之变化，因此不能断定唯一结果。"
+            "更可靠的做法，是先说明推演依据，再比较几种可能性。"
+        )
         answer = (
             "⚠️ 以下为历史推演，非史实。\n"
-            f"同学你好，我将用“历史教学模拟”的方式，以{character}的视角回答。\n\n"
+            f"同学你好。下面是基于现有史料的“{character}视角”教学模拟。\n\n"
             "【回答】\n"
-            f"你的问题是：{question}。从现有史料看，我只能做有限推演。"
-            "（推演）如果相关历史条件发生变化，结果也会受到政治、经济、军事和社会力量的共同影响，不能简单断定一个唯一结局。\n\n"
+            f"{answer_body}\n\n"
         )
+        learning_tip = "请把推演内容分成“史料能确认的事实”和“基于事实提出的可能性”两栏。"
     else:
+        themed = _fallback_shang_yang_answer(question, entries) if character == "商鞅" else None
+        answer_body, learning_tip = themed or _fallback_generic_answer(character, question, entries)
         answer = (
-            f"同学你好，我将用“历史教学模拟”的方式，以{character}的视角回答。\n\n"
+            f"同学你好。下面是基于现有史料的“{character}视角”教学模拟。\n\n"
             "【回答】\n"
-            f"你的问题是：{question}。根据现有史料，我会先抓住其中最确定的事实来理解。"
-            "如果史料没有直接说明细节，就不能把推测当成史实。"
-            f"{guidance}\n\n"
+            f"{answer_body}\n\n"
         )
-    evidence = "\n".join(f"{index}. {fact}" for index, fact in enumerate(fact_lines, start=1))
-    note = f"\n\n（系统提示：模型生成暂不可用，已使用史料降级回答。原因：{reason}）" if reason else ""
+    evidence = "\n".join(
+        f"{index}. {label} {_short_evidence(content)}"
+        for index, (label, content) in enumerate(entries, start=1)
+    ) or "当前没有检索到可供核对的史料，请缩小问题范围后再试。"
     return (
         f"{answer}"
         "【史料依据】\n"
         f"{evidence}\n\n"
         "【学习提示】\n"
-        "复习时先找“人物、事件、原因、影响”四类信息，再判断哪些结论有史料依据。"
-        f"{note}"
+        f"{learning_tip}"
     )
 
 

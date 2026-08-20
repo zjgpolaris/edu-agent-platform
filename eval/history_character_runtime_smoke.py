@@ -19,6 +19,37 @@ class FailingVerifier:
 
 
 def main() -> None:
+    fallback = character._fallback_response_from_facts({
+        "character": "商鞅",
+        "messages": [{"role": "user", "content": "你为什么要变法？"}],
+        "retrieved_facts": [
+            "[史料1] 公元前356年，秦孝公任用商鞅主持变法，使秦国国力增强，提高军队战斗力，为统一全国奠定基础。",
+            "[史料2] 商君治秦，法令至行，公平无私，罚不讳强大，赏不私亲近。",
+            "[史料3] 商鞅变法确立县制，废除贵族世袭特权，改革户籍制度，严明法度。",
+        ],
+        "mode": "factual",
+    }, "anthropic credentials are not configured")
+    assert "核心目标是让秦国富强起来" in fallback, fallback
+    assert "县制" in fallback and "贵族世袭特权" in fallback, fallback
+    assert "[史料1]" in fallback and "[史料3]" in fallback, fallback
+    assert "credentials" not in fallback and "系统提示" not in fallback, fallback
+    assert "？。" not in fallback, fallback
+    no_evidence = character._fallback_response_from_facts({
+        "character": "商鞅",
+        "messages": [{"role": "user", "content": "你为什么要变法？"}],
+        "retrieved_facts": [],
+        "mode": "factual",
+    }, "provider unavailable")
+    assert "暂时不能替这位人物给出确定答案" in no_evidence, no_evidence
+    assert "富强起来" not in no_evidence, no_evidence
+    diagnosis = character._history_inspector_diagnosis(
+        {"retrieval_strategy": "tool_primary"},
+        [{"citation_label": "[史料1]", "used_in_answer": True}],
+        generation_degraded=True,
+        response="回答依据[史料1]",
+    )
+    assert "模型服务" not in diagnosis["diagnosis_summary"], diagnosis
+
     original = character.llm_opus
     character.llm_opus = FailingVerifier()
     state = {
