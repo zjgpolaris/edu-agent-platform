@@ -25,6 +25,7 @@ import agents.history_character as character  # noqa: E402
 import rag.knowledge_base as knowledge_base  # noqa: E402
 from agent_runtime.event_store import get_run, list_run_events  # noqa: E402
 from api.main import app  # noqa: E402
+from api.routers.history import _debate_runtime_outcome  # noqa: E402
 
 
 def fake_character_stream(state, _retriever):
@@ -56,6 +57,14 @@ async def fake_debate_run(topic: str, *, trace_id: str | None = None):
 
 
 def main() -> None:
+    assert _debate_runtime_outcome({
+        "sources": [{"citation_label": "S1"}],
+        "fact_check": {"claims": [{"supported": True, "source_ids": ["S1"]}]},
+        "completion_status": "completed",
+        "generation_mode": "fallback",
+        "fallback_roles": ["pro_debater"],
+    }) == ("partial", "verified", ["debate_generation_degraded"])
+
     original_character = character.stream_character_response
     original_retriever = knowledge_base.get_retriever
     original_debate = debate.run_debate

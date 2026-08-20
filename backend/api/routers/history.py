@@ -182,6 +182,19 @@ def _debate_claims_grounded(result: dict) -> bool:
     )
 
 
+def _debate_runtime_outcome(result: dict) -> tuple[str, str, list[str]]:
+    grounded = _debate_claims_grounded(result)
+    degraded = result.get("generation_mode") == "fallback" or bool(result.get("fallback_roles"))
+    if grounded and not degraded:
+        return "completed", "verified", ["debate_fact_claims_grounded"]
+    if grounded:
+        return "partial", "verified", ["debate_generation_degraded"]
+    reasons = ["debate_evidence_incomplete"]
+    if degraded:
+        reasons.append("debate_generation_degraded")
+    return "partial", "failed", reasons
+
+
 @router.post("/api/history/character/recommend")
 async def character_recommend(req: CharacterRecommendRequest, actor: Actor = Depends(require_auth)):
     from agents.character_recommender import recommend_characters
@@ -531,12 +544,12 @@ async def start_debate(req: DebateRequest, actor: Actor = Depends(require_auth))
             result = await run_debate(req.topic, trace_id=current_trace_id())
             if runtime:
                 sources = result.get("sources") or []
-                grounded = _debate_claims_grounded(result)
+                status, verification_status, reason_codes = _debate_runtime_outcome(result)
                 result = runtime.finish(
                     result,
-                    status="completed" if grounded else "partial",
-                    verification_status="verified" if grounded else "failed",
-                    reason_codes=["debate_fact_claims_grounded" if grounded else "debate_evidence_incomplete"],
+                    status=status,
+                    verification_status=verification_status,
+                    reason_codes=reason_codes,
                     source_ids=_source_ids(sources),
                 )
         except Exception as exc:
@@ -584,19 +597,23 @@ async def stream_debate_endpoint(req: DebateRequest, actor: Actor = Depends(requ
                         result["verdict"] = data.get("verdict", "")
                     elif event == "coach_summary":
                         result["coach_summary"] = data.get("summary", "")
+                    elif event == "done":
+                        result["generation_mode"] = "fallback" if data.get("degraded") else "llm"
+                        result["fallback_roles"] = data.get("fallback_roles") or []
                     yield sse_frame(event, data)
                 if runtime:
-                    grounded = _debate_claims_grounded(result)
+                    status, verification_status, reason_codes = _debate_runtime_outcome(result)
                     terminal = runtime.finish(
                         result,
-                        status="completed" if grounded else "partial",
-                        verification_status="verified" if grounded else "failed",
-                        reason_codes=["debate_fact_claims_grounded" if grounded else "debate_evidence_incomplete"],
+                        status=status,
+                        verification_status=verification_status,
+                        reason_codes=reason_codes,
                         source_ids=_source_ids(result["sources"]),
                     )
                     yield sse_frame("runtime_terminal", terminal)
             except Exception as exc:
                 if runtime:
                     runtime.fail(exc)
-                yield sse_frame("error", {"message": str(exc) or "debate stream failed"})
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+                logger.exception("history_debate_stream_failed")
+                yield sse_frame("error", {"message": "辩论生成失败，请稍后重试。"})
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

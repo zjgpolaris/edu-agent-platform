@@ -197,6 +197,8 @@ export default function HistoryDebatePage() {
             setPhase("coaching");
           } else if (event === "done") {
             setPhase("done");
+          } else if (event === "error") {
+            throw new Error(String(data.message || "辩论生成失败，请稍后重试。"));
           }
       });
     } catch (e: unknown) {
@@ -322,7 +324,7 @@ export default function HistoryDebatePage() {
               </CollapsibleCard>
             )}
 
-            {error && <p className="db-error">连接已中断，请刷新页面重试。</p>}
+            {error && <p className="db-error">{error}</p>}
           </div>
 
           <aside className="db-agent-pipeline">

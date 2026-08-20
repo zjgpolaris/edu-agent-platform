@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,8 +38,20 @@ class FakeModel:
 class FailingModel:
     model = "fake-failing-model"
 
+    def __init__(self):
+        self.calls = 0
+
     def invoke(self, _prompt: str) -> FakeResponse:
+        self.calls += 1
         raise RuntimeError("expected role failure")
+
+
+class SlowModel:
+    model = "fake-slow-model"
+
+    def invoke(self, _prompt: str) -> FakeResponse:
+        time.sleep(0.2)
+        return FakeResponse("too late")
 
 
 def run_case(name: str, fn) -> bool:
@@ -85,7 +98,7 @@ def complete_trajectory_has_one_event_per_stage() -> None:
     event_names = [item["event"] for item in events]
     assert event_names == ["trace", "round", "round", "fact_check", "verdict", "coach_summary", "done"], event_names
     assert events[3]["data"]["sources"][0]["citation_label"] == "[史料1]"
-    assert events[-1]["data"] == {"trace_id": trace_id, "round_count": 1, "source_count": 1}
+    assert events[-1]["data"] == {"trace_id": trace_id, "round_count": 1, "source_count": 1, "degraded": False, "fallback_roles": []}
 
     trace_events = get_trace_store().get_trace(trace_id)
     assert [item["agent_name"] for item in trace_events] == [
@@ -118,10 +131,80 @@ def role_failure_is_traced() -> None:
     assert trace_events[0]["metadata"]["error_type"] == "RuntimeError"
 
 
+def role_failure_degrades_to_grounded_trajectory() -> None:
+    trace_id = "debate_multi_agent_fallback"
+    original_fast = debate.llm
+    original_quality = debate.llm_judge
+    original_rounds = debate.MAX_ROUNDS
+    original_search = debate._search_history_sources
+    failing_model = FailingModel()
+    debate.llm = failing_model
+    debate.llm_judge = failing_model
+    debate.MAX_ROUNDS = 1
+    debate._search_history_sources = lambda _topic: (
+        [{
+            "citation_label": "[史料1]",
+            "topic": "测试史料",
+            "source": "offline-smoke",
+            "snippet": "秦统一结束了长期割据局面。",
+            "score": 0.9,
+        }],
+        "[史料1] 秦统一结束了长期割据局面。",
+    )
+
+    async def collect() -> list[dict]:
+        return [item async for item in debate.stream_debate("秦统一利弊", trace_id=trace_id)]
+
+    try:
+        events = asyncio.run(collect())
+    finally:
+        debate.llm = original_fast
+        debate.llm_judge = original_quality
+        debate.MAX_ROUNDS = original_rounds
+        debate._search_history_sources = original_search
+
+    assert [item["event"] for item in events] == ["trace", "round", "round", "fact_check", "verdict", "coach_summary", "done"]
+    assert all(item["data"].get("generation_mode") == "fallback" for item in events[1:-1]), events
+    assert events[3]["data"]["claims"][0]["source_ids"] == ["[史料1]"]
+    assert events[-1]["data"]["degraded"] is True
+    assert set(events[-1]["data"]["fallback_roles"]) == {"pro_debater", "con_debater", "fact_checker", "judge", "learning_coach"}
+    assert failing_model.calls == 1
+    trace_events = get_trace_store().get_trace(trace_id)
+    assert len(trace_events) == 6, trace_events
+    assert all(item["status"] == "success" for item in trace_events)
+    assert all(item["metadata"].get("generation_mode") == "fallback" for item in trace_events[:-1])
+
+
+def slow_role_is_bounded_by_timeout() -> None:
+    trace_id = "debate_multi_agent_timeout"
+
+    async def invoke() -> tuple[str, float]:
+        with trace_context(trace_id):
+            started = time.perf_counter()
+            result = await debate._invoke_role(
+                "pro_debater",
+                "round_1",
+                SlowModel(),
+                "prompt",
+                fallback="有据降级发言",
+                timeout_seconds=0.01,
+            )
+            return result, time.perf_counter() - started
+
+    result, elapsed = asyncio.run(invoke())
+    assert result == "有据降级发言"
+    assert elapsed < 0.15, elapsed
+    trace_events = get_trace_store().get_trace(trace_id)
+    assert len(trace_events) == 1
+    assert trace_events[0]["metadata"]["degraded_reason"] == "TimeoutError"
+
+
 def main() -> None:
     cases = [
         ("complete_trajectory_has_one_event_per_stage", complete_trajectory_has_one_event_per_stage),
         ("role_failure_is_traced", role_failure_is_traced),
+        ("role_failure_degrades_to_grounded_trajectory", role_failure_degrades_to_grounded_trajectory),
+        ("slow_role_is_bounded_by_timeout", slow_role_is_bounded_by_timeout),
     ]
     passed = sum(1 for name, fn in cases if run_case(name, fn))
     print(f"debate_multi_agent={passed}/{len(cases)}")
