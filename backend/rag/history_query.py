@@ -112,10 +112,27 @@ _ACTION_SUFFIXES = (
     "解释",
 )
 _CONTEXTUAL_TERMS = ("它", "这个", "刚才", "上面", "结合教材", "结合课文", "按教材", "用教材")
+_COLLECTION_FEATURE_TERMS = ("以少胜多", "以弱胜强")
+_COLLECTION_OBJECT_TERMS = ("战役", "战争", "战斗", "战例")
+_COLLECTION_LIST_TERMS = ("哪些", "哪几", "有什么", "列举", "举例", "盘点")
 
 
 def _compact(value: Any) -> str:
     return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", str(value or "").lower())
+
+
+def collection_query_label(query: str) -> str | None:
+    """Return a canonical subject for supported cross-entity list queries."""
+    compact = _compact(query)
+    if "世界" in compact:
+        return None
+    if (
+        any(_compact(term) in compact for term in _COLLECTION_FEATURE_TERMS)
+        and any(_compact(term) in compact for term in _COLLECTION_OBJECT_TERMS)
+        and any(_compact(term) in compact for term in _COLLECTION_LIST_TERMS)
+    ):
+        return "中国古代以少胜多的战役"
+    return None
 
 
 @lru_cache(maxsize=2)
@@ -219,9 +236,12 @@ def parse_history_query(
 ) -> HistoryQuery:
     original = str(query or "").strip()[:500]
     entities = catalog if catalog is not None else load_history_entities()
+    collection_label = collection_query_label(original)
     explicit_anchor = topic_anchor(topic)
     query_anchor = topic_anchor(original)
     resolved, ambiguous = _resolve_entity(" ".join(value for value in (explicit_anchor, original) if value), entities)
+    if collection_label:
+        resolved, ambiguous = None, []
     inherited = False
     reason_codes: list[str] = []
 
@@ -241,16 +261,18 @@ def parse_history_query(
     needs_clarification = len(ambiguous) > 1 or (not entity_name and any(term in original for term in _CONTEXTUAL_TERMS))
     if len(ambiguous) > 1:
         reason_codes.append("ambiguous_entity")
-    if not entity_name:
+    if collection_label:
+        reason_codes.append("collection_query")
+    elif not entity_name:
         reason_codes.append("entity_not_in_catalog")
     if needs_clarification:
         reason_codes.append("clarification_required")
 
-    retrieval_parts = [entity_name or explicit_anchor or query_anchor or original]
+    retrieval_parts = [collection_label or entity_name or explicit_anchor or query_anchor or original]
     aspect_label = aspect_query_label(aspect)
-    if aspect_label and aspect_label not in retrieval_parts[0]:
+    if not collection_label and aspect_label and aspect_label not in retrieval_parts[0]:
         retrieval_parts.append(aspect_label)
-    confidence = 0.98 if resolved and resolved.reviewed else 0.92 if resolved else 0.55 if (explicit_anchor or query_anchor) else 0.2
+    confidence = 0.90 if collection_label else 0.98 if resolved and resolved.reviewed else 0.92 if resolved else 0.55 if (explicit_anchor or query_anchor) else 0.2
     if inherited:
         confidence = min(confidence, 0.90)
 

@@ -714,6 +714,7 @@ shadow 100%（只记录）
 - 生产检索评测不再用系统自身的 `entity_match / answer_bearing` 充当相关性标签；Recall、MRR、nDCG 只读取 `teacher_reviewed` 的 source judgments，当前 top source 出现未标注 ID 时返回 `NOT_RUN`。
 - 查询种子按 `event / person` 实体类型生成：苏轼、辛弃疾不再套用“为什么会发生某人”等事件模板；数据集重建只保留指纹未变化的既有人工复核，变更 case 自动回到 pending。
 - 本地无向量库时，aspect 明确且教材证据不足的事件查询可补充 `geo_events.json` 的 L3 稳定来源；L3 只产生 `partial`，不会冒充 L1/L2 教材充分证据，精确名单、私人谈话和逐日路线等超范围问题仍返回 `none`。
+- “中国历史以少胜多的战役有哪些”等跨事件集合问法不再把整句误当单一实体；系统先用受控事件目录确定候选集合，再只从教材正文中提取明确写有“以少胜多”的 L1 直接证据，并按来源拆分验证 claim。当前覆盖巨鹿之战、官渡之战、赤壁之战和淝水之战，完整链路返回 `sufficient / verified / completed`。
 
 当前工程验证：
 

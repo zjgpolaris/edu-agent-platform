@@ -10,6 +10,9 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from langchain_core.documents import Document
 
+from agents import learning_assistant
+from agents.answer_verifier import verify_answer_evidence
+from agents.learning_assistant_planner import PlanStep
 from rag.knowledge_base import reciprocal_rank_fusion
 from tools import history_search
 
@@ -40,7 +43,14 @@ def main() -> None:
 
     original = history_search.search_with_scores_and_diagnostics
     original_curated_loader = history_search._load_curated_history_events
+    original_corpus_loader = history_search._load_history_corpus_rows
+    original_llm_invoke = learning_assistant.llm_fast.invoke
+
+    def offline_invoke(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("offline collection regression")
     try:
+        learning_assistant.llm_fast.invoke = offline_invoke
         history_search._load_curated_history_events = lambda: ()
         history_search.search_with_scores_and_diagnostics = lambda *args, **kwargs: ([
             {
@@ -92,6 +102,80 @@ def main() -> None:
         }).model_dump()
         assert missing["ok"] is True and missing["data"]["retrieval_status"] == "none", missing
 
+        collection_query = history_search.parse_history_query(
+            "中国历史以少胜多的战役有哪些",
+            topic="中国以少胜多的战役有哪些",
+        )
+        assert collection_query.entity is None, collection_query
+        assert collection_query.retrieval_query == "中国古代以少胜多的战役", collection_query
+        assert "collection_query" in collection_query.reason_codes, collection_query
+        assert "entity_not_in_catalog" not in collection_query.reason_codes, collection_query
+        assert "collection_query" not in history_search.parse_history_query(
+            "官渡之战为什么能以少胜多",
+            topic="官渡之战",
+        ).reason_codes
+        assert "collection_query" not in history_search.parse_history_query(
+            "世界历史上以少胜多的战役有哪些",
+            topic="世界历史上以少胜多的战役有哪些",
+        ).reason_codes
+
+        history_search._load_curated_history_events = lambda: (
+            {"title": "巨鹿之战", "summary": "项羽率楚军以少胜多大败秦军主力。"},
+            {"title": "官渡之战", "summary": "曹操以少胜多大败袁绍。"},
+            {"title": "赤壁之战", "summary": "孙刘联军以少胜多大败曹军。"},
+            {"title": "淝水之战", "summary": "东晋以少胜多大败前秦。"},
+        )
+        history_search._load_history_corpus_rows = lambda: (
+            {
+                "text": "项羽在巨鹿之战中以少胜多歼灭秦军主力。",
+                "meta": {"topic": "巨鹿之战", "source": "《中国历史七年级上册》", "lesson": "秦末农民大起义", "page": 57},
+            },
+            {
+                "text": "官渡之战和赤壁之战都是中国古代以少胜多的著名战役。",
+                "meta": {"topic": "三国鼎立", "source": "《中国历史七年级上册》", "lesson": "三国鼎立", "page": 89},
+            },
+            {
+                "text": "淝水之战是中国古代又一次以少胜多的著名战役。",
+                "meta": {"topic": "淝水之战", "source": "《中国历史七年级上册》", "lesson": "北魏政治和北方民族大交融", "page": 98},
+            },
+        )
+        collection = history_search.search_history_knowledge({
+            "query": "中国历史以少胜多的战役有哪些",
+            "topic": "中国以少胜多的战役有哪些",
+        }).model_dump()
+        collection_text = " ".join(source["snippet"] for source in collection["data"]["sources"])
+        assert collection["data"]["retrieval_status"] == "sufficient", collection
+        assert collection["metadata"]["collection_exact_source_count"] == 3, collection
+        assert collection["metadata"]["collection_member_count"] == 4, collection
+        assert all(source["source_tier"] == "L1_TEXTBOOK_DIRECT" for source in collection["data"]["sources"]), collection
+        assert all(source["answer_bearing"] is True for source in collection["data"]["sources"]), collection
+        assert all(title in collection_text for title in ("巨鹿之战", "官渡之战", "赤壁之战", "淝水之战")), collection
+        generated = learning_assistant._run_generation_operation(
+            "answer_from_sources",
+            PlanStep(
+                step_id="step_2",
+                title="生成史料解释",
+                kind="generation",
+                operation="answer_from_sources",
+                input={"message": "中国历史以少胜多的战役有哪些", "topic": "中国以少胜多的战役有哪些"},
+                depends_on=["step_1"],
+            ),
+            {"step_1": {"payload": collection}},
+            req={"message": "中国历史以少胜多的战役有哪些"},
+            history=[],
+            source_context={},
+        )
+        assert all(title in generated["response"] for title in ("巨鹿之战", "官渡之战", "赤壁之战", "淝水之战")), generated
+        verification = verify_answer_evidence(
+            intents=["history_search"],
+            execution={
+                "tool_results": [collection],
+                "generation_results": [{**generated, "operation": "answer_from_sources", "step_id": "step_2"}],
+            },
+        )
+        assert verification.status == "verified" and verification.completion_allowed is True, verification
+        assert verification.supported_claim_count == 3, verification
+
         history_search._load_curated_history_events = lambda: ({
             "title": "长平之战",
             "summary": "秦赵之间规模最大的野战，赵军大败，白起坑杀降卒四十万，赵国元气大伤。",
@@ -126,6 +210,8 @@ def main() -> None:
     finally:
         history_search.search_with_scores_and_diagnostics = original
         history_search._load_curated_history_events = original_curated_loader
+        history_search._load_history_corpus_rows = original_corpus_loader
+        learning_assistant.llm_fast.invoke = original_llm_invoke
     print("history_retrieval_contract_smoke=PASS")
 
 

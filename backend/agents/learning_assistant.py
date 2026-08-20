@@ -212,6 +212,20 @@ def _fallback_history_answer(
         topic_text = f"“{focus_topic}”" if focus_topic else "这个问题"
         return f"当前教材知识库没有检索到足够依据来回答{topic_text}。你可以补充教材课次，或换一个更具体的历史事件、人物或时期来问。"
     topic = focus_topic or sources[0].get("topic") or "这个问题"
+    collection_members = list(dict.fromkeys(
+        str(member).strip()
+        for source in sources
+        for member in (source.get("collection_members") or [])
+        if str(member).strip()
+    ))
+    if collection_members:
+        labels = list(dict.fromkeys(
+            label for source in sources if (label := _source_label(source))
+        ))[:3]
+        answer = f"根据当前教材知识库，明确提到的中国古代以少胜多战役包括：{'、'.join(collection_members)}。"
+        if labels:
+            answer += f"依据：{'；'.join(labels)}。"
+        return answer
     source_facts = [(source, _source_fact(source, focus_topic)) for source in sources[:4]]
     source_facts = [(source, fact) for source, fact in source_facts if fact]
     answer_bearing_facts = [(source, fact) for source, fact in source_facts if source.get("answer_bearing") is True]
@@ -616,7 +630,14 @@ def _run_generation_operation(
         retrieval_status = str(_dependency_data(outputs, "retrieval_status") or "none")
         history_query = _dependency_data(outputs, "history_query") or {}
         aspect = str(history_query.get("aspect") or "fact") if isinstance(history_query, dict) else "fact"
-        focus_topic = str((history_query.get("entity") if isinstance(history_query, dict) else None) or step.input.get("topic") or "").strip() or None
+        reason_codes = (history_query.get("reason_codes") or []) if isinstance(history_query, dict) else []
+        collection_topic = history_query.get("retrieval_query") if "collection_query" in reason_codes else None
+        focus_topic = str(
+            collection_topic
+            or (history_query.get("entity") if isinstance(history_query, dict) else None)
+            or step.input.get("topic")
+            or ""
+        ).strip() or None
         answer_sources = [source for source in sources if source.get("answer_bearing") is True] or sources
         response, mode = _generate_history_answer(
             message,
@@ -627,7 +648,24 @@ def _run_generation_operation(
             retrieval_status,
             aspect,
         )
-        evidence_claims = [] if retrieval_status == "none" else [_evidence_claim(operation, f"{step.step_id}_answer", response, answer_sources[:4])]
+        is_collection_query = "collection_query" in reason_codes
+        if retrieval_status == "none":
+            evidence_claims = []
+        elif is_collection_query:
+            evidence_claims = []
+            for index, source in enumerate(answer_sources[:4], start=1):
+                claim_text = _source_fact(source, None)
+                if claim_text:
+                    evidence_claims.append(
+                        _evidence_claim(
+                            operation,
+                            f"{step.step_id}_answer_{index}",
+                            claim_text,
+                            [source],
+                        )
+                    )
+        else:
+            evidence_claims = [_evidence_claim(operation, f"{step.step_id}_answer", response, answer_sources[:4])]
         return {
             "ok": bool(response),
             "response": response,

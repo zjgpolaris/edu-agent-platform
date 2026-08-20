@@ -11,7 +11,14 @@ from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
 from rag.history_documents import history_source_fields, stable_history_source_id
-from rag.history_query import HistoryQuery, aspect_query_label, detect_history_aspect, parse_history_query, topic_anchor
+from rag.history_query import (
+    HistoryQuery,
+    aspect_query_label,
+    collection_query_label,
+    detect_history_aspect,
+    parse_history_query,
+    topic_anchor,
+)
 from rag.knowledge_base import MetadataHints, search_with_scores_and_diagnostics
 from tracing import truncate_text
 from tools.base import ToolResult
@@ -19,6 +26,7 @@ from tools.base import ToolResult
 
 ROOT = Path(__file__).resolve().parents[2]
 GEO_EVENTS_PATH = ROOT / "knowledge_base" / "history" / "geo_events.json"
+HISTORY_CORPUS_PATH = ROOT / "knowledge_base" / "history" / "corpus.json"
 
 
 @lru_cache(maxsize=2)
@@ -37,6 +45,24 @@ def _load_curated_history_events(path: Path = GEO_EVENTS_PATH) -> tuple[dict[str
     except OSError:
         return ()
     return _load_curated_history_events_cached(str(path), mtime_ns)
+
+
+@lru_cache(maxsize=2)
+def _load_history_corpus_rows_cached(path: str, mtime_ns: int) -> tuple[dict[str, Any], ...]:
+    del mtime_ns
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return ()
+    return tuple(row for row in payload if isinstance(row, dict)) if isinstance(payload, list) else ()
+
+
+def _load_history_corpus_rows(path: Path = HISTORY_CORPUS_PATH) -> tuple[dict[str, Any], ...]:
+    try:
+        mtime_ns = path.stat().st_mtime_ns
+    except OSError:
+        return ()
+    return _load_history_corpus_rows_cached(str(path), mtime_ns)
 
 
 class SearchHistoryKnowledgeInput(BaseModel):
@@ -256,6 +282,86 @@ def _curated_event_source(topic: str, query: str, target_aspect: str) -> dict[st
     )
 
 
+def _collection_event_titles(query: str) -> list[str]:
+    if collection_query_label(query) != "中国古代以少胜多的战役":
+        return []
+    titles: list[str] = []
+    for event in _load_curated_history_events():
+        title = str(event.get("title") or "").strip()
+        summary = _compact(event.get("summary"))
+        if title and "以少胜多" in summary and title not in titles:
+            titles.append(title)
+    return titles
+
+
+def _collection_textbook_sources(query: str, *, k: int) -> list[dict[str, Any]]:
+    """Resolve supported list queries from direct textbook passages.
+
+    The curated event file supplies the closed set of candidate event names;
+    only corpus rows that explicitly state the requested shared feature become
+    answer-bearing sources. This avoids turning a broad fallback into an
+    unrestricted full-corpus list generator.
+    """
+    event_titles = _collection_event_titles(query)
+    if not event_titles:
+        return []
+    candidates_by_title: dict[str, list[tuple[dict[str, Any], int]]] = {title: [] for title in event_titles}
+    for row in _load_history_corpus_rows():
+        content = str(row.get("text") or row.get("content") or "").strip()
+        metadata = row.get("meta") or row.get("metadata") or {}
+        if not content or not isinstance(metadata, dict) or "以少胜多" not in _compact(content):
+            continue
+        matched_titles = [title for title in event_titles if _compact(title) in _compact(content)]
+        if not matched_titles:
+            continue
+        source = _source_from_scored_doc(
+            {
+                "document": Document(page_content=content, metadata=metadata),
+                "rank": 1,
+                "score": 1.0,
+                "final_score": 1.0,
+                "retrieval_score": 1.0,
+                "keyword_score": 1.0,
+                "source_mode": "collection_exact",
+            },
+            "以少胜多",
+            query,
+            target_aspect="fact",
+        )
+        source.update({
+            "topic": "、".join(matched_titles),
+            "collection_members": matched_titles,
+            "entity_match": True,
+            "aspect_match": True,
+            "answer_bearing": True,
+            "source_mode": "collection_exact",
+        })
+        for title in matched_titles:
+            candidates_by_title[title].append((source, len(content)))
+
+    selected: list[dict[str, Any]] = []
+    covered: set[str] = set()
+    selected_source_ids: set[str] = set()
+    for title in event_titles:
+        if title in covered:
+            continue
+        candidates = sorted(
+            candidates_by_title.get(title) or [],
+            key=lambda item: (-len(item[0].get("collection_members") or []), item[1]),
+        )
+        if not candidates:
+            continue
+        source = candidates[0][0]
+        source_id = str(source.get("source_id") or "")
+        if source_id not in selected_source_ids:
+            selected.append(source)
+            selected_source_ids.add(source_id)
+        covered.update(str(value) for value in source.get("collection_members") or [])
+        if len(selected) >= k:
+            break
+    return _dedupe_sources(selected)
+
+
 def _compact(value: Any) -> str:
     return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", str(value or "").lower())
 
@@ -386,7 +492,8 @@ def search_history_knowledge(payload: BaseModel) -> ToolResult:
     history_query = req.history_query if _feature_enabled("EDU_AGENT_HISTORY_QUERY_V2_ENABLED") else None
     if history_query is None:
         history_query = parse_history_query(req.query, topic=req.topic, grade=req.grade, lesson=req.lesson)
-    topic = history_query.entity or topic_anchor(req.topic)
+    is_collection_query = "collection_query" in history_query.reason_codes
+    topic = history_query.entity or (None if is_collection_query else topic_anchor(req.topic))
     hints: MetadataHints = {"keywords": [history_query.retrieval_query]}
     if topic:
         hints["topic"] = [topic]
@@ -416,6 +523,9 @@ def search_history_knowledge(payload: BaseModel) -> ToolResult:
         _source_from_scored_doc(item, topic, req.query, target_aspect=history_query.aspect)
         for item in scored_docs
     ])
+    collection_sources = _collection_textbook_sources(req.query, k=req.k) if is_collection_query else []
+    if collection_sources:
+        sources = _dedupe_sources([*collection_sources, *sources])[:req.k]
     sufficiency = _sufficiency(sources, history_query)
     curated_fallback_added = False
     if sufficiency.status != "sufficient" and topic and history_query.aspect not in {"fact", "unknown"}:
@@ -450,6 +560,12 @@ def search_history_knowledge(payload: BaseModel) -> ToolResult:
             "fusion": diagnostics.get("fusion"),
             "rerank_status": (diagnostics.get("reranker") or {}).get("status"),
             "curated_fallback_added": curated_fallback_added,
+            "collection_exact_source_count": len(collection_sources),
+            "collection_member_count": len({
+                str(member)
+                for source in collection_sources
+                for member in (source.get("collection_members") or [])
+            }),
             "retrieval_diagnostics": diagnostics,
         },
     )
