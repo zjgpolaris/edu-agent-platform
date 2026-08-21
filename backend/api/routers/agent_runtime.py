@@ -36,6 +36,24 @@ class RecoverRunsRequest(BaseModel):
     updated_before: str
 
 
+def _client_run_payload(run: dict) -> dict:
+    payload = dict(run)
+    payload.pop("actor_id", None)
+    payload["run_revision"] = int(run["revision"])
+    payload["event_cursor"] = int(run.get("last_event_sequence") or 0)
+    return payload
+
+
+def _client_action_payload(result: dict, run: dict) -> dict:
+    return {
+        **result,
+        "run_id": str(run["run_id"]),
+        "run_revision": int(run["revision"]),
+        "event_cursor": int(run.get("last_event_sequence") or 0),
+        "status": str(run["status"]),
+    }
+
+
 def _authorize_run(actor: Actor, run: dict) -> None:
     if run.get("student_id"):
         student_id = str(run["student_id"])
@@ -66,8 +84,7 @@ def _load_authorized_run(run_id: str, actor: Actor) -> dict:
 @router.get("/api/agent-runs/{run_id}")
 async def get_agent_run(run_id: str, actor: Actor = Depends(require_auth)):
     run = _load_authorized_run(run_id, actor)
-    run.pop("actor_id", None)
-    return run
+    return _client_run_payload(run)
 
 
 @router.get("/api/agent-runs/{run_id}/events")
@@ -81,8 +98,10 @@ async def get_agent_run_events(
     events = list_run_events(run_id, after=after, limit=limit)
     return {
         "run_id": run_id,
+        "run_revision": int(run["revision"]),
         "events": [event.model_dump() for event in events],
         "event_cursor": events[-1].sequence if events else after,
+        "status": run["status"],
         "terminal": run["status"] in {"completed", "partial", "failed", "cancelled"},
     }
 
@@ -96,8 +115,35 @@ async def cancel_agent_run(run_id: str, req: RunRevisionRequest, actor: Actor = 
         raise HTTPException(status_code=409, detail="Run revision 已变化，请刷新后重试。") from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    run.pop("actor_id", None)
-    return run
+    if str(run.get("agent_type") or "") == "learning_assistant":
+        from services.learning_assistant_session_service import update_message_for_runtime_run
+
+        update_message_for_runtime_run(
+            run_id,
+            session_id=run.get("session_id"),
+            status="cancelled",
+            run_revision=int(run["revision"]),
+            event_cursor=int(run.get("last_event_sequence") or 0),
+            content="已取消高风险工具确认。",
+        )
+    return _client_run_payload(run)
+
+
+@router.post("/api/agent-runs/{run_id}/confirmation-token")
+async def refresh_agent_run_confirmation(
+    run_id: str,
+    req: RunRevisionRequest,
+    actor: Actor = Depends(require_auth),
+):
+    run = _load_authorized_run(run_id, actor)
+    if int(run["revision"]) != req.expected_revision:
+        raise HTTPException(status_code=409, detail="Run revision 已变化，请刷新后重试。")
+    from agent_runtime.resume_registry import issue_learning_assistant_confirmation
+
+    try:
+        return issue_learning_assistant_confirmation(run, actor)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/api/agent-runs/{run_id}/resume")
@@ -116,7 +162,8 @@ async def resume_agent_run(run_id: str, req: RunResumeRequest, actor: Actor = De
         input_patch=req.input_patch,
     )
     try:
-        return await dispatch_resume(run, signal, actor)
+        result = await dispatch_resume(run, signal, actor)
+        return _client_action_payload(result, get_run(run_id))
     except LookupError as exc:
         raise HTTPException(status_code=409, detail="该 Agent 尚未注册可恢复处理器。") from exc
     except ValueError as exc:
@@ -137,7 +184,8 @@ async def confirm_agent_run(run_id: str, req: RunConfirmRequest, actor: Actor = 
         confirmation_token=req.confirmation_token,
     )
     try:
-        return await dispatch_resume(run, signal, actor)
+        result = await dispatch_resume(run, signal, actor)
+        return _client_action_payload(result, get_run(run_id))
     except LookupError as exc:
         raise HTTPException(status_code=409, detail="该 Agent 尚未注册可恢复处理器。") from exc
     except ValueError as exc:
@@ -149,3 +197,12 @@ async def recover_agent_runs(req: RecoverRunsRequest, actor: Actor = Depends(req
     if auth_required() and actor.role != "admin":
         raise HTTPException(status_code=403, detail="仅管理员可恢复 Agent Run。")
     return recover_stale_runs(updated_before=req.updated_before)
+
+
+@router.get("/api/admin/agent-runtime/readiness")
+async def get_agent_runtime_readiness(actor: Actor = Depends(require_auth)):
+    if auth_required() and actor.role != "admin":
+        raise HTTPException(status_code=403, detail="仅管理员可检查 Agent Runtime readiness。")
+    from agent_runtime.readiness import runtime_schema_readiness
+
+    return runtime_schema_readiness()

@@ -10,6 +10,53 @@ ResumeHandler = Callable[[dict[str, Any], ResumeSignal, Actor], Awaitable[dict[s
 _HANDLERS: dict[str, ResumeHandler] = {}
 
 
+def issue_learning_assistant_confirmation(run: dict[str, Any], actor: Actor) -> dict[str, Any]:
+    """Issue an ephemeral token for the current owner-scoped waiting step.
+
+    Confirmation tokens are deliberately not persisted in run events or message
+    metadata.  Reconnects obtain a replacement token bound to the current run
+    revision through the authenticated Runtime API.
+    """
+    if str(run.get("agent_type") or "") != "learning_assistant":
+        raise ValueError("该 Agent 不支持工具确认")
+    if str(run.get("status") or "") != "waiting_confirmation":
+        raise ValueError("当前 Run 不等待确认")
+
+    from agent_runtime.capability_registry import build_default_registry
+    from agent_runtime.models import AgentPlan
+    from tools.base import ToolExecutionContext
+    from tools.registry import issue_runtime_confirmation_token
+
+    plan = AgentPlan.model_validate((run.get("state") or {}).get("plan"))
+    step = next((item for item in plan.steps if item.step_id == (run.get("current_step_id") or "")), None)
+    if step is None or len(plan.steps) != 1:
+        raise ValueError("该确认只能恢复单一高风险步骤")
+    binding = build_default_registry().resolve(step.operation, "learning_assistant")
+    if binding.kind != "tool" or not binding.tool_name:
+        raise ValueError("等待确认的步骤不是受控工具")
+    token = issue_runtime_confirmation_token(
+        binding.tool_name,
+        step.input,
+        ToolExecutionContext(
+            actor_id=actor.actor_id,
+            role=actor.role,
+            student_id=run.get("student_id"),
+            request_source="agent_runtime_confirmation_refresh",
+            run_id=str(run["run_id"]),
+            step_id=step.step_id,
+            run_revision=int(run["revision"]),
+        ),
+    )
+    return {
+        "run_id": str(run["run_id"]),
+        "run_revision": int(run["revision"]),
+        "event_cursor": int(run.get("last_event_sequence") or 0),
+        "step_id": step.step_id,
+        "tool_name": binding.tool_name,
+        "confirmation_token": token,
+    }
+
+
 async def _resume_auto_tutor(run: dict[str, Any], signal: ResumeSignal, actor: Actor) -> dict[str, Any]:
     if signal.kind != "input":
         raise ValueError("AutoTutor 仅接受答题恢复信号")
@@ -101,6 +148,15 @@ async def _confirm_learning_assistant(run: dict[str, Any], signal: ResumeSignal,
             step_id=step.step_id,
         )
         waiting_run = get_run(str(run["run_id"]))
+        from services.learning_assistant_session_service import update_message_for_runtime_run
+
+        update_message_for_runtime_run(
+            str(run["run_id"]),
+            session_id=run.get("session_id"),
+            status="waiting_confirmation",
+            run_revision=int(waiting_run["revision"]),
+            event_cursor=int(waiting_run.get("last_event_sequence") or 0),
+        )
         result_payload = result.model_dump()
         response = {
             "ok": False,
@@ -125,13 +181,21 @@ async def _confirm_learning_assistant(run: dict[str, Any], signal: ResumeSignal,
             response["confirmation_token"] = replacement_token
         return response
 
+    final_response = "高风险工具已确认并执行完成。"
+    final_payload = {
+        "response": final_response,
+        "completion_status": "completed",
+        "tool_results": [result.model_dump()],
+        "verification_summary": {"status": "not_required", "completion_allowed": True},
+        "plan_summary": {"completed_steps": 1, "total_steps": 1},
+    }
     artifact = create_artifact(
         str(run["run_id"]),
         owner_actor_id=run.get("actor_id"),
         student_id=run.get("student_id"),
         artifact_type="final_output",
         sensitivity="normal",
-        content={"tool_result": result.model_dump()},
+        content={"final": final_payload},
     )
     step_result = StepResult(
         step_id=step.step_id,
@@ -165,7 +229,25 @@ async def _confirm_learning_assistant(run: dict[str, Any], signal: ResumeSignal,
         completion=decision,
     )
     completed = get_run(str(run["run_id"]))
-    return {"ok": True, "run_id": run["run_id"], "run_revision": completed["revision"], "tool_result": result.model_dump(), "completion": decision.model_dump()}
+    from services.learning_assistant_session_service import update_message_for_runtime_run
+
+    update_message_for_runtime_run(
+        str(run["run_id"]),
+        session_id=run.get("session_id"),
+        status="completed",
+        run_revision=int(completed["revision"]),
+        event_cursor=int(completed.get("last_event_sequence") or 0),
+        tool_result=result.model_dump(),
+        content=final_response,
+    )
+    return {
+        "ok": True,
+        "run_id": run["run_id"],
+        "run_revision": completed["revision"],
+        "response": final_response,
+        "tool_result": result.model_dump(),
+        "completion": decision.model_dump(),
+    }
 
 
 _DEFAULT_HANDLERS: dict[str, ResumeHandler] = {

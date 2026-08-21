@@ -115,6 +115,8 @@ CORE_SUITES = [
     "agent_runtime_product_routes_smoke",
     "agent_runtime_autotutor_resume_smoke",
     "agent_runtime_essay_resume_smoke",
+    "agent_runtime_schema_readiness_smoke",
+    "agent_runtime_learning_assistant_api_smoke",
 ]
 QUICK_SUITES = [
     "eval_run_evidence_smoke",
@@ -160,6 +162,8 @@ QUICK_SUITES = [
     "agent_runtime_product_routes_smoke",
     "agent_runtime_autotutor_resume_smoke",
     "agent_runtime_essay_resume_smoke",
+    "agent_runtime_schema_readiness_smoke",
+    "agent_runtime_learning_assistant_api_smoke",
     # LLM/embed-dependent (skipped gracefully when credentials absent)
     "history_character_smoke",
     "rag_inspector_smoke",
@@ -240,6 +244,8 @@ SMOKE_SUITES = [
     "agent_runtime_product_routes_smoke",
     "agent_runtime_autotutor_resume_smoke",
     "agent_runtime_essay_resume_smoke",
+    "agent_runtime_schema_readiness_smoke",
+    "agent_runtime_learning_assistant_api_smoke",
 ]
 SUITE_FILES = {
     "eval_run_evidence_smoke": EVAL_DIR / "eval_run_evidence_smoke.py",
@@ -313,6 +319,8 @@ SUITE_FILES = {
     "agent_runtime_product_routes_smoke": EVAL_DIR / "agent_runtime_product_routes_smoke.py",
     "agent_runtime_autotutor_resume_smoke": EVAL_DIR / "agent_runtime_autotutor_resume_smoke.py",
     "agent_runtime_essay_resume_smoke": EVAL_DIR / "agent_runtime_essay_resume_smoke.py",
+    "agent_runtime_schema_readiness_smoke": EVAL_DIR / "agent_runtime_schema_readiness_smoke.py",
+    "agent_runtime_learning_assistant_api_smoke": EVAL_DIR / "agent_runtime_learning_assistant_api_smoke.py",
     "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
     "variant_question_smoke": EVAL_DIR / "variant_question_smoke.py",
     "lecture_review_smoke": EVAL_DIR / "lecture_review_smoke.py",

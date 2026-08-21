@@ -117,6 +117,21 @@ test("随问可执行解释后出题的三步受限计划", async ({ page }) => 
   await expect(plannedAnswer).not.toContainText(/灰度决策|路由方式|reason_code|bucket|置信度/);
 });
 
+test("随问高风险确认在同一个 Runtime Run 内完成", async ({ page }) => {
+  test.setTimeout(60_000);
+  await enterDemo(page, "student");
+  await page.goto("/student/assistant");
+  await page.getByRole("button", { name: "新对话" }).click();
+  await page.getByRole("textbox", { name: "学习问题" }).fill("演示高风险工具，删除演示记忆");
+  await page.getByRole("button", { name: "发送问题" }).click();
+
+  await expect(page.getByText("需要你的确认", { exact: true })).toBeVisible({ timeout: 45_000 });
+  await page.getByRole("button", { name: "确认执行", exact: true }).click();
+
+  await expect(page.getByText("需要你的确认", { exact: true })).toHaveCount(0, { timeout: 45_000 });
+  await expect(page.locator(".learning-message.assistant").last()).toContainText("高风险工具已确认并执行完成", { timeout: 45_000 });
+});
+
 test("学情薄弱点进入新随问会话并围绕指定知识点讲解", async ({ page }) => {
   test.setTimeout(60_000);
   await enterDemo(page, "student");

@@ -19,6 +19,7 @@ os.environ.pop("DATABASE_URL", None)
 from agent_runtime.event_store import StaleRevisionError, append_run_event, create_run, list_run_events  # noqa: E402
 from agent_runtime.models import AgentContext  # noqa: E402
 import agents.auto_tutor as auto_tutor  # noqa: E402
+from services.learning_assistant_session_service import append_idempotent_user_message, create_session, list_messages  # noqa: E402
 
 
 def main() -> None:
@@ -73,6 +74,24 @@ def main() -> None:
     assert final["revision"] == started["revision"] + 1, final
     assert len(final_internal.step_history) == 1
     assert sum(bool(item.get("idempotent_replay")) or bool(item.get("stale_answer_ignored")) for item in answers) >= 1
+
+    assistant_session = create_session("student-cas", source_feature="standalone")
+    message_barrier = threading.Barrier(2)
+
+    def persist_user_once(_: int) -> str:
+        message_barrier.wait()
+        return append_idempotent_user_message(
+            assistant_session["session_id"],
+            "并发重试只保留一条用户消息",
+            idempotency_key="learning-message-cas-0001",
+            source_feature="standalone",
+        )["message_id"]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        message_ids = list(pool.map(persist_user_once, (1, 2)))
+    assert len(set(message_ids)) == 1, message_ids
+    persisted_messages = list_messages(assistant_session["session_id"], limit=100)
+    assert len(persisted_messages) == 1, persisted_messages
 
     print("agent_runtime_concurrency_smoke=PASS")
 

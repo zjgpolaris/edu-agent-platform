@@ -7,6 +7,14 @@ import { Archive, ArrowUp, BookOpen, Check, ChevronDown, History, Pencil, Plus, 
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { readSseStream, type SseEvent } from "@/lib/sse";
+import {
+  createAgentRunIdempotencyKey,
+  mergeAgentRunClientState,
+  normalizeAgentRuntimeEvent,
+  replayEventToSse,
+  runtimeCorrelationKey,
+  type AgentRunClientState,
+} from "@/lib/agentRuntime";
 import { Select, type SelectOption } from "./Select";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import { assistantCompletionLabel, assistantToolStatus, buildTextbookRequestFields, dedupeAssistantTools, shouldSubmitComposerKey, updateAssistantPlanStep, type AssistantPlanStep } from "@/components/learningAssistantComposer";
@@ -57,6 +65,9 @@ type Message = {
     completion_status?: string;
     verification_summary?: VerificationSummary;
     rollout_summary?: RolloutSummary;
+    run_id?: string;
+    run_revision?: number;
+    event_cursor?: number;
   };
 };
 type AssistantSession = {
@@ -100,6 +111,10 @@ type PendingConfirmation = {
   toolName: string;
   token: string;
   message: string;
+  runId?: string;
+  runRevision?: number;
+  eventCursor?: number;
+  stepId?: string;
   riskLevel?: string;
   sideEffect?: string;
   requiredRole?: string;
@@ -141,6 +156,7 @@ type TextbookContext = {
 type ConfirmationPayload = { confirmed_tool_name: string; confirmation_token: string; confirmation_decision: "confirmed" };
 type SubmitOptions = {
   confirmation?: ConfirmationPayload;
+  idempotencyKey?: string;
   regenerateMessageId?: string;
   replaceAssistantId?: string;
   appendUser?: boolean;
@@ -244,15 +260,27 @@ function sortedRuntimeSteps(steps: RuntimeStep[]): RuntimeStep[] {
     .map((item) => item.step);
 }
 
-function confirmationFromTool(tool: ToolResult | ToolSummary): PendingConfirmation | null {
+function confirmationFromTool(
+  tool: ToolResult | ToolSummary,
+  runtime: AgentRunClientState | null = null,
+): PendingConfirmation | null {
   const error = "error" in tool ? tool.error as ToolResult["error"] : null;
   const metadata = (tool.metadata || {}) as Record<string, unknown>;
+  const runtimeData = tool as Record<string, unknown>;
   const token = typeof metadata.confirmation_token === "string" ? metadata.confirmation_token : "";
-  if (error?.code !== "confirmation_required" || !token) return null;
+  const runId = typeof runtimeData.run_id === "string" ? runtimeData.run_id : runtime?.runId;
+  const runRevision = typeof runtimeData.run_revision === "number" ? runtimeData.run_revision : runtime?.runRevision;
+  const eventCursor = typeof runtimeData.event_cursor === "number" ? runtimeData.event_cursor : runtime?.eventCursor;
+  const stepId = typeof runtimeData.step_id === "string" ? runtimeData.step_id : runtime?.stepId;
+  if (error?.code !== "confirmation_required" || (!token && !runId)) return null;
   return {
     toolName: String(tool.tool_name || ""),
     token,
     message: error.message || "该工具需要确认后才会执行。",
+    runId,
+    runRevision,
+    eventCursor,
+    stepId,
     riskLevel: typeof metadata.risk_level === "string" ? metadata.risk_level : undefined,
     sideEffect: typeof metadata.side_effect === "string" ? metadata.side_effect : undefined,
     requiredRole: typeof metadata.required_role === "string" ? metadata.required_role : undefined,
@@ -403,8 +431,10 @@ function LearningAssistantContent() {
   const [profileContext, setProfileContext] = useState<ProfileContext | null>(null);
   const [traceId, setTraceId] = useState("");
   const [runtimeSteps, setRuntimeSteps] = useState<RuntimeStep[]>([]);
+  const [, setRuntimeClient] = useState<AgentRunClientState | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [lastRequestText, setLastRequestText] = useState("");
+  const [lastRequestIdempotencyKey, setLastRequestIdempotencyKey] = useState("");
   const [ragChunks, setRagChunks] = useState<RagChunk[]>([]);
   const [ragQuery, setRagQuery] = useState("");
   const [ragSummary, setRagSummary] = useState<RagInspectorSummary | null>(null);
@@ -423,11 +453,27 @@ function LearningAssistantContent() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sourceInitializedRef = useRef("");
   const abortControllerRef = useRef<AbortController | null>(null);
+  const runtimeClientRef = useRef<AgentRunClientState | null>(null);
+  const activeIdempotencyKeyRef = useRef("");
 
   const requestHeaders = useMemo(
     () => ({ "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) }),
     [user?.token]
   );
+
+  const captureRuntimeState = useCallback((data: Record<string, unknown>, eventId?: string) => {
+    const next = mergeAgentRunClientState(
+      runtimeClientRef.current,
+      data,
+      activeIdempotencyKeyRef.current,
+      eventId,
+    );
+    if (next !== runtimeClientRef.current) {
+      runtimeClientRef.current = next;
+      setRuntimeClient(next);
+    }
+    return next;
+  }, []);
 
   const loadBooks = useCallback(async () => {
     if (books.length) return books;
@@ -543,7 +589,19 @@ function LearningAssistantContent() {
     setRagChunks([]);
     setRagSummary(null);
     setProfileContext(null);
-    setPendingConfirmation(null);
+    const waitingMessage = [...restored].reverse().find((item) => item.role === "assistant" && item.completionStatus === "waiting_confirmation");
+    const restoredRun = waitingMessage?.evidence?.run_id && typeof waitingMessage.evidence.run_revision === "number"
+      ? {
+          runId: waitingMessage.evidence.run_id,
+          runRevision: waitingMessage.evidence.run_revision,
+          eventCursor: waitingMessage.evidence.event_cursor || 0,
+          idempotencyKey: `restored:${waitingMessage.evidence.run_id}`,
+        }
+      : null;
+    runtimeClientRef.current = restoredRun;
+    setRuntimeClient(restoredRun);
+    const waitingTool = waitingMessage?.tools?.find((tool) => tool.error?.code === "confirmation_required");
+    setPendingConfirmation(waitingTool ? confirmationFromTool(waitingTool, restoredRun) : null);
   }, []);
 
   const createSession = useCallback(async (sourceSessionId?: string): Promise<AssistantSession> => {
@@ -618,6 +676,63 @@ function LearningAssistantContent() {
     return () => { cancelled = true; };
   }, [studentId, user?.token, sourceAutoTutorId, requestedSessionId, startFreshSession, sessionReady, requestHeaders, createSession, fetchSession, hydrateSession]);
 
+  useEffect(() => {
+    if (
+      !pendingConfirmation?.runId
+      || typeof pendingConfirmation.runRevision !== "number"
+      || pendingConfirmation.token
+    ) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/api/agent-runs/${encodeURIComponent(pendingConfirmation.runId!)}/confirmation-token`,
+          {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({ expected_revision: pendingConfirmation.runRevision }),
+            signal: controller.signal,
+          },
+        );
+        if (response.status === 409) {
+          const current = await fetch(
+            `${apiBaseUrl}/api/agent-runs/${encodeURIComponent(pendingConfirmation.runId!)}`,
+            { headers: requestHeaders, signal: controller.signal },
+          );
+          if (!current.ok) throw new Error(`刷新运行状态失败：${current.status}`);
+          const run = await current.json() as Record<string, unknown>;
+          captureRuntimeState(run);
+          if (run.status !== "waiting_confirmation") {
+            setPendingConfirmation(null);
+            return;
+          }
+          setPendingConfirmation((value) => value ? {
+            ...value,
+            runRevision: typeof run.run_revision === "number" ? run.run_revision : value.runRevision,
+            eventCursor: typeof run.event_cursor === "number" ? run.event_cursor : value.eventCursor,
+          } : value);
+          return;
+        }
+        if (!response.ok) throw new Error(`恢复确认凭证失败：${response.status}`);
+        const data = await response.json() as Record<string, unknown>;
+        captureRuntimeState(data);
+        setPendingConfirmation((value) => value ? {
+          ...value,
+          token: typeof data.confirmation_token === "string" ? data.confirmation_token : "",
+          toolName: typeof data.tool_name === "string" ? data.tool_name : value.toolName,
+          stepId: typeof data.step_id === "string" ? data.step_id : value.stepId,
+          runRevision: typeof data.run_revision === "number" ? data.run_revision : value.runRevision,
+          eventCursor: typeof data.event_cursor === "number" ? data.event_cursor : value.eventCursor,
+        } : value);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setErrorMessage(error instanceof Error ? error.message : "恢复确认状态失败");
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [captureRuntimeState, pendingConfirmation?.runId, pendingConfirmation?.runRevision, pendingConfirmation?.token, requestHeaders]);
+
   async function startNewConversation() {
     if (!studentId || loading) return;
     setLoading(true);
@@ -632,6 +747,11 @@ function LearningAssistantContent() {
       setTextbookContext(null);
       setTraceId("");
       setRuntimeSteps([]);
+      runtimeClientRef.current = null;
+      setRuntimeClient(null);
+      activeIdempotencyKeyRef.current = "";
+      setLastRequestIdempotencyKey("");
+      setPendingConfirmation(null);
       setStatus("等待你的问题");
       router.replace(`/student/assistant?session_id=${encodeURIComponent(session.session_id)}`, { scroll: false });
       if (historyOpen) await loadSessions();
@@ -827,9 +947,44 @@ function LearningAssistantContent() {
 
   async function handleStream(response: Response, assistantId: string) {
     async function handleEvent(streamEvent: SseEvent<Record<string, unknown>>) {
-      const { event, data } = streamEvent;
+      const normalized = normalizeAgentRuntimeEvent(streamEvent);
+      const { event, data } = normalized;
+      const activeRuntime = captureRuntimeState(data, normalized.id);
       if (event === "trace") {
         if (typeof data.trace_id === "string") setTraceId(data.trace_id);
+        return;
+      }
+      if (event === "run_started") {
+        if (typeof data.trace_id === "string") setTraceId(data.trace_id);
+        setStatus("Agent Run 已创建");
+        return;
+      }
+      if (event === "waiting_confirmation") {
+        setPendingConfirmation((value) => ({
+          toolName: typeof data.tool_name === "string" ? data.tool_name : value?.toolName || "",
+          token: value?.token || "",
+          message: value?.message || "该工具需要确认后才会执行。",
+          runId: activeRuntime?.runId,
+          runRevision: activeRuntime?.runRevision,
+          eventCursor: activeRuntime?.eventCursor,
+          stepId: typeof data.step_id === "string" ? data.step_id : activeRuntime?.stepId,
+          riskLevel: value?.riskLevel,
+          sideEffect: value?.sideEffect,
+          requiredRole: value?.requiredRole,
+        }));
+        setStatus("学习计划等待确认");
+        return;
+      }
+      if (event === "run_cancelled") {
+        setPendingConfirmation(null);
+        setStatus("已取消高风险工具");
+        return;
+      }
+      if (event === "run_completed" || event === "run_failed") {
+        const completion = data.completion && typeof data.completion === "object"
+          ? data.completion as Record<string, unknown>
+          : {};
+        setStatus(assistantCompletionLabel(typeof completion.status === "string" ? completion.status : event === "run_completed" ? "completed" : "failed"));
         return;
       }
       if (event === "runtime_step") {
@@ -844,6 +999,10 @@ function LearningAssistantContent() {
               toolName: typeof metadata.tool_name === "string" ? metadata.tool_name : "",
               token,
               message: error?.message ? String(error.message) : "该工具需要确认后才会执行。",
+              runId: activeRuntime?.runId,
+              runRevision: activeRuntime?.runRevision,
+              eventCursor: activeRuntime?.eventCursor,
+              stepId: activeRuntime?.stepId,
               riskLevel: typeof metadata.risk_level === "string" ? metadata.risk_level : undefined,
               sideEffect: typeof metadata.side_effect === "string" ? metadata.side_effect : undefined,
               requiredRole: typeof metadata.required_role === "string" ? metadata.required_role : undefined,
@@ -915,7 +1074,7 @@ function LearningAssistantContent() {
       }
       if (event === "tool_result") {
         const tool = data as ToolSummary;
-        const confirmation = confirmationFromTool(tool);
+        const confirmation = confirmationFromTool(tool, activeRuntime);
         if (confirmation) setPendingConfirmation(confirmation);
         if (tool.tool_name === "search_history_knowledge" && tool.ok && Array.isArray((tool as unknown as { data?: { sources?: RagChunk[] } }).data?.sources)) {
           const sources = (tool as unknown as { data: { sources: RagChunk[] } }).data.sources;
@@ -999,7 +1158,42 @@ function LearningAssistantContent() {
       if (event === "error") throw new Error(typeof data.message === "string" ? data.message : "学习助手请求失败");
     }
 
-    await readSseStream(response, handleEvent);
+    try {
+      await readSseStream(response, handleEvent);
+    } catch (streamError) {
+      const current = runtimeClientRef.current;
+      if (!current?.runId) throw streamError;
+      const replayResponse = await fetch(
+        `${apiBaseUrl}/api/agent-runs/${encodeURIComponent(current.runId)}/events?after=${current.eventCursor}`,
+        { headers: requestHeaders },
+      );
+      if (!replayResponse.ok) throw streamError;
+      const replay = await replayResponse.json() as {
+        events?: Record<string, unknown>[];
+        run_revision?: number;
+        event_cursor?: number;
+        status?: string;
+        terminal?: boolean;
+      };
+      captureRuntimeState({
+        run_id: current.runId,
+        run_revision: replay.run_revision,
+        event_cursor: replay.event_cursor,
+      });
+      for (const item of replay.events || []) {
+        const event = replayEventToSse(item);
+        if (event) await handleEvent(event);
+      }
+      if (replay.terminal) {
+        setStatus(assistantCompletionLabel(replay.status || "failed"));
+        return;
+      }
+      if (replay.status === "waiting_confirmation") {
+        setStatus("学习计划等待确认");
+        return;
+      }
+      throw streamError;
+    }
   }
 
   async function submit(nextMessage?: string, options: SubmitOptions = {}) {
@@ -1026,6 +1220,10 @@ function LearningAssistantContent() {
       setRagChunks([]);
       setRagSummary(null);
     }
+    if (!options.idempotencyKey && !options.confirmation) {
+      runtimeClientRef.current = null;
+      setRuntimeClient(null);
+    }
     setPendingConfirmation(null);
     setLastRequestText(text);
     setStatus("正在发送学习任务");
@@ -1034,6 +1232,9 @@ function LearningAssistantContent() {
 
     try {
       const activeSession = assistantSession || await createSession(sourceAutoTutorId || undefined);
+      const idempotencyKey = options.idempotencyKey || createAgentRunIdempotencyKey(activeSession.session_id);
+      activeIdempotencyKeyRef.current = idempotencyKey;
+      setLastRequestIdempotencyKey(idempotencyKey);
       const response = await fetch(`${apiBaseUrl}/api/learning/assistant/chat`, {
         method: "POST",
         headers: requestHeaders,
@@ -1045,6 +1246,7 @@ function LearningAssistantContent() {
           stream: true,
           regenerate_message_id: options.regenerateMessageId || null,
           reuse_last_user: options.reuseLastUser === true,
+          idempotency_key: idempotencyKey,
           ...(options.confirmation || {}),
         }),
         signal: controller.signal,
@@ -1097,6 +1299,7 @@ function LearningAssistantContent() {
       replaceAssistantId: lastAssistant.id,
       appendUser: false,
       reuseLastUser: true,
+      idempotencyKey: lastRequestIdempotencyKey || undefined,
     });
   }
 
@@ -1143,7 +1346,87 @@ function LearningAssistantContent() {
   }
 
   async function confirmToolExecution() {
-    if (!pendingConfirmation || !lastRequestText) return;
+    if (!pendingConfirmation) return;
+    if (
+      pendingConfirmation.runId
+      && typeof pendingConfirmation.runRevision === "number"
+      && pendingConfirmation.token
+    ) {
+      setLoading(true);
+      setErrorMessage("");
+      setStatus("已确认高风险工具，正在恢复原任务");
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/api/agent-runs/${encodeURIComponent(pendingConfirmation.runId)}/confirm`,
+          {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({
+              expected_revision: pendingConfirmation.runRevision,
+              correlation_key: runtimeCorrelationKey("confirm", {
+                runId: pendingConfirmation.runId,
+                runRevision: pendingConfirmation.runRevision,
+              }),
+              confirmation_token: pendingConfirmation.token,
+            }),
+          },
+        );
+        if (response.status === 409) {
+          const current = await fetch(
+            `${apiBaseUrl}/api/agent-runs/${encodeURIComponent(pendingConfirmation.runId)}`,
+            { headers: requestHeaders },
+          );
+          if (current.ok) {
+            const run = await current.json() as Record<string, unknown>;
+            captureRuntimeState(run);
+            setPendingConfirmation((value) => value ? {
+              ...value,
+              token: "",
+              runRevision: typeof run.run_revision === "number" ? run.run_revision : value.runRevision,
+              eventCursor: typeof run.event_cursor === "number" ? run.event_cursor : value.eventCursor,
+            } : value);
+          }
+        }
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(typeof error.detail === "string" ? error.detail : `确认失败：${response.status}`);
+        }
+        const data = await response.json() as Record<string, unknown>;
+        const activeRuntime = captureRuntimeState(data);
+        if (data.ok === false) {
+          setPendingConfirmation((value) => value ? {
+            ...value,
+            token: typeof data.confirmation_token === "string" ? data.confirmation_token : "",
+            runRevision: activeRuntime?.runRevision ?? value.runRevision,
+            eventCursor: activeRuntime?.eventCursor ?? value.eventCursor,
+          } : value);
+          setStatus("确认凭证已刷新，请再次确认");
+          return;
+        }
+        const tool = data.tool_result && typeof data.tool_result === "object"
+          ? asToolResult(data.tool_result as Record<string, unknown>)
+          : null;
+        const lastAssistant = [...messages].reverse().find((item) => item.role === "assistant");
+        if (lastAssistant && tool) {
+          updateAssistant(lastAssistant.id, (current) => ({
+            ...current,
+            text: typeof data.response === "string" ? data.response : current.text,
+            tools: dedupeAssistantTools([...(current.tools || []), tool]),
+            completionStatus: "completed",
+          }));
+        }
+        setRuntimeSteps((current) => current.map((step) => step.status === "waiting_confirmation" ? { ...step, status: "success" } : step));
+        setPendingConfirmation(null);
+        setStatus("高风险工具已确认并执行完成");
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "确认高风险工具失败");
+        setStatus("等待确认");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+    if (!lastRequestText || !pendingConfirmation.token) return;
     setRuntimeSteps((current) => current.map((step) => step.status === "waiting_confirmation" ? { ...step, status: "confirmed" } : step));
     setStatus("已确认高风险工具，正在重新执行");
     const lastAssistant = [...messages].reverse().find((item) => item.role === "assistant");
@@ -1160,18 +1443,49 @@ function LearningAssistantContent() {
 
   async function cancelToolExecution() {
     if (!pendingConfirmation) return;
+    setErrorMessage("");
     try {
-      const response = await fetch(`${apiBaseUrl}/api/learning/assistant/tool-confirmation/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) },
-        body: JSON.stringify({ tool_name: pendingConfirmation.toolName, confirmation_token: pendingConfirmation.token, student_id: studentId || null }),
-      });
+      const isRuntimeV2 = pendingConfirmation.runId && typeof pendingConfirmation.runRevision === "number";
+      const response = await fetch(
+        isRuntimeV2
+          ? `${apiBaseUrl}/api/agent-runs/${encodeURIComponent(pendingConfirmation.runId!)}/cancel`
+          : `${apiBaseUrl}/api/learning/assistant/tool-confirmation/cancel`,
+        {
+          method: "POST",
+          headers: requestHeaders,
+          body: JSON.stringify(isRuntimeV2
+            ? { expected_revision: pendingConfirmation.runRevision }
+            : { tool_name: pendingConfirmation.toolName, confirmation_token: pendingConfirmation.token, student_id: studentId || null }),
+        },
+      );
       const data = await response.json().catch(() => ({}));
+      if (response.status === 409 && isRuntimeV2) {
+        const current = await fetch(
+          `${apiBaseUrl}/api/agent-runs/${encodeURIComponent(pendingConfirmation.runId!)}`,
+          { headers: requestHeaders },
+        );
+        if (current.ok) {
+          const run = await current.json() as Record<string, unknown>;
+          captureRuntimeState(run);
+          if (run.status !== "waiting_confirmation") setPendingConfirmation(null);
+        }
+      }
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : `取消失败：${response.status}`);
+      if (isRuntimeV2) captureRuntimeState(data as Record<string, unknown>);
       if (typeof data.trace_id === "string") setTraceId(data.trace_id);
-    } finally {
       setRuntimeSteps((current) => current.map((step) => step.status === "waiting_confirmation" ? { ...step, status: "cancelled", metadata: { ...step.metadata, result_summary: "用户取消高风险工具确认" } } : step));
+      const lastAssistant = [...messages].reverse().find((item) => item.role === "assistant");
+      if (lastAssistant) {
+        updateAssistant(lastAssistant.id, (current) => ({
+          ...current,
+          text: "已取消高风险工具确认。",
+          completionStatus: "cancelled",
+        }));
+      }
       setPendingConfirmation(null);
       setStatus("已取消高风险工具");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "取消高风险工具失败");
     }
   }
 

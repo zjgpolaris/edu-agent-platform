@@ -1143,23 +1143,7 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
                     )
                     if legacy_step is None or str(legacy_step.operation) != str(data.get("tool_name") or ""):
                         raise ValueError("confirmation step does not match persisted plan")
-                    waiting_revision = int(current["revision"]) + 2
-                    token = issue_runtime_confirmation_token(
-                        str(legacy_step.operation),
-                        dict(legacy_step.input),
-                        ToolExecutionContext(
-                            actor_id=req.get("actor_id"),
-                            role=actor_role,
-                            student_id=req.get("student_id"),
-                            request_source="learning_assistant_runtime_v2",
-                            run_id=run_id,
-                            step_id=step_id,
-                            run_revision=waiting_revision,
-                        ),
-                    )
-                    metadata = {**(data.get("metadata") or {}), "confirmation_token": token}
-                    data = {**data, "metadata": metadata, "confirmation_token": token}
-                    runtime_confirmation = {"tool_name": str(legacy_step.operation), "step_id": step_id, "token": token}
+                    runtime_confirmation = {"tool_name": str(legacy_step.operation), "step_id": step_id, "token": ""}
                 persisted = controller.event(event_type, public_payload=data)
                 if event == "tool_start":
                     req["_runtime_run_revision"] = get_run(run_id)["revision"]
@@ -1168,7 +1152,31 @@ def stream_learning_assistant_events(req: LearningAssistantRequestData) -> Itera
                         {"step_id": runtime_confirmation["step_id"], "tool_name": runtime_confirmation["tool_name"]},
                         step_id=runtime_confirmation["step_id"],
                     )
-                    data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": waiting.sequence}
+                    waiting_run = get_run(run_id)
+                    token = issue_runtime_confirmation_token(
+                        runtime_confirmation["tool_name"],
+                        dict(legacy_step.input),
+                        ToolExecutionContext(
+                            actor_id=req.get("actor_id"),
+                            role=actor_role,
+                            student_id=req.get("student_id"),
+                            request_source="learning_assistant_runtime_v2",
+                            run_id=run_id,
+                            step_id=runtime_confirmation["step_id"],
+                            run_revision=int(waiting_run["revision"]),
+                        ),
+                    )
+                    runtime_confirmation["token"] = token
+                    metadata = {**(data.get("metadata") or {}), "confirmation_token": token}
+                    data = {
+                        **data,
+                        "metadata": metadata,
+                        "confirmation_token": token,
+                        "run_id": run_id,
+                        "run_revision": waiting_run["revision"],
+                        "event_cursor": waiting.sequence,
+                        "step_id": runtime_confirmation["step_id"],
+                    }
                 else:
                     data = {**data, "run_id": run_id, "run_revision": get_run(run_id)["revision"], "event_cursor": persisted.sequence}
             elif event == "final":

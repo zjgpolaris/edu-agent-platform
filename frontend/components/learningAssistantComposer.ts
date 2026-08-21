@@ -39,6 +39,7 @@ export function assistantCompletionLabel(status?: string) {
   if (status === "partial") return "已完成部分学习任务";
   if (status === "needs_clarification") return "等待补充信息";
   if (status === "waiting_confirmation") return "等待确认";
+  if (status === "cancelled") return "已取消";
   if (status === "failed") return "任务未完成";
   return "已完成";
 }

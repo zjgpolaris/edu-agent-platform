@@ -68,6 +68,19 @@ class AutoTutorStartRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
 
 
+def _persistable_tool_results(items: list[dict] | None) -> list[dict]:
+    """Strip ephemeral confirmation credentials before message persistence."""
+    persisted: list[dict] = []
+    for item in items or []:
+        clean = dict(item)
+        clean.pop("confirmation_token", None)
+        metadata = dict(clean.get("metadata") or {})
+        metadata.pop("confirmation_token", None)
+        clean["metadata"] = metadata
+        persisted.append(clean)
+    return persisted
+
+
 class AutoTutorAnswerRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=64)
     answer: str = Field(min_length=1, max_length=8)
@@ -323,7 +336,7 @@ async def learning_assistant_cancel_tool_confirmation(req: ToolConfirmationCance
 @router.post("/api/learning/assistant/chat")
 async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = Depends(require_auth)):
     from agents.learning_assistant import stream_learning_assistant_events
-    from services.learning_assistant_session_service import append_message, get_session, list_messages, prepare_regeneration, replace_assistant_message, validate_last_user_message
+    from services.learning_assistant_session_service import append_idempotent_user_message, append_message, get_session, list_messages, prepare_regeneration, replace_assistant_message, validate_last_user_message
     from security.auth import auth_required
     session = None
     if req.session_id:
@@ -362,6 +375,25 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
         req.grade = req.grade or textbook.get("grade")
         req.book_id = req.book_id or textbook.get("book_id")
         req.lesson_id = req.lesson_id or textbook.get("lesson_id")
+    existing_runtime_run = None
+    runtime_idempotency_active = False
+    if req.idempotency_key:
+        from agent_runtime.context import RuntimeV2Settings
+
+        runtime_settings = RuntimeV2Settings.from_env()
+        runtime_subject = str(actor.actor_id or req.student_id or req.session_id or "")
+        runtime_active, _ = runtime_settings.rollout_decision("learning_assistant", runtime_subject)
+        if runtime_active and runtime_settings.observable_ready:
+            runtime_idempotency_active = True
+            from agent_runtime.event_store import get_run_by_idempotency_key
+
+            existing_runtime_run = await run_in_threadpool(
+                get_run_by_idempotency_key,
+                actor_id=actor.actor_id,
+                idempotency_key=req.idempotency_key,
+            )
+            if existing_runtime_run and str(existing_runtime_run.get("session_id") or "") != str(req.session_id or ""):
+                raise HTTPException(status_code=409, detail="Idempotency key 已绑定到其他随问会话。")
     request_data = req.model_dump()
     request_data["actor_id"] = actor.actor_id
     request_data["actor_role"] = "student" if req.student_id and not auth_required() else actor.role
@@ -382,13 +414,25 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                 guardrail_step = {"event": "runtime_step", "data": {"trace_id": trace_id, "agent_name": "learning_assistant", "step_id": "guardrail_check", "step_name": "Guardrail Check", "event_type": "guardrail", "status": "failed", "latency_ms": None, "metadata": {"error_code": "guardrail_failed", "message": exc.detail}}}
                 raise HTTPException(status_code=exc.status_code, detail={"message": exc.detail, "events": [guardrail_step]}) from exc
             if session and not req.confirmation_decision and not regenerating and not reusing_last_user:
-                await run_in_threadpool(append_message, req.session_id, "user", req.message, metadata={"source_feature": session["source_feature"]})
+                try:
+                    if runtime_idempotency_active and req.idempotency_key:
+                        await run_in_threadpool(
+                            append_idempotent_user_message,
+                            req.session_id,
+                            req.message,
+                            idempotency_key=req.idempotency_key,
+                            source_feature=session["source_feature"],
+                        )
+                    elif existing_runtime_run is None:
+                        await run_in_threadpool(append_message, req.session_id, "user", req.message, metadata={"source_feature": session["source_feature"]})
+                except ValueError as exc:
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
             guardrail_step = {"event": "runtime_step", "data": {"trace_id": trace_id, "agent_name": "learning_assistant", "step_id": "guardrail_check", "step_name": "Guardrail Check", "sequence": 0, "event_type": "guardrail", "status": "success", "latency_ms": None, "metadata": {"route": "/api/learning/assistant/chat"}, "error": None}}
             record_audit_event(actor_id=actor.actor_id, action="learning_assistant.chat", resource_type="student" if req.student_id else None, resource_id=req.student_id, metadata={"stream": req.stream, "grade": req.grade})
             request_data["trace_id"] = trace_id
             events = list(stream_learning_assistant_events(request_data))
             final = next((data for event, data in events if event == "final"), None)
-            if session and final and final.get("response"):
+            if session and final and final.get("response") and not final.get("idempotent_replay"):
                 context_usage = final.get("context_usage") or {}
                 persist_fn = replace_assistant_message if regenerating else append_message
                 persist_args = (req.session_id, req.regenerate_message_id, final["response"]) if regenerating else (req.session_id, "assistant", final["response"])
@@ -397,7 +441,7 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                     *persist_args,
                     intent=final.get("intent"),
                     trace_id=trace_id,
-                    tool_results=final.get("tool_results") or [],
+                    tool_results=_persistable_tool_results(final.get("tool_results")),
                     metadata={
                         "history_messages": int(context_usage.get("history_messages") or 0),
                         "generation_mode": final.get("generation_mode"),
@@ -413,6 +457,7 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                         "verification_summary": final.get("verification_summary") or {},
                         "run_id": final.get("run_id"),
                         "run_revision": final.get("run_revision"),
+                        "event_cursor": final.get("event_cursor"),
                     },
                 )
                 final["message_id"] = persisted["message_id"]
@@ -432,7 +477,20 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                 yield sse_frame("error", {"message": exc.detail})
                 return
             if session and not req.confirmation_decision and not regenerating and not reusing_last_user:
-                await run_in_threadpool(append_message, req.session_id, "user", req.message, metadata={"source_feature": session["source_feature"]})
+                try:
+                    if runtime_idempotency_active and req.idempotency_key:
+                        await run_in_threadpool(
+                            append_idempotent_user_message,
+                            req.session_id,
+                            req.message,
+                            idempotency_key=req.idempotency_key,
+                            source_feature=session["source_feature"],
+                        )
+                    elif existing_runtime_run is None:
+                        await run_in_threadpool(append_message, req.session_id, "user", req.message, metadata={"source_feature": session["source_feature"]})
+                except ValueError as exc:
+                    yield sse_frame("error", {"code": "idempotency_conflict", "message": str(exc)})
+                    return
             record_audit_event(actor_id=actor.actor_id, action="learning_assistant.chat", resource_type="student" if req.student_id else None, resource_id=req.student_id, metadata={"stream": req.stream, "grade": req.grade})
             request_data["trace_id"] = trace_id
             iterator = stream_learning_assistant_events(request_data)
@@ -442,7 +500,7 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                     if item is None:
                         break
                     event, data = item
-                    if event == "final" and session and data.get("response"):
+                    if event == "final" and session and data.get("response") and not data.get("idempotent_replay"):
                         context_usage = data.get("context_usage") or {}
                         persist_fn = replace_assistant_message if regenerating else append_message
                         persist_args = (req.session_id, req.regenerate_message_id, data["response"]) if regenerating else (req.session_id, "assistant", data["response"])
@@ -451,7 +509,7 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                             *persist_args,
                             intent=data.get("intent"),
                             trace_id=trace_id,
-                            tool_results=data.get("tool_results") or [],
+                            tool_results=_persistable_tool_results(data.get("tool_results")),
                             metadata={
                                 "history_messages": int(context_usage.get("history_messages") or 0),
                                 "generation_mode": data.get("generation_mode"),
@@ -467,10 +525,11 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
                                 "verification_summary": data.get("verification_summary") or {},
                                 "run_id": data.get("run_id"),
                                 "run_revision": data.get("run_revision"),
+                                "event_cursor": data.get("event_cursor"),
                             },
                         )
                         data = {**data, "message_id": persisted["message_id"]}
-                    yield sse_frame(event, data)
+                    yield sse_frame(event, data, event_id=data.get("event_cursor"))
                     await asyncio.sleep(0)
             except Exception as exc:
                 yield sse_frame("error", {"message": str(exc) or "stream failed"})

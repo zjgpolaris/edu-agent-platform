@@ -9,8 +9,9 @@ from security.prompt_injection import evaluate_user_input, mask_sensitive
 from student_profile import LearningEvent, try_record_learning_event
 
 
-def sse_frame(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+def sse_frame(event: str, data: dict, *, event_id: int | str | None = None) -> str:
+    cursor = f"id: {event_id}\n" if event_id is not None else ""
+    return f"{cursor}event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 def next_stream_event(iterator):

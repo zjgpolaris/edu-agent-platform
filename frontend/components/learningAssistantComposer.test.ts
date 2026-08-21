@@ -38,6 +38,7 @@ describe("learning assistant composer", () => {
   it("labels partial and clarification completions explicitly", () => {
     expect(assistantCompletionLabel("partial")).toBe("已完成部分学习任务");
     expect(assistantCompletionLabel("needs_clarification")).toBe("等待补充信息");
+    expect(assistantCompletionLabel("cancelled")).toBe("已取消");
     expect(assistantCompletionLabel("completed")).toBe("已完成");
   });
 

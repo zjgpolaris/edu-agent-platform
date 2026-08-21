@@ -1,6 +1,7 @@
 """Persistent short-term conversations for the free-question learning assistant."""
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 from uuid import uuid4
@@ -402,6 +403,122 @@ def append_message(
             "session_id": session_id,
         })
     return list_messages(session_id, limit=1)[0]
+
+
+def append_idempotent_user_message(
+    session_id: str,
+    content: str,
+    *,
+    idempotency_key: str,
+    source_feature: str,
+) -> dict[str, Any]:
+    """Persist one Runtime-backed user turn exactly once.
+
+    A deterministic primary key makes the insert safe under concurrent retries
+    without adding a second idempotency table.  Reusing a key with different
+    content is rejected instead of replaying an unrelated Run.
+    """
+    session = get_session(session_id)
+    clean_content = content.strip()[:2000]
+    if not clean_content:
+        raise ValueError("assistant message content is empty")
+    digest = hashlib.sha256(f"{session_id}\0{idempotency_key}".encode("utf-8")).hexdigest()[:24]
+    message_id = f"lam_idem_{digest}"
+    now = now_iso()
+    metadata = {"source_feature": source_feature, "runtime_idempotency": True}
+    with get_connection() as conn:
+        result = conn.execute(text("""INSERT INTO assistant_messages (
+            message_id, session_id, role, content, intent, trace_id,
+            tool_results_json, metadata_json, created_at
+        ) VALUES (
+            :message_id, :session_id, 'user', :content, NULL, NULL,
+            '[]', :metadata_json, :created_at
+        ) ON CONFLICT(message_id) DO NOTHING"""), {
+            "message_id": message_id,
+            "session_id": session_id,
+            "content": clean_content,
+            "metadata_json": json.dumps(metadata, ensure_ascii=False),
+            "created_at": now,
+        })
+        row = conn.execute(text("""SELECT session_id, role, content FROM assistant_messages
+            WHERE message_id=:message_id"""), {"message_id": message_id}).mappings().first()
+        if (
+            not row
+            or str(row["session_id"]) != session_id
+            or str(row["role"]) != "user"
+            or str(row["content"]).strip() != clean_content
+        ):
+            raise ValueError("Idempotency key 已绑定到其他随问内容。")
+        if int(result.rowcount or 0) > 0:
+            title = clean_content[:40] if not session.get("title") else session.get("title")
+            conn.execute(text("""UPDATE assistant_sessions SET title=:title, updated_at=:updated_at
+                WHERE session_id=:session_id"""), {
+                "title": title,
+                "updated_at": now,
+                "session_id": session_id,
+            })
+    return {
+        "message_id": message_id,
+        "session_id": session_id,
+        "role": "user",
+        "content": clean_content,
+        "metadata": metadata,
+    }
+
+
+def update_message_for_runtime_run(
+    run_id: str,
+    *,
+    session_id: str | None = None,
+    status: str,
+    run_revision: int,
+    event_cursor: int,
+    tool_result: dict[str, Any] | None = None,
+    content: str | None = None,
+) -> str | None:
+    """Keep the persisted assistant message aligned with its canonical Run.
+
+    The message table intentionally has no second runtime state machine.  This
+    helper only updates the existing message whose metadata references run_id.
+    """
+    ensure_tables()
+    with get_connection() as conn:
+        rows = conn.execute(text("""SELECT message_id, tool_results_json, metadata_json
+            FROM assistant_messages WHERE role='assistant'
+              AND (:session_id IS NULL OR session_id=:session_id)
+            ORDER BY created_at DESC LIMIT 100"""), {"session_id": session_id}).mappings().all()
+        target = next(
+            (
+                dict(row)
+                for row in rows
+                if str(_loads(row.get("metadata_json"), {}).get("run_id") or "") == run_id
+            ),
+            None,
+        )
+        if target is None:
+            return None
+        metadata = _loads(target.get("metadata_json"), {})
+        metadata.update(
+            completion_status=status,
+            run_revision=int(run_revision),
+            event_cursor=int(event_cursor),
+        )
+        tools = _loads(target.get("tool_results_json"), [])
+        if tool_result:
+            replacement = _safe_tool_results([tool_result])[0]
+            tools = [item for item in tools if item.get("tool_name") != replacement.get("tool_name")]
+            tools.append(replacement)
+        next_content = str(content or "").strip()[:2000] or None
+        conn.execute(text("""UPDATE assistant_messages SET
+            content=COALESCE(:content, content),
+            tool_results_json=:tool_results_json, metadata_json=:metadata_json
+            WHERE message_id=:message_id"""), {
+            "content": next_content,
+            "tool_results_json": json.dumps(tools, ensure_ascii=False),
+            "metadata_json": json.dumps(metadata, ensure_ascii=False),
+            "message_id": target["message_id"],
+        })
+    return str(target["message_id"])
 
 
 def set_message_feedback(session_id: str, message_id: str, feedback: str) -> dict[str, Any]:

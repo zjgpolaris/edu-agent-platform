@@ -141,6 +141,19 @@ def get_run_state(run_id: str) -> AgentRunState:
     return AgentRunState.model_validate(get_run(run_id)["state"])
 
 
+def get_run_by_idempotency_key(*, actor_id: str, idempotency_key: str) -> dict[str, Any] | None:
+    """Resolve the canonical actor-scoped run before product message writes."""
+    if not actor_id or not idempotency_key:
+        return None
+    ensure_runtime_tables()
+    with get_connection() as conn:
+        row = conn.execute(
+            text("SELECT * FROM agent_runs WHERE idempotency_scope=:scope AND idempotency_key=:key"),
+            {"scope": f"actor:{actor_id}", "key": idempotency_key},
+        ).mappings().first()
+    return _public_run(dict(row)) if row else None
+
+
 def create_run(
     context: AgentContext,
     *,
