@@ -1,0 +1,380 @@
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "objective_id": "history:戊戌变法:cause:v1",
+      "entity": "戊戌变法",
+      "aspect": "cause",
+      "grade": "八年级上册",
+      "lesson": "第6课 戊戌变法",
+      "target_outcome": "解释戊戌变法失败的主要原因，并区分失败原因与历史影响",
+      "explanation": "戊戌变法触犯了以慈禧太后为首的顽固派利益，遭到强烈阻挠。维新派自身力量弱小，缺乏可靠的组织、军队和广泛群众支持，又把希望主要寄托在没有实权的光绪帝身上。慈禧太后发动政变后，变法最终失败。思想启蒙是变法产生的影响，不能当作失败原因。",
+      "claims": [
+        {
+          "claim_id": "wuxu-cause-claim-1",
+          "text": "顽固派的强烈阻挠与慈禧太后发动政变，是戊戌变法失败的重要原因。",
+          "source_ids": ["autotutor:textbook:wuxu:cause:v1"],
+          "objective_aspect": "cause"
+        },
+        {
+          "claim_id": "wuxu-cause-claim-2",
+          "text": "维新派力量弱小，缺乏有力支持并依赖没有实权的光绪帝。",
+          "source_ids": ["autotutor:textbook:wuxu:cause:v1"],
+          "objective_aspect": "cause"
+        }
+      ],
+      "key_points": ["顽固派阻挠", "维新派力量弱小", "依赖无实权的皇帝"],
+      "example": "判断一句话时先问：它是在回答“为什么失败”，还是在说明“失败后产生了什么影响”。",
+      "practice_items": [
+        {
+          "assessment_id": "wuxu-cause-practice-1",
+          "objective_id": "history:戊戌变法:cause:v1",
+          "kind": "practice",
+          "stem": "戊戌变法推行一百多天后失败，其失败的主要原因是？",
+          "options": [
+            {"option_id": "A", "text": "变法触犯顽固派利益，维新派力量弱小，又依赖无实权的皇帝", "is_correct": true, "feedback": "正确。这同时指出了顽固派阻挠和维新派自身力量不足。", "source_ids": ["autotutor:textbook:wuxu:cause:v1"]},
+            {"option_id": "B", "text": "变法在社会上起到了思想启蒙作用", "is_correct": false, "misconception_code": "cause_impact_confusion", "feedback": "这是戊戌变法的历史影响，不是它失败的原因。"},
+            {"option_id": "C", "text": "外国列强直接出兵镇压了变法", "is_correct": false, "misconception_code": "external_cause_overstatement", "feedback": "变法失败的直接政治力量来自清廷顽固派，不能虚构为列强直接出兵。"},
+            {"option_id": "D", "text": "变法已经使清政府走上富强道路", "is_correct": false, "misconception_code": "outcome_counterfactual", "feedback": "变法很快失败，并未使清政府走上富强道路。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "explain",
+          "source_ids": ["autotutor:textbook:wuxu:cause:v1"],
+          "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "wuxu-cause-practice-2",
+          "objective_id": "history:戊戌变法:cause:v1",
+          "kind": "practice",
+          "stem": "下列哪一项属于戊戌变法失败原因，而不是变法产生的影响？",
+          "options": [
+            {"option_id": "A", "text": "促进了思想启蒙", "is_correct": false, "misconception_code": "cause_impact_confusion", "feedback": "思想启蒙属于影响。题目要求选择失败原因。"},
+            {"option_id": "B", "text": "维新派力量弱小并遭到顽固派阻挠", "is_correct": true, "feedback": "正确。这一项直接解释了变法为什么难以持续。", "source_ids": ["autotutor:textbook:wuxu:cause:v1"]},
+            {"option_id": "C", "text": "推动了新式学堂的发展", "is_correct": false, "misconception_code": "cause_measure_confusion", "feedback": "这是变法措施及其后续影响，不是失败原因。"},
+            {"option_id": "D", "text": "传播了变法图强思想", "is_correct": false, "misconception_code": "cause_significance_confusion", "feedback": "传播思想属于影响或意义，不是失败原因。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "compare",
+          "source_ids": ["autotutor:textbook:wuxu:cause:v1"],
+          "variant_of": "wuxu-cause-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "exit_ticket_items": [
+        {
+          "assessment_id": "wuxu-cause-exit-1",
+          "objective_id": "history:戊戌变法:cause:v1",
+          "kind": "exit_ticket",
+          "stem": "某次改革只依靠少数上层人物，既没有可靠军队，也没有广泛社会支持。用戊戌变法的经验判断，这最可能暴露什么问题？",
+          "options": [
+            {"option_id": "A", "text": "改革力量薄弱，面对既得利益集团反击时难以坚持", "is_correct": true, "feedback": "正确。你把戊戌变法失败原因迁移到了新的改革情境。", "source_ids": ["autotutor:textbook:wuxu:cause:v1"]},
+            {"option_id": "B", "text": "改革一定会立即完成思想启蒙", "is_correct": false, "misconception_code": "cause_impact_confusion", "feedback": "思想影响不能代替对失败风险的判断。"},
+            {"option_id": "C", "text": "改革措施越少越容易成功", "is_correct": false, "misconception_code": "unsupported_generalization", "feedback": "材料强调的是力量基础，不是措施数量。"},
+            {"option_id": "D", "text": "只要皇帝支持，改革必然成功", "is_correct": false, "misconception_code": "single_factor_absolutism", "feedback": "戊戌变法说明只依赖没有实权的皇帝并不足以保障成功。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "apply",
+          "source_ids": ["autotutor:textbook:wuxu:cause:v1"],
+          "variant_of": "wuxu-cause-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "source_refs": [{"source_id": "autotutor:textbook:wuxu:cause:v1", "label": "第6课 戊戌变法", "answer_bearing": true}],
+      "review_status": "curriculum_reviewed",
+      "reviewed_by": "eduagent-curriculum-baseline",
+      "content_version": "v1"
+    },
+    {
+      "objective_id": "history:洋务运动:purpose:v1",
+      "entity": "洋务运动",
+      "aspect": "purpose",
+      "grade": "八年级上册",
+      "lesson": "第4课 洋务运动",
+      "target_outcome": "说明洋务运动的根本目的，并区分目的、口号与影响",
+      "explanation": "第二次鸦片战争后，洋务派主张利用西方先进技术强兵富国。洋务运动以“自强”“求富”为口号，这些是实现目标的路径；它的根本目的是维护和巩固清政府的统治。客观上促进近代化属于运动产生的影响，不能替代对根本目的的回答。",
+      "claims": [
+        {"claim_id": "westernization-purpose-claim-1", "text": "洋务运动的根本目的是维护和巩固清政府的统治。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"], "objective_aspect": "purpose"},
+        {"claim_id": "westernization-purpose-claim-2", "text": "“自强”“求富”是洋务运动的口号和实现目标的路径。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"], "objective_aspect": "purpose"}
+      ],
+      "key_points": ["根本目的：维护清朝统治", "口号：自强、求富", "影响不等于目的"],
+      "example": "“创办工厂”是做法，“促进近代化”是影响，“维护清朝统治”才是根本目的。",
+      "practice_items": [
+        {
+          "assessment_id": "westernization-purpose-practice-1",
+          "objective_id": "history:洋务运动:purpose:v1",
+          "kind": "practice",
+          "stem": "洋务派掀起洋务运动的根本目的是？",
+          "options": [
+            {"option_id": "A", "text": "维护和巩固清政府的统治", "is_correct": true, "feedback": "正确。利用西方技术、自强求富都是为维护清朝统治服务。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"]},
+            {"option_id": "B", "text": "推翻清政府并建立民主共和国", "is_correct": false, "misconception_code": "movement_goal_confusion", "feedback": "这是革命派的政治目标，不是洋务派的目标。"},
+            {"option_id": "C", "text": "让中国立即成为资本主义强国", "is_correct": false, "misconception_code": "purpose_outcome_overstatement", "feedback": "洋务派并不以改变封建统治制度为目标。"},
+            {"option_id": "D", "text": "传播民主科学思想", "is_correct": false, "misconception_code": "movement_period_confusion", "feedback": "民主与科学是新文化运动的重要口号，与洋务运动目的不同。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "recall",
+          "source_ids": ["autotutor:textbook:westernization:purpose:v1"],
+          "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "westernization-purpose-practice-2",
+          "objective_id": "history:洋务运动:purpose:v1",
+          "kind": "practice",
+          "stem": "如何准确理解洋务运动的“自强”“求富”与根本目的之间的关系？",
+          "options": [
+            {"option_id": "A", "text": "“自强”“求富”是口号和路径，根本目的仍是维护清朝统治", "is_correct": true, "feedback": "正确。你区分了手段、口号和根本目的。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"]},
+            {"option_id": "B", "text": "“自强”“求富”证明洋务派要推翻君主制", "is_correct": false, "misconception_code": "means_goal_confusion", "feedback": "洋务派属于清朝统治集团，并不主张推翻君主制。"},
+            {"option_id": "C", "text": "“自强”“求富”是洋务运动失败后的历史影响", "is_correct": false, "misconception_code": "purpose_impact_confusion", "feedback": "它们是运动中的口号，不是失败后的影响。"},
+            {"option_id": "D", "text": "口号与根本目的完全相同，不需要区分", "is_correct": false, "misconception_code": "concept_layer_confusion", "feedback": "口号描述追求，根本目的解释洋务派为何这样做，需要区分。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "compare",
+          "source_ids": ["autotutor:textbook:westernization:purpose:v1"],
+          "variant_of": "westernization-purpose-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "exit_ticket_items": [
+        {
+          "assessment_id": "westernization-purpose-exit-1",
+          "objective_id": "history:洋务运动:purpose:v1",
+          "kind": "exit_ticket",
+          "stem": "洋务派创办近代企业、编练新式军队，却没有改变清朝政治制度。这最能说明其根本目的是什么？",
+          "options": [
+            {"option_id": "A", "text": "借助新技术巩固原有统治", "is_correct": true, "feedback": "正确。材料中的做法服务于维护和巩固清政府统治。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"]},
+            {"option_id": "B", "text": "建立资产阶级共和国", "is_correct": false, "misconception_code": "movement_goal_confusion", "feedback": "洋务派没有改变封建政治制度的目标。"},
+            {"option_id": "C", "text": "发动群众革命", "is_correct": false, "misconception_code": "actor_confusion", "feedback": "洋务派是清朝官员，不以群众革命为目的。"},
+            {"option_id": "D", "text": "彻底摆脱外国技术", "is_correct": false, "misconception_code": "means_reversal", "feedback": "洋务运动恰恰主张学习和利用西方先进技术。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "apply",
+          "source_ids": ["autotutor:textbook:westernization:purpose:v1"],
+          "variant_of": "westernization-purpose-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "source_refs": [{"source_id": "autotutor:textbook:westernization:purpose:v1", "label": "第4课 洋务运动", "answer_bearing": true}],
+      "review_status": "curriculum_reviewed",
+      "reviewed_by": "eduagent-curriculum-baseline",
+      "content_version": "v1"
+    },
+    {
+      "objective_id": "history:赤壁之战:impact:v1",
+      "entity": "赤壁之战",
+      "aspect": "impact",
+      "grade": "七年级上册",
+      "lesson": "第16课 三国鼎立",
+      "target_outcome": "说明赤壁之战对三国鼎立局面形成的影响",
+      "explanation": "208年的赤壁之战中，孙刘联军击败曹军。战后曹操退回北方，孙权在长江中下游的地位得到巩固，刘备也获得发展机会。北方统一全国的进程受阻，赤壁之战为三国鼎立局面的形成奠定了基础。战争经过中的火攻不能代替对历史影响的回答。",
+      "claims": [
+        {"claim_id": "redcliff-impact-claim-1", "text": "赤壁之战为三国鼎立局面的形成奠定了基础。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"], "objective_aspect": "impact"},
+        {"claim_id": "redcliff-impact-claim-2", "text": "曹操退回北方，孙权和刘备获得巩固与发展的机会。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"], "objective_aspect": "impact"}
+      ],
+      "key_points": ["曹操退回北方", "孙刘势力发展", "奠定三国鼎立基础"],
+      "example": "“黄盖火攻”回答战役怎么打，“为三国鼎立奠定基础”才回答战役带来什么影响。",
+      "practice_items": [
+        {
+          "assessment_id": "redcliff-impact-practice-1",
+          "objective_id": "history:赤壁之战:impact:v1",
+          "kind": "practice",
+          "stem": "赤壁之战产生的最重要历史影响是？",
+          "options": [
+            {"option_id": "A", "text": "为三国鼎立局面的形成奠定基础", "is_correct": true, "feedback": "正确。战后北方统一全国受阻，孙刘势力得到发展。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"]},
+            {"option_id": "B", "text": "结束了东汉政权", "is_correct": false, "misconception_code": "result_timeline_confusion", "feedback": "东汉政权直到220年才结束，不能归因于赤壁之战。"},
+            {"option_id": "C", "text": "实现了全国统一", "is_correct": false, "misconception_code": "impact_reversal", "feedback": "赤壁之战阻止了曹操当时统一全国，随后走向三国鼎立。"},
+            {"option_id": "D", "text": "直接建立了西晋", "is_correct": false, "misconception_code": "dynasty_timeline_confusion", "feedback": "西晋建立在更晚时期，与赤壁之战的直接影响不同。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "explain",
+          "source_ids": ["autotutor:textbook:redcliff:impact:v1"],
+          "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "redcliff-impact-practice-2",
+          "objective_id": "history:赤壁之战:impact:v1",
+          "kind": "practice",
+          "stem": "赤壁之战后政治力量格局发生了怎样的变化？",
+          "options": [
+            {"option_id": "A", "text": "曹操退回北方，孙权和刘备获得巩固发展的机会", "is_correct": true, "feedback": "正确。这一变化推动了三国鼎立局面的形成。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"]},
+            {"option_id": "B", "text": "孙刘联军立即统一全国", "is_correct": false, "misconception_code": "impact_overstatement", "feedback": "孙刘获胜后并未统一全国。"},
+            {"option_id": "C", "text": "曹操势力从此完全消失", "is_correct": false, "misconception_code": "outcome_absolutism", "feedback": "曹操仍控制北方，只是南下统一受阻。"},
+            {"option_id": "D", "text": "南北朝对峙局面正式形成", "is_correct": false, "misconception_code": "period_confusion", "feedback": "南北朝是更晚时期，不能与三国格局混淆。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "explain",
+          "source_ids": ["autotutor:textbook:redcliff:impact:v1"],
+          "variant_of": "redcliff-impact-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "exit_ticket_items": [
+        {
+          "assessment_id": "redcliff-impact-exit-1",
+          "objective_id": "history:赤壁之战:impact:v1",
+          "kind": "exit_ticket",
+          "stem": "一场战役使北方势力统一全国的计划受阻，南方两支力量获得发展空间。该材料最适合说明赤壁之战的哪项影响？",
+          "options": [
+            {"option_id": "A", "text": "推动三国鼎立局面的形成", "is_correct": true, "feedback": "正确。你根据战后力量变化判断出了战役影响。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"]},
+            {"option_id": "B", "text": "促成秦朝统一", "is_correct": false, "misconception_code": "period_confusion", "feedback": "秦朝统一远早于赤壁之战。"},
+            {"option_id": "C", "text": "开创科举制度", "is_correct": false, "misconception_code": "institution_event_confusion", "feedback": "科举制度与赤壁之战的影响无关。"},
+            {"option_id": "D", "text": "完成西晋统一", "is_correct": false, "misconception_code": "later_outcome_confusion", "feedback": "西晋统一发生在三国之后，不是该战役的直接影响。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "apply",
+          "source_ids": ["autotutor:textbook:redcliff:impact:v1"],
+          "variant_of": "redcliff-impact-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "source_refs": [{"source_id": "autotutor:textbook:redcliff:impact:v1", "label": "第16课 三国鼎立", "answer_bearing": true}],
+      "review_status": "curriculum_reviewed",
+      "reviewed_by": "eduagent-curriculum-baseline",
+      "content_version": "v1"
+    },
+    {
+      "objective_id": "history:辛亥革命:significance:v1",
+      "entity": "辛亥革命",
+      "aspect": "significance",
+      "grade": "八年级上册",
+      "lesson": "第9课 辛亥革命",
+      "target_outcome": "概括辛亥革命的历史意义并辨析其局限",
+      "explanation": "辛亥革命推翻了清王朝的反动统治，宣告中国两千多年君主专制制度的终结。它拉开了中国完全意义上的近代民族民主革命的序幕，推动了中华民族的思想解放和社会进步。但革命果实后来被袁世凯窃取，中国半殖民地半封建社会性质没有根本改变，因此不能说革命完成了全部反帝反封建任务。",
+      "claims": [
+        {"claim_id": "xinhai-significance-claim-1", "text": "辛亥革命推翻清王朝并终结两千多年君主专制制度。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"], "objective_aspect": "significance"},
+        {"claim_id": "xinhai-significance-claim-2", "text": "辛亥革命推动思想解放，拉开完全意义上的近代民族民主革命序幕。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"], "objective_aspect": "significance"}
+      ],
+      "key_points": ["推翻清王朝", "终结君主专制", "推动思想解放"],
+      "example": "评价历史事件既要说明它改变了什么，也要说明哪些根本问题仍未解决。",
+      "practice_items": [
+        {
+          "assessment_id": "xinhai-significance-practice-1",
+          "objective_id": "history:辛亥革命:significance:v1",
+          "kind": "practice",
+          "stem": "下列对辛亥革命历史意义的概括最准确的是？",
+          "options": [
+            {"option_id": "A", "text": "推翻清王朝、终结君主专制制度并推动思想解放", "is_correct": true, "feedback": "正确。这一概括同时抓住政治制度变化和思想影响。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"]},
+            {"option_id": "B", "text": "彻底改变中国半殖民地半封建社会性质", "is_correct": false, "misconception_code": "significance_overstatement", "feedback": "辛亥革命没有根本改变中国的社会性质。"},
+            {"option_id": "C", "text": "完成全部反帝反封建任务", "is_correct": false, "misconception_code": "task_completion_overstatement", "feedback": "革命任务并未全部完成，需要看到辛亥革命的局限。"},
+            {"option_id": "D", "text": "建立并长期巩固民主共和制度", "is_correct": false, "misconception_code": "outcome_duration_overstatement", "feedback": "民主共和观念得到传播，但革命果实被袁世凯窃取。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "explain",
+          "source_ids": ["autotutor:textbook:xinhai:significance:v1"],
+          "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "xinhai-significance-practice-2",
+          "objective_id": "history:辛亥革命:significance:v1",
+          "kind": "practice",
+          "stem": "“皇帝倒了，民主共和观念逐渐深入人心。”这句话主要说明辛亥革命的什么意义？",
+          "options": [
+            {"option_id": "A", "text": "终结君主专制并推动思想解放", "is_correct": true, "feedback": "正确。材料分别对应制度终结和思想观念变化。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"]},
+            {"option_id": "B", "text": "使中国立即成为世界强国", "is_correct": false, "misconception_code": "significance_overstatement", "feedback": "材料没有说明国家立即富强。"},
+            {"option_id": "C", "text": "彻底消除外国侵略势力", "is_correct": false, "misconception_code": "anti_imperial_completion", "feedback": "辛亥革命没有彻底完成反帝任务。"},
+            {"option_id": "D", "text": "恢复清王朝统治", "is_correct": false, "misconception_code": "historical_reversal", "feedback": "辛亥革命推翻了清王朝，不能反向理解。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "apply",
+          "source_ids": ["autotutor:textbook:xinhai:significance:v1"],
+          "variant_of": "xinhai-significance-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "exit_ticket_items": [
+        {
+          "assessment_id": "xinhai-significance-exit-1",
+          "objective_id": "history:辛亥革命:significance:v1",
+          "kind": "exit_ticket",
+          "stem": "辛亥革命结束了君主专制制度，但中国社会性质没有根本改变。由此应怎样评价它？",
+          "options": [
+            {"option_id": "A", "text": "既有重大的制度和思想意义，也存在未完成革命任务的局限", "is_correct": true, "feedback": "正确。这是兼顾历史贡献和局限的评价。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"]},
+            {"option_id": "B", "text": "因为有局限，所以没有任何历史意义", "is_correct": false, "misconception_code": "all_or_nothing_evaluation", "feedback": "有局限不等于没有意义，应同时评价贡献和不足。"},
+            {"option_id": "C", "text": "已经彻底完成反帝反封建任务", "is_correct": false, "misconception_code": "task_completion_overstatement", "feedback": "材料已明确社会性质没有根本改变。"},
+            {"option_id": "D", "text": "只是一场没有政治影响的思想运动", "is_correct": false, "misconception_code": "event_nature_confusion", "feedback": "辛亥革命推翻清王朝，具有直接而重大的政治影响。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "apply",
+          "source_ids": ["autotutor:textbook:xinhai:significance:v1"],
+          "variant_of": "xinhai-significance-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "source_refs": [{"source_id": "autotutor:textbook:xinhai:significance:v1", "label": "第9课 辛亥革命", "answer_bearing": true}],
+      "review_status": "curriculum_reviewed",
+      "reviewed_by": "eduagent-curriculum-baseline",
+      "content_version": "v1"
+    },
+    {
+      "objective_id": "history:鸦片战争:impact:v1",
+      "entity": "鸦片战争",
+      "aspect": "impact",
+      "grade": "八年级上册",
+      "lesson": "第1课 鸦片战争",
+      "target_outcome": "说明鸦片战争对中国社会性质和历史进程的影响",
+      "explanation": "鸦片战争后，清政府被迫签订《南京条约》等不平等条约，中国的领土、关税和司法等主权受到破坏。中国开始从封建社会变为半殖民地半封建社会，鸦片战争成为中国近代史的开端。战争爆发原因和战争经过不能代替对战后影响的回答。",
+      "claims": [
+        {"claim_id": "opium-impact-claim-1", "text": "鸦片战争后中国主权受到破坏，开始沦为半殖民地半封建社会。", "source_ids": ["autotutor:textbook:opium:impact:v1"], "objective_aspect": "impact"},
+        {"claim_id": "opium-impact-claim-2", "text": "鸦片战争成为中国近代史的开端。", "source_ids": ["autotutor:textbook:opium:impact:v1"], "objective_aspect": "impact"}
+      ],
+      "key_points": ["主权遭到破坏", "社会性质变化", "中国近代史开端"],
+      "example": "“英国为什么发动战争”是原因，“战后中国社会发生什么变化”才是影响。",
+      "practice_items": [
+        {
+          "assessment_id": "opium-impact-practice-1",
+          "objective_id": "history:鸦片战争:impact:v1",
+          "kind": "practice",
+          "stem": "鸦片战争对中国社会产生的最深远影响是？",
+          "options": [
+            {"option_id": "A", "text": "中国开始沦为半殖民地半封建社会，近代史由此开端", "is_correct": true, "feedback": "正确。这概括了社会性质和历史进程的变化。", "source_ids": ["autotutor:textbook:opium:impact:v1"]},
+            {"option_id": "B", "text": "中国立即变成完全殖民地", "is_correct": false, "misconception_code": "social_nature_overstatement", "feedback": "教材表述是开始沦为半殖民地半封建社会，不是完全殖民地。"},
+            {"option_id": "C", "text": "清王朝统治立即结束", "is_correct": false, "misconception_code": "timeline_overstatement", "feedback": "清王朝仍继续统治，直到辛亥革命后结束。"},
+            {"option_id": "D", "text": "中国完成了工业化", "is_correct": false, "misconception_code": "modernization_outcome_confusion", "feedback": "鸦片战争并未使中国完成工业化。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "explain",
+          "source_ids": ["autotutor:textbook:opium:impact:v1"],
+          "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "opium-impact-practice-2",
+          "objective_id": "history:鸦片战争:impact:v1",
+          "kind": "practice",
+          "stem": "《南京条约》等不平等条约签订后，中国领土、关税等主权受到破坏。这说明鸦片战争带来了什么变化？",
+          "options": [
+            {"option_id": "A", "text": "中国社会的半殖民地化程度开始加深", "is_correct": true, "feedback": "正确。主权受损是半殖民地化开始的重要表现。", "source_ids": ["autotutor:textbook:opium:impact:v1"]},
+            {"option_id": "B", "text": "中国完全摆脱外国侵略", "is_correct": false, "misconception_code": "historical_reversal", "feedback": "不平等条约使外国侵略权益扩大，而不是被摆脱。"},
+            {"option_id": "C", "text": "封建制度立即消失", "is_correct": false, "misconception_code": "social_nature_overstatement", "feedback": "封建制度仍然存在，所以称半殖民地半封建社会。"},
+            {"option_id": "D", "text": "中国已经建立民主共和国", "is_correct": false, "misconception_code": "period_confusion", "feedback": "民主共和国建立在辛亥革命之后，与鸦片战争影响不同。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "apply",
+          "source_ids": ["autotutor:textbook:opium:impact:v1"],
+          "variant_of": "opium-impact-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "exit_ticket_items": [
+        {
+          "assessment_id": "opium-impact-exit-1",
+          "objective_id": "history:鸦片战争:impact:v1",
+          "kind": "exit_ticket",
+          "stem": "如果一个国家战败后被迫割地、协定关税并开放通商口岸，这些变化最能说明鸦片战争后的哪项影响？",
+          "options": [
+            {"option_id": "A", "text": "国家主权遭到破坏，社会性质开始发生变化", "is_correct": true, "feedback": "正确。你从条约权益变化推断出了社会影响。", "source_ids": ["autotutor:textbook:opium:impact:v1"]},
+            {"option_id": "B", "text": "国家主权得到进一步巩固", "is_correct": false, "misconception_code": "impact_reversal", "feedback": "割地和协定关税都意味着主权受损。"},
+            {"option_id": "C", "text": "封建经济已经完全消失", "is_correct": false, "misconception_code": "social_nature_overstatement", "feedback": "中国仍保留封建因素，不能说完全消失。"},
+            {"option_id": "D", "text": "对外贸易从此完全停止", "is_correct": false, "misconception_code": "trade_outcome_reversal", "feedback": "通商口岸开放意味着被迫扩大对外贸易，不是完全停止。"}
+          ],
+          "difficulty": "medium",
+          "cognitive_action": "apply",
+          "source_ids": ["autotutor:textbook:opium:impact:v1"],
+          "variant_of": "opium-impact-practice-1",
+          "generation_mode": "curated"
+        }
+      ],
+      "source_refs": [{"source_id": "autotutor:textbook:opium:impact:v1", "label": "第1课 鸦片战争", "answer_bearing": true}],
+      "review_status": "curriculum_reviewed",
+      "reviewed_by": "eduagent-curriculum-baseline",
+      "content_version": "v1"
+    }
+  ]
+}

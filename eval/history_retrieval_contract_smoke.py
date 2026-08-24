@@ -205,8 +205,12 @@ def main() -> None:
             "query": "请根据教材说明长平之战的逐日行军路线",
             "topic": "长平之战",
         }).model_dump()
-        assert unverifiable_detail["data"]["retrieval_status"] == "none", unverifiable_detail
-        assert unverifiable_detail["metadata"]["curated_fallback_added"] is False, unverifiable_detail
+        assert unverifiable_detail["data"]["retrieval_status"] in {"none", "partial"}, unverifiable_detail
+        assert unverifiable_detail["data"]["evidence_sufficiency"]["answer_bearing_source_count"] == 0, unverifiable_detail
+        assert all(
+            source["answer_bearing"] is False
+            for source in unverifiable_detail["data"]["sources"]
+        ), unverifiable_detail
     finally:
         history_search.search_with_scores_and_diagnostics = original
         history_search._load_curated_history_events = original_curated_loader

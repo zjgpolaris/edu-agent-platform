@@ -57,6 +57,8 @@ export default defineConfig({
         EDU_AGENT_RUNTIME_V2_PERCENT_BPS: "10000",
         EDU_AGENT_RUNTIME_V2_ARTIFACT_ENABLED: "true",
         EDU_AGENT_RUNTIME_V2_LEARNING_ASSISTANT_BPS: "10000",
+        EDU_AGENT_AUTOTUTOR_CONTENT_GATE_MODE: "enforce",
+        EDU_AGENT_AUTOTUTOR_CONTENT_GATE_BPS: "10000",
       },
       url: `http://127.0.0.1:${backendPort}/api/health`,
       reuseExistingServer: false,

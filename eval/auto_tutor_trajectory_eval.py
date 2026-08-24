@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 DEFAULT_LOCAL_EMBED_MODEL_PATH = Path("/Users/cengjiguang/.cache/modelscope/BAAI/bge-large-zh-v1___5")
@@ -23,6 +24,14 @@ if not os.environ.get("EMBED_MODEL_PATH") and DEFAULT_LOCAL_EMBED_MODEL_PATH.exi
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
+DB_PATH = Path(tempfile.gettempdir()) / "edu-agent-auto-tutor-trajectory.sqlite3"
+os.environ["DATABASE_URL"] = f"sqlite:///{DB_PATH}"
+os.environ["EDU_AGENT_AUTOTUTOR_CONTENT_GATE_MODE"] = "enforce"
+os.environ["EDU_AGENT_AUTOTUTOR_CONTENT_GATE_BPS"] = "10000"
+try:
+    DB_PATH.unlink()
+except FileNotFoundError:
+    pass
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -78,8 +87,8 @@ def _tag_covered(tag: str, plan: list[dict]) -> bool:
 def case_plan_targets_weakpoints() -> tuple[bool, str, dict]:
     """规划合理性：计划对准薄弱点，且不同学生计划不同。"""
     sid_a, sid_b = "traj-plan-a", "traj-plan-b"
-    _seed(sid_a, ["鸦片战争", "戊戌变法"])
-    _seed(sid_b, ["科举制", "安史之乱"])
+    _seed(sid_a, ["戊戌变法失败原因", "鸦片战争影响"])
+    _seed(sid_b, ["洋务运动目的", "赤壁之战影响"])
     st_a = at.start_session(sid_a, grade="八年级上册", actor_role="student")
     st_b = at.start_session(sid_b, grade="七年级下册", actor_role="student")
     plan_a, plan_b = st_a["lesson_plan"], st_b["lesson_plan"]
@@ -89,7 +98,7 @@ def case_plan_targets_weakpoints() -> tuple[bool, str, dict]:
     }
     if not plan_a:
         return False, "plan_a empty", detail
-    covered = sum(1 for t in ["鸦片战争", "戊戌变法"] if _tag_covered(t, plan_a))
+    covered = sum(1 for t in ["戊戌变法失败原因", "鸦片战争影响"] if _tag_covered(t, plan_a))
     if covered == 0:
         return False, "plan does not target seeded weakpoints", detail
     points_a = {p["knowledge_point"] for p in plan_a}
@@ -102,7 +111,7 @@ def case_plan_targets_weakpoints() -> tuple[bool, str, dict]:
 def case_wrong_answer_triggers_replan() -> tuple[bool, str, dict]:
     """反思触发正确性（正例）：答错 → reflect → 真实 re-plan。"""
     sid = "traj-replan"
-    _seed(sid, ["鸦片战争", "辛亥革命"])
+    _seed(sid, ["鸦片战争影响"])
     st = at.start_session(sid, grade="八年级上册", actor_role="student")
     sess = st["session_id"]
     before = [(p["knowledge_point"], p["difficulty"]) for p in st["lesson_plan"]]
@@ -133,7 +142,7 @@ def case_wrong_answer_triggers_replan() -> tuple[bool, str, dict]:
 def case_correct_answer_no_spurious_replan() -> tuple[bool, str, dict]:
     """反思触发正确性（反例）：答对不该乱反思 / 乱改计划。"""
     sid = "traj-correct"
-    _seed(sid, ["唐朝", "宋朝"])
+    _seed(sid, ["赤壁之战影响"])
     st = at.start_session(sid, grade="七年级下册", actor_role="student")
     sess = st["session_id"]
     res = at.submit_answer(sess, _current_correct_letter(sess), actor_role="student")
@@ -150,7 +159,7 @@ def case_correct_answer_no_spurious_replan() -> tuple[bool, str, dict]:
 def case_closure_writes_memory_and_review() -> tuple[bool, str, dict]:
     """闭环命中：课后写 memory + 掌握证据累积（掌握度模型：单次答对记 evidence，未必立即移除）。"""
     sid = "traj-closure"
-    _seed(sid, ["分封制", "甲骨文"])
+    _seed(sid, ["辛亥革命历史意义"])
     st = at.start_session(sid, grade="七年级上册", actor_role="student")
     sess = st["session_id"]
     guard = 0
@@ -186,8 +195,8 @@ def case_focus_tags_prioritized_in_plan() -> tuple[bool, str, dict]:
     导致 focus_tags 在 LLM 可用时失效。现已在 plan prompt 显式 pin。
     """
     sid = "traj-focus"
-    _seed(sid, ["科举制", "安史之乱", "贞观之治"])
-    focus = "安史之乱"
+    _seed(sid, ["鸦片战争影响", "洋务运动目的", "辛亥革命历史意义"])
+    focus = "洋务运动目的"
     st = at.start_session(sid, grade="七年级下册", actor_role="student", focus_tags=[focus])
     plan = st["lesson_plan"]
     detail = {"plan": [p["knowledge_point"] for p in plan], "focus": focus,
@@ -204,7 +213,7 @@ def case_focus_tags_prioritized_in_plan() -> tuple[bool, str, dict]:
 def case_repeated_wrong_downgrades_difficulty() -> tuple[bool, str, dict]:
     """连续答错应触发难度下调（reflect→re_plan 中 hard/medium 逐步降级）。"""
     sid = "traj-downgrade"
-    _seed(sid, ["鸦片战争", "洋务运动"])
+    _seed(sid, ["洋务运动目的"])
     st = at.start_session(sid, grade="八年级上册", actor_role="student")
     sess = st["session_id"]
     diffs: list[str] = []
@@ -311,7 +320,7 @@ def case_exit_ticket_result_written_to_learning_events() -> tuple[bool, str, dic
 def case_exit_ticket_wrong_records_weakpoint() -> tuple[bool, str, dict]:
     """退出票答错后应回流/强化错题本。"""
     sid = "traj-exit-wrong"
-    tag = "甲午中日战争"
+    tag = "鸦片战争影响"
     _seed(sid, [tag])
     before = {w["knowledge_tag"]: int(w.get("wrong_count") or 0) for w in get_weakpoints(sid)}
     st = at.start_session(sid, grade="八年级上册", actor_role="student", focus_tags=[tag])
@@ -329,6 +338,67 @@ def case_exit_ticket_wrong_records_weakpoint() -> tuple[bool, str, dict]:
     return True, "ok", detail
 
 
+def case_practice_event_uses_judgement_result() -> tuple[bool, str, dict]:
+    """有效练习事件的 success/score 必须与实际判分一致。"""
+    from db.engine import get_connection
+    from sqlalchemy import text
+
+    rows: dict[str, dict] = {}
+    for suffix, should_answer_correctly in (("correct", True), ("wrong", False)):
+        sid = f"traj-practice-event-{suffix}"
+        tag = "赤壁之战影响"
+        _seed(sid, [tag])
+        state = at.start_session(sid, grade="七年级上册", actor_role="student", focus_tags=[tag])
+        session_id = state["session_id"]
+        correct = _current_correct_letter(session_id)
+        answer = correct if should_answer_correctly else _wrong_letter(correct)
+        at.submit_answer(session_id, answer, actor_role="student")
+        with get_connection() as conn:
+            row = conn.execute(
+                text("""SELECT success, score, metadata_json FROM learning_events
+                     WHERE student_id=:sid AND session_id=:session_id
+                       AND feature='auto_tutor' AND event_type='auto_tutor_practice_answered'
+                     ORDER BY created_at DESC LIMIT 1"""),
+                {"sid": sid, "session_id": session_id},
+            ).mappings().first()
+        rows[suffix] = dict(row or {})
+
+    detail = {"events": rows}
+    if not rows["correct"] or not rows["wrong"]:
+        return False, "practice answer learning event missing", detail
+    if not bool(rows["correct"]["success"]) or float(rows["correct"]["score"] or 0) != 1.0:
+        return False, "correct practice event was not recorded as successful", detail
+    if bool(rows["wrong"]["success"]) or float(rows["wrong"]["score"] or 0) != 0.0:
+        return False, "wrong practice event was not recorded as unsuccessful", detail
+    return True, "ok", detail
+
+
+def case_legacy_session_restores_unverified() -> tuple[bool, str, dict]:
+    """旧 state JSON 可以恢复，但旧题缺少内容合同时必须安全暂停且不标掌握。"""
+    restored = at._restore_state({
+        "session_id": "legacy-v135",
+        "trace_id": "legacy-trace",
+        "student_id": "legacy-student",
+        "grade": "八年级上册",
+        "lesson_plan": [{
+            "knowledge_point": "戊戌变法失败原因",
+            "status": "active",
+            "question": {"question": "旧题", "options": ["A", "B", "C", "D"], "answer": "A"},
+        }],
+        "status": "awaiting_answer",
+        "phase": "lesson",
+    })
+    public = at._public_state(restored)
+    detail = {"status": public["status"], "phase": public["phase"], "legacy_unverified": public["legacy_unverified"]}
+    if public["status"] != "needs_content" or public["phase"] != "content_blocked":
+        return False, "legacy active question was not safely paused", detail
+    if not public["legacy_unverified"] or public["mastery"]["status"] == "verified":
+        return False, "legacy session was incorrectly verified", detail
+    if public["current_question"] is not None:
+        return False, "legacy unverified question was still exposed", detail
+    return True, "ok", detail
+
+
 CASES = [
     ("plan_targets_weakpoints", case_plan_targets_weakpoints),
     ("wrong_answer_triggers_replan", case_wrong_answer_triggers_replan),
@@ -341,6 +411,8 @@ CASES = [
     ("exit_ticket_answer_finalizes_session", case_exit_ticket_answer_finalizes_session),
     ("exit_ticket_result_written_to_learning_events", case_exit_ticket_result_written_to_learning_events),
     ("exit_ticket_wrong_records_weakpoint", case_exit_ticket_wrong_records_weakpoint),
+    ("practice_event_uses_judgement_result", case_practice_event_uses_judgement_result),
+    ("legacy_session_restores_unverified", case_legacy_session_restores_unverified),
 ]
 
 

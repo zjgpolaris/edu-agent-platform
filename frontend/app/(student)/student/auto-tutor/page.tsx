@@ -13,17 +13,20 @@ type PlanStep = {
   knowledge_point: string;
   source_tag?: string | null;
   difficulty: string;
-  strategy: string;
-  rationale: string;
-  status: "pending" | "active" | "mastered" | "struggling";
+  status: "pending" | "active" | "practiced" | "mastered" | "struggling" | "content_blocked";
   attempts: number;
   replanned: boolean;
+  objective?: { objective_id: string; entity: string; aspect: string; target_outcome: string } | null;
+  content_status?: "verified" | "blocked" | null;
 };
 type CurrentQuestion = {
-  kind?: "lesson" | "exit_ticket";
+  kind?: "practice" | "exit_ticket";
+  assessment_id?: string;
+  objective?: { objective_id: string; label: string } | null;
+  content_status?: "verified" | "blocked";
+  evidence_label?: string | null;
   knowledge_point: string;
   difficulty: string;
-  strategy: string;
   teaching?: {
     explanation: string;
     key_points: string[];
@@ -76,8 +79,8 @@ type SessionState = {
   trace_id: string;
   student_id: string;
   grade?: string | null;
-  status: "awaiting_answer" | "completed";
-  phase?: "lesson" | "exit_ticket" | "completed";
+  status: "awaiting_answer" | "needs_content" | "completed";
+  phase?: "lesson" | "exit_ticket" | "content_blocked" | "completed";
   revision: number;
   lesson_plan: PlanStep[];
   current_step_index: number;
@@ -91,6 +94,24 @@ type SessionState = {
   reflection?: Reflection;
   last_answer_correct?: boolean;
   stale_answer_ignored?: boolean;
+  answer_feedback?: {
+    selected_option: string;
+    message: string;
+    correction: string;
+    misconception_code?: string | null;
+    is_correct: boolean;
+  } | null;
+  mastery?: {
+    status: "verified" | "not_yet_verified";
+    practice_verified: boolean;
+    practice_correct: boolean;
+    exit_ticket_verified: boolean;
+  };
+  content_blocked?: {
+    objective_label: string;
+    message: string;
+    suggested_actions: string[];
+  } | null;
 };
 
 type RootCauseInfo = {
@@ -112,8 +133,10 @@ const adjustmentLabel: Record<string, string> = {
 const stepStatusLabel: Record<string, string> = {
   pending: "待教",
   active: "进行中",
+  practiced: "已完成练习",
   mastered: "已掌握",
   struggling: "仍薄弱",
+  content_blocked: "等待补充内容",
 };
 
 const runtimeStatusLabel: Record<string, string> = {
@@ -158,6 +181,7 @@ function AutoTutorInner() {
 
   // 从 URL ?focus=知识点 读取作业/错题本跳转带来的聚焦知识点
   const focusTag = searchParams?.get("focus") ?? null;
+  const showDebugTrace = process.env.NODE_ENV === "development" && searchParams?.get("debug") === "1";
 
   const headers = useMemo(
     () => ({ "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) }),
@@ -205,7 +229,7 @@ function AutoTutorInner() {
     setLoading(true);
     setError("");
     setSelected(null);
-    setStatus("Agent 正在读取你的画像与错题本，规划本节课……");
+    setStatus("正在读取你的画像与错题本，准备本节课……");
     try {
       const body: Record<string, unknown> = { student_id: studentId };
       if (focusTag) body.focus_tags = [focusTag];
@@ -218,7 +242,7 @@ function AutoTutorInner() {
       if (!res.ok) throw new Error(`启动失败：${res.status}`);
       const data = (await res.json()) as SessionState;
       setSession(data);
-      setStatus(data.current_question ? "请作答当前题目" : "本节课已完成");
+      setStatus(data.status === "needs_content" ? "当前内容需要补充" : data.current_question ? "请作答当前题目" : "本节课已完成");
     } catch (e) {
       setError(e instanceof Error ? e.message : "启动失败");
       setStatus("启动失败");
@@ -240,7 +264,7 @@ function AutoTutorInner() {
     setSelected(letter);
     setLoading(true);
     setError("");
-    setStatus("Agent 正在判分……");
+    setStatus("正在检查答案……");
     try {
       const res = await fetch(`${apiBaseUrl}/api/autotutor/answer`, {
         method: "POST",
@@ -257,10 +281,11 @@ function AutoTutorInner() {
       setSession(data);
       setSelected(null);
       if (data.stale_answer_ignored) setStatus("已同步最新辅导进度");
-      else if (data.status === "completed") setStatus("本节课已完成，学习证据已写入");
+      else if (data.status === "needs_content") setStatus("当前内容需要补充，不会改变掌握记录");
+      else if (data.status === "completed") setStatus(data.mastery?.status === "verified" ? "本节课已完成，掌握已验证" : "本节课已完成，掌握尚未验证");
       else if (data.phase === "exit_ticket") setStatus("进入退出票检验，请完成最后一题证明掌握");
-      else if (data.reflection) setStatus("Agent 反思后调整了计划，请再试一次");
-      else setStatus(data.last_answer_correct ? "答对了，进入下一个知识点" : "请作答当前题目");
+      else if (data.reflection) setStatus("已根据你的作答调整讲解，请再试一次");
+      else setStatus(data.last_answer_correct ? "练习答对了，继续完成独立检验" : "已根据你的选择调整讲解");
     } catch (e) {
       setError(e instanceof Error ? e.message : "提交失败");
       setStatus("提交失败");
@@ -285,7 +310,7 @@ function AutoTutorInner() {
         const data = (await res.json()) as SessionState;
         if (cancelled) return;
         setSession(data);
-        setStatus(data.status === "completed" ? "已恢复最近一节已完成课程" : "已恢复最近一节未完成课程");
+        setStatus(data.status === "completed" ? "已恢复最近一节已完成课程" : data.status === "needs_content" ? "已恢复等待补充内容的课程" : "已恢复最近一节未完成课程");
       } catch {
         /* 无可恢复会话时静默跳过 */
       }
@@ -307,8 +332,8 @@ function AutoTutorInner() {
           <div className="eyebrow">Autonomous Tutor</div>
           <h1>AutoTutor 自主辅导</h1>
           <p>
-            Agent 自己读你的画像和错题本、规划本节课、出题检验；答错时会反思「是讲得不对还是题超纲」并实时调整计划。
-            教学结束前还会完成退出票检验，把学习证据写回错题、复习与教师端分析。
+            根据你的薄弱点安排少量学习目标，先讲清再练习；答错后会结合具体选项换一种讲法。
+            只有通过不同于练习题的课末检验，才会更新已验证掌握记录。
           </p>
           {session && (
             <div className="hero-flow" aria-label="AutoTutor 闭环">
@@ -316,7 +341,7 @@ function AutoTutorInner() {
               <span>规划</span>
               <span>讲解</span>
               <span>出题检验</span>
-              <span>反思重规划</span>
+              <span>错因反馈</span>
               <span>退出票检验</span>
               <span>证据入库</span>
             </div>
@@ -327,7 +352,7 @@ function AutoTutorInner() {
           <strong>{status}</strong>
           <p>
             {session
-              ? `已规划 ${plan.length} 个知识点 · 触发 ${session.replans} 次重规划`
+              ? `本节聚焦 ${plan.length} 个学习目标 · 调整讲解 ${session.replans} 次`
               : "还没有进行中的课程。"}
           </p>
           {session && session.status === "awaiting_answer" && (
@@ -341,18 +366,18 @@ function AutoTutorInner() {
       {!session ? (
         <section className="autotutor-launch" aria-label="开始辅导">
           <span className="autotutor-launch-seal" aria-hidden="true">辅</span>
-          <h2>{loading ? "Agent 正在规划本节课…" : "让 agent 为你规划一节课"}</h2>
+          <h2>{loading ? "正在准备本节课…" : "开始一节针对性辅导课"}</h2>
           <p>
             {loading
               ? "正在读取你的画像和错题本，安排知识点顺序与难度。"
-              : "开始后，agent 会读你的画像和错题本，安排知识点顺序、出题检验，并根据你的作答实时调整。"}
+              : "开始后，系统会根据你的画像和错题本安排学习目标、出题检验，并结合你的作答调整讲解。"}
           </p>
           {focusTag && !loading && (
             <p className="autotutor-launch-focus">将优先讲解你的薄弱知识点「{focusTag}」</p>
           )}
           {focusTag && rootCause && !loading && (
             <p className="autotutor-launch-cause">
-              {rootCause.icon} 错因诊断：{rootCause.label} — {rootCause.description} agent 会据此调整讲法。
+              {rootCause.icon} 错因诊断：{rootCause.label} — {rootCause.description} 后续讲解会据此调整。
             </p>
           )}
           <button
@@ -369,18 +394,18 @@ function AutoTutorInner() {
             <li><strong>规划</strong><span>排知识点顺序和难度</span></li>
             <li><strong>先讲解</strong><span>结合史料讲清关键点</span></li>
             <li><strong>出题检验</strong><span>每讲一点就检验一次</span></li>
-            <li><strong>反思重规划</strong><span>答错就判断病因、改讲法</span></li>
+            <li><strong>错因反馈</strong><span>结合具体选项说明误区、改讲法</span></li>
             <li><strong>退出票</strong><span>课末验收本节掌握度</span></li>
             <li><strong>证据入库</strong><span>写回错题、复习与教师端</span></li>
           </ol>
         </section>
       ) : (
-      <section className="learning-command-grid">
+      <section className={`learning-command-grid${showDebugTrace ? "" : " student-focused"}`}>
         {/* 左：课程计划 */}
         <aside className="panel learning-control-panel">
           <div className="panel-kicker">Lesson Plan</div>
           <h2>本节课计划</h2>
-          {!plan.length && <p style={{ fontSize: 13, color: "var(--muted)" }}>开始后，这里会展示 agent 自主生成的教学计划。</p>}
+          {!plan.length && <p style={{ fontSize: 13, color: "var(--muted)" }}>开始后，这里会展示本节课的学习目标。</p>}
           <ol className="autotutor-plan">
             {plan.map((step, i) => (
               <li
@@ -396,16 +421,15 @@ function AutoTutorInner() {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                   <strong style={{ fontSize: "0.92rem" }}>{i + 1}. {step.knowledge_point}</strong>
-                  <span style={{ fontSize: "0.7rem", color: step.status === "mastered" ? "#2f6f4f" : step.status === "struggling" ? "#b8004d" : "var(--muted)" }}>
+                  <span style={{ fontSize: "0.7rem", color: step.status === "mastered" ? "#2f6f4f" : step.status === "struggling" || step.status === "content_blocked" ? "#b8004d" : "var(--muted)" }}>
                     {stepStatusLabel[step.status]}
                   </span>
                 </div>
                 <div className="learning-runtime-chips" style={{ marginTop: 4 }}>
                   <small>{difficultyLabel[step.difficulty] || step.difficulty}</small>
-                  {step.replanned && <small style={{ color: "#b87a00" }}>已重规划</small>}
+                  {step.replanned && <small style={{ color: "#b87a00" }}>已调整讲解</small>}
                   {step.attempts > 0 && <small>尝试 {step.attempts} 次</small>}
                 </div>
-                {step.rationale && <p style={{ fontSize: "0.76rem", color: "var(--muted)", margin: "4px 0 0" }}>{step.rationale}</p>}
               </li>
             ))}
           </ol>
@@ -429,16 +453,28 @@ function AutoTutorInner() {
                   {session.evidence && (
                     <div className="learning-runtime-chips">
                       <small>{session.evidence.exit_ticket_recorded ? "学习事件已记录" : "学习事件未记录"}</small>
-                      <small>{session.evidence.weakpoint_action === "correct_evidence_recorded" ? "已累积掌握证据" : session.evidence.weakpoint_action === "weakpoint_recorded" ? "已回流错题本" : session.evidence.weakpoint_action}</small>
+                      <small>{session.evidence.weakpoint_action === "verified_correct_evidence_recorded" ? "已写入验证掌握" : session.evidence.weakpoint_action === "weakpoint_recorded" ? "已回流错题本" : "未改变掌握记录"}</small>
                       <small>{session.evidence.tutor_effectiveness_ready ? "教师端可见" : "等待同步"}</small>
                     </div>
                   )}
                 </div>
               )}
               <div className="learning-suggestion-row" style={{ marginTop: 16 }}>
-                <a href="/student/review" className="learning-tool-action">去今日复习</a>
-                <a href="/student/memory" className="learning-tool-action">查看记忆中心</a>
+                <Link href="/student/review" className="learning-tool-action">去今日复习</Link>
+                <Link href="/student/memory" className="learning-tool-action">查看记忆中心</Link>
                 <button type="button" onClick={() => void start()} disabled={loading}>再上一节</button>
+              </div>
+            </div>
+          ) : session?.status === "needs_content" && session.content_blocked ? (
+            <div className="autotutor-summary" style={{ padding: 16 }} role="status">
+              <div style={{ border: "1px solid #e6b9a9", background: "rgba(184,72,32,0.06)", borderRadius: 12, padding: "14px 16px" }}>
+                <strong style={{ color: "#9f3f25" }}>这个学习目标暂时不能安全出题</strong>
+                <h2 style={{ margin: "8px 0" }}>{session.content_blocked.objective_label}</h2>
+                <p style={{ lineHeight: 1.7 }}>{session.content_blocked.message}</p>
+              </div>
+              <div className="learning-suggestion-row" style={{ marginTop: 16 }}>
+                <Link href={`/student/assistant?prompt=${encodeURIComponent(`我想继续了解${session.content_blocked.objective_label}，请先说明现有教材能支持哪些内容。`)}`}>进入随问继续提问</Link>
+                <Link href="/student/review">换一个复习目标</Link>
               </div>
             </div>
           ) : q ? (
@@ -447,6 +483,23 @@ function AutoTutorInner() {
                 <span>{q.kind === "exit_ticket" ? "退出票检验" : `第 ${q.step_index + 1} 题`} · {q.knowledge_point}</span>
                 <em>{difficultyLabel[q.difficulty] || q.difficulty}{q.replanned ? " · 调整后" : ""}</em>
               </div>
+              {q.objective && (
+                <div style={{ borderLeft: "3px solid var(--jade-dark,#2f6f4f)", paddingLeft: 10, margin: "10px 0" }}>
+                  <strong>本题学习目标</strong>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.86rem" }}>{q.objective.label}</p>
+                  {q.evidence_label && <small style={{ color: "var(--muted)" }}>{q.evidence_label}</small>}
+                </div>
+              )}
+              {session.answer_feedback && (
+                <div style={{ border: `1px solid ${session.answer_feedback.is_correct ? "#b9d8ca" : "#f0c8d8"}`, background: session.answer_feedback.is_correct ? "rgba(47,111,79,0.05)" : "rgba(184,0,77,0.05)", borderRadius: 10, padding: "10px 12px", margin: "10px 0" }} role="status">
+                  <strong style={{ color: session.answer_feedback.is_correct ? "#2f6f4f" : "#b8004d" }}>
+                    {session.answer_feedback.is_correct ? "练习答对" : "看看这一步为什么容易混淆"}
+                  </strong>
+                  <p style={{ margin: "5px 0" }}>{session.answer_feedback.message}</p>
+                  {!session.answer_feedback.is_correct && <p style={{ margin: 0, fontSize: "0.85rem" }}>更正：{session.answer_feedback.correction}</p>}
+                  {session.mastery && <small style={{ color: "var(--muted)" }}>{session.mastery.status === "verified" ? "已验证掌握" : "掌握尚未验证"}</small>}
+                </div>
+              )}
               {q.kind === "exit_ticket" && (
                 <div style={{ border: "1px solid #d8c8f0", background: "rgba(122,75,176,0.06)", borderRadius: 10, padding: "10px 12px", margin: "10px 0" }}>
                   <strong style={{ color: "#7a4bb0" }}>退出票检验</strong>
@@ -458,8 +511,8 @@ function AutoTutorInner() {
                   className="autotutor-reflection"
                   style={{ border: "1px solid #f0c8d8", background: "rgba(184,0,77,0.05)", borderRadius: 10, padding: "10px 12px", margin: "10px 0" }}
                 >
-                  <strong style={{ color: "#b8004d" }}>🤔 Agent 反思并调整了计划</strong>
-                  <p style={{ margin: "6px 0 2px", fontSize: "0.85rem" }}><b>诊断：</b>{lastReflection.diagnosis}</p>
+                  <strong style={{ color: "#b8004d" }}>根据本次作答调整讲解</strong>
+                  <p style={{ margin: "6px 0 2px", fontSize: "0.85rem" }}><b>容易混淆的地方：</b>{lastReflection.diagnosis}</p>
                   <p style={{ margin: "2px 0", fontSize: "0.85rem" }}><b>调整：</b>{adjustmentLabel[lastReflection.adjustment] || lastReflection.adjustment}</p>
                   <p style={{ margin: "2px 0 0", fontSize: "0.85rem" }}>{lastReflection.explanation}</p>
                 </div>
@@ -499,18 +552,17 @@ function AutoTutorInner() {
                   );
                 })}
               </ul>
-              {q.strategy && <p style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 8 }}>教学策略：{q.strategy}</p>}
             </div>
           ) : (
             <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>
-              <p>{loading ? "Agent 正在规划本节课……" : "点击右上角「开始本节课」，让 agent 为你现场规划。"}</p>
+              <p>{loading ? "正在准备本节课……" : "点击右上角「开始本节课」，生成针对性学习目标。"}</p>
             </div>
           )}
           {error && <p className="learning-error">{error}</p>}
         </section>
 
         {/* 右：运行时轨迹 */}
-        <aside className="panel learning-observation-panel" aria-label="运行时轨迹">
+        {showDebugTrace && <aside className="panel learning-observation-panel" aria-label="开发调试轨迹">
           <div className="panel-kicker">Agent Trace</div>
           <h2>规划 / 反思轨迹</h2>
           {session?.trace_id && <p className="learning-trace-id">Trace: {session.trace_id}</p>}
@@ -546,7 +598,7 @@ function AutoTutorInner() {
             )}
           </div>
           {session?.trace_id && <TraceTimeline traceId={session.trace_id} token={user?.token} />}
-        </aside>
+        </aside>}
       </section>
       )}
     </main>

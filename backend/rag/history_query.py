@@ -14,6 +14,7 @@ HistoryAspect = Literal[
     "definition",
     "background",
     "cause",
+    "purpose",
     "process",
     "result",
     "impact",
@@ -66,9 +67,10 @@ _ASPECT_TERMS: tuple[tuple[HistoryAspect, tuple[str, ...]], ...] = (
     ("evaluation", ("评价", "如何看待", "怎么看", "认识", "文学史上的地位", "地位如何")),
     ("significance", ("意义", "为什么重要", "重要性")),
     ("contribution", ("贡献", "做了什么", "主要成就")),
+    ("purpose", ("目的", "目标", "意图", "旨在")),
     ("cause", ("原因", "为什么", "为何", "导火索")),
     ("background", ("背景", "条件", "生活在什么时代", "所处时代")),
-    ("process", ("经过", "过程", "如何发生", "怎么发生")),
+    ("process", ("经过", "过程", "如何发生", "怎么发生", "行军路线", "路线")),
     ("result", ("结果", "结局", "后果")),
     ("impact", ("影响", "作用", "带来什么", "带来了什么", "产生什么", "变化")),
     ("measure", ("措施", "内容", "做法", "政策")),
@@ -80,6 +82,7 @@ _ASPECT_QUERY_LABEL: dict[HistoryAspect, str] = {
     "definition": "定义",
     "background": "背景",
     "cause": "原因",
+    "purpose": "目的",
     "process": "经过",
     "result": "结果",
     "impact": "影响",
@@ -179,7 +182,7 @@ def _question_type(query: str, aspect: HistoryAspect) -> HistoryQuestionType:
         return "comparison"
     if aspect == "evaluation":
         return "evaluation"
-    if aspect in {"background", "cause", "process", "result", "impact", "significance", "contribution"}:
+    if aspect in {"background", "cause", "purpose", "process", "result", "impact", "significance", "contribution"}:
         return "explanation"
     if compact:
         return "fact"

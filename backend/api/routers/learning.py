@@ -65,6 +65,8 @@ class AutoTutorStartRequest(BaseModel):
     grade: str | None = None
     focus_tags: list[str] | None = None
     focus_reason: str | None = Field(default=None, max_length=200)
+    lesson_id: str | None = Field(default=None, max_length=160)
+    max_minutes: int | None = Field(default=None, ge=5, le=45)
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=200)
 
 
@@ -539,7 +541,7 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
 
 @router.post("/api/autotutor/start")
 async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Depends(require_auth)):
-    from agents.auto_tutor import start_session as autotutor_start
+    from agents.auto_tutor import AutoTutorUnavailableError, start_session as autotutor_start
     from security.auth import auth_required
     assert_student_access(actor, req.student_id)
     check_rate_limit(f"autotutor:{req.student_id}", limit=40, window_seconds=3600)
@@ -547,7 +549,22 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
     with trace_context(name="POST /api/autotutor/start", metadata=trace_meta("auto_tutor", "/api/autotutor/start", student_id=req.student_id, grade=req.grade), user_id=req.student_id, input_data={"student_id": req.student_id}):
         trace_id = current_trace_id()
         record_audit_event(actor_id=actor.actor_id, action="autotutor.start", resource_type="student", resource_id=req.student_id, metadata={"grade": req.grade})
-        return await run_in_threadpool(autotutor_start, req.student_id, grade=req.grade, actor_id=actor.actor_id, actor_role=actor_role, trace_id=trace_id, focus_tags=req.focus_tags or None, focus_reason=req.focus_reason or None, idempotency_key=req.idempotency_key)
+        try:
+            return await run_in_threadpool(
+                autotutor_start,
+                req.student_id,
+                grade=req.grade,
+                actor_id=actor.actor_id,
+                actor_role=actor_role,
+                trace_id=trace_id,
+                focus_tags=req.focus_tags or None,
+                focus_reason=req.focus_reason or None,
+                lesson_id=req.lesson_id,
+                max_minutes=req.max_minutes,
+                idempotency_key=req.idempotency_key,
+            )
+        except AutoTutorUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
 
 
 @router.post("/api/autotutor/answer")

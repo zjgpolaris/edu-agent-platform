@@ -1,0 +1,7 @@
+[
+  {"id": "wuxu_cause", "input": "戊戌变法失败原因", "entity": "戊戌变法", "aspect": "cause", "expected": "verified"},
+  {"id": "westernization_purpose", "input": "洋务运动目的", "entity": "洋务运动", "aspect": "purpose", "expected": "verified"},
+  {"id": "redcliff_impact", "input": "赤壁之战的影响", "entity": "赤壁之战", "aspect": "impact", "expected": "verified"},
+  {"id": "changping_route", "input": "长平之战逐日行军路线", "entity": "长平之战", "aspect": "process", "expected": "blocked"},
+  {"id": "xinhai_significance", "input": "辛亥革命历史意义", "entity": "辛亥革命", "aspect": "significance", "expected": "verified"}
+]

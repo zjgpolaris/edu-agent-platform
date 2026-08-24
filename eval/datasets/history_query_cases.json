@@ -958,5 +958,13 @@
     "expected_entity_type": "event",
     "expected_aspect": "significance",
     "review_status": "seed_pending_teacher_review"
+  },
+  {
+    "id": "autotutor-westernization-purpose",
+    "query": "洋务运动目的",
+    "expected_entity": "洋务运动",
+    "expected_entity_type": "event",
+    "expected_aspect": "purpose",
+    "review_status": "v1.35_contract"
   }
 ]

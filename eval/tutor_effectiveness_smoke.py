@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -85,6 +86,30 @@ def _write_exit_ticket(student_id: str, tag: str, success: bool, session_id: str
             VALUES (:id, :sid, 'auto_tutor', 'auto_tutor_exit_ticket', :tag, :success, :score, :session_id, :ts, '{}')"""),
             {"id": str(uuid.uuid4()), "sid": student_id, "tag": tag,
              "success": 1 if success else 0, "score": 1.0 if success else 0.0, "session_id": session_id, "ts": ts})
+
+
+def _write_v135_event(
+    student_id: str,
+    tag: str,
+    event_type: str,
+    success: bool,
+    session_id: str,
+    *,
+    content_validation_status: str = "verified",
+):
+    import uuid
+    from db.engine import get_connection
+    from sqlalchemy import text
+    _ensure_learning_events_table()
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    metadata = json.dumps({"content_validation_status": content_validation_status})
+    with get_connection() as conn:
+        conn.execute(text("""INSERT INTO learning_events
+            (id, student_id, feature, event_type, topic, success, score, session_id, created_at, metadata_json)
+            VALUES (:id, :sid, 'auto_tutor', :event_type, :tag, :success, :score, :session_id, :ts, :metadata)"""),
+            {"id": str(uuid.uuid4()), "sid": student_id, "event_type": event_type, "tag": tag,
+             "success": 1 if success else 0, "score": 1.0 if success else 0.0,
+             "session_id": session_id, "ts": ts, "metadata": metadata})
 
 
 # ── Case 1: 无辅导记录返回空摘要 ─────────────────────────────────────────────
@@ -189,6 +214,30 @@ def c8_legacy_step_events_still_work_without_exit_ticket():
     assert result["summary"]["exit_ticket_mastery_rate"] == 0.0, result
 
 
+# ── Case 9: v1.35 比率按唯一会话计算且非法 mastery 单独计数 ────────────────
+def c9_verified_metrics_are_session_bounded():
+    from services.tutor_effectiveness_service import get_student_tutor_effectiveness
+    student = "smoke-teff-v135"
+    _write_v135_event(student, "戊戌变法失败原因", "auto_tutor_practice_answered", False, "sess-practice")
+    _write_v135_event(student, "戊戌变法失败原因", "auto_tutor_practice_answered", True, "sess-practice")
+    _write_v135_event(student, "戊戌变法失败原因", "auto_tutor_verified_mastery", True, "sess-practice")
+    _write_v135_event(student, "长平之战逐日行军路线", "auto_tutor_content_blocked", False, "sess-blocked")
+    _write_v135_event(
+        student,
+        "戊戌变法失败原因",
+        "auto_tutor_verified_mastery",
+        True,
+        "sess-invalid",
+        content_validation_status="blocked",
+    )
+    summary = get_student_tutor_effectiveness(student)["summary"]
+    assert summary["practice_completion_rate"] == 50.0, summary
+    assert summary["practice_accuracy"] == 50.0, summary
+    assert summary["verified_mastery_rate"] == 50.0, summary
+    assert summary["content_blocked_rate"] == 50.0, summary
+    assert summary["false_mastery_count"] == 1, summary
+
+
 if __name__ == "__main__":
     cases = [
         ("C1 无记录返回空摘要", c1_no_records),
@@ -199,6 +248,7 @@ if __name__ == "__main__":
         ("C6 退出票学习证据被统计", c6_exit_ticket_events_are_counted),
         ("C7 班级退出票证据聚合", c7_class_exit_ticket_rollup),
         ("C8 旧 step 数据兼容", c8_legacy_step_events_still_work_without_exit_ticket),
+        ("C9 v1.35 会话级指标与 false mastery", c9_verified_metrics_are_session_bounded),
     ]
     passed = sum(run_case(name, fn) for name, fn in cases)
     total = len(cases)

@@ -28,28 +28,42 @@ from pydantic import BaseModel, Field
 from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
-from llm_config import llm_fast, llm_quality
-from security.prompt_injection import build_untrusted_context_block, evaluate_user_input
+from llm_config import llm_quality
 from structured_output import invoke_structured
 from student_profile import LearningEvent, get_student_profile, try_record_learning_event
-from services.weakpoint_service import delete_weakpoint, get_weakpoints, record_correct_evidence, record_weakpoint
-from services.learning_preference_service import build_preference_prompt
+from services.weakpoint_service import get_weakpoints, record_correct_evidence, record_weakpoint
 from tools.base import ToolExecutionContext
 from tools.registry import run_tool
 from trace_store import current_trace_id, emit_trace_event, set_trace_id
 from user_memory import record_typed_memory
+from agents.autotutor_content import (
+    AssessmentItem,
+    ContentGateSettings,
+    ContentValidation,
+    LearningObjective,
+    TeachingEvidenceDecision,
+    answer_feedback as build_answer_feedback,
+    assessment_to_question,
+    build_learning_objective,
+    prepare_content,
+    verified_mastery,
+)
 
 AGENT_NAME = "auto_tutor"
 
+
+class AutoTutorUnavailableError(RuntimeError):
+    """Raised when the content-safety kill switch blocks new sessions."""
+
 # 防死循环 / 防失控护栏
-MAX_STEPS = 4
+MAX_STEPS = 2
 MAX_REPLANS = 3
 MAX_ATTEMPTS_PER_STEP = 3
 
 Difficulty = Literal["easy", "medium", "hard"]
 AdjustmentAction = Literal["reteach", "lower_difficulty", "change_example", "advance"]
-SessionStatus = Literal["awaiting_answer", "completed"]
-SessionPhase = Literal["lesson", "exit_ticket", "completed"]
+SessionStatus = Literal["awaiting_answer", "needs_content", "completed"]
+SessionPhase = Literal["lesson", "exit_ticket", "content_blocked", "completed"]
 
 
 # --------------------------------------------------------------------------- #
@@ -62,12 +76,19 @@ class LessonStep(BaseModel):
     strategy: str = "讲解关键史实后用一道选择题检验。"
     tool: str = "search_history_knowledge"
     rationale: str = ""
-    status: Literal["pending", "active", "mastered", "struggling"] = "pending"
+    status: Literal["pending", "active", "practiced", "mastered", "struggling", "content_blocked"] = "pending"
     attempts: int = 0
     replanned: bool = False
     teaching: dict[str, Any] | None = None
     question: dict[str, Any] | None = None
     sources: list[dict[str, Any]] = Field(default_factory=list)
+    objective: LearningObjective | None = None
+    evidence_decision: TeachingEvidenceDecision | None = None
+    content_validation: ContentValidation | None = None
+    content_version: str | None = None
+    evidence_label: str | None = None
+    practice_result: dict[str, Any] | None = None
+    content_blocked: dict[str, Any] | None = None
 
 
 class RuntimeStep(BaseModel):
@@ -99,6 +120,10 @@ class ExitTicket(BaseModel):
     question: dict[str, Any] = Field(default_factory=dict)
     sources: list[dict[str, Any]] = Field(default_factory=list)
     generated_from: Literal["struggling_step", "replanned_step", "mastered_step", "fallback"] = "fallback"
+    objective: LearningObjective | None = None
+    content_validation: ContentValidation | None = None
+    content_version: str | None = None
+    evidence_label: str | None = None
 
 
 class ExitTicketResult(BaseModel):
@@ -109,6 +134,10 @@ class ExitTicketResult(BaseModel):
     is_correct: bool
     explanation: str = ""
     mastery_signal: Literal["exit_ticket_passed", "exit_ticket_failed"]
+    assessment_id: str | None = None
+    objective_id: str | None = None
+    content_validation_status: str | None = None
+    verified_mastery: bool = False
 
 
 class EvidenceSummary(BaseModel):
@@ -117,6 +146,8 @@ class EvidenceSummary(BaseModel):
     weakpoint_action: str = "not_recorded"
     review_action: str = "not_scheduled"
     tutor_effectiveness_ready: bool = False
+    verified_mastery: bool = False
+    content_validation_status: str | None = None
 
 
 class AutoTutorState(BaseModel):
@@ -125,6 +156,8 @@ class AutoTutorState(BaseModel):
     trace_id: str
     student_id: str
     grade: str | None = None
+    lesson_id: str | None = None
+    max_minutes: int = 12
     lesson_plan: list[LessonStep] = Field(default_factory=list)
     current_step_index: int = 0
     step_history: list[dict[str, Any]] = Field(default_factory=list)
@@ -138,6 +171,11 @@ class AutoTutorState(BaseModel):
     exit_ticket_result: ExitTicketResult | None = None
     evidence: EvidenceSummary | None = None
     summary: str | None = None
+    content_gate_mode: Literal["off", "shadow", "enforce"] = "off"
+    content_blocked: dict[str, Any] | None = None
+    answer_feedback: dict[str, Any] | None = None
+    verified_mastery: bool = False
+    legacy_unverified: bool = False
     revision: int = 0
     created_at: float = 0.0
     updated_at: float = 0.0
@@ -252,6 +290,29 @@ def _restore_state(payload: dict[str, Any]) -> AutoTutorState:
     if state.status == "completed" and state.phase != "completed":
         # 兼容 v1.26 之前持久化的已完成会话（当时还没有 phase 字段）。
         state.phase = "completed"
+    legacy_active_step = next(
+        (
+            step for step in state.lesson_plan
+            if step.question and (step.content_validation is None or step.objective is None)
+        ),
+        None,
+    )
+    if legacy_active_step is not None:
+        state.legacy_unverified = True
+        state.verified_mastery = False
+        if state.status != "completed":
+            legacy_active_step.status = "content_blocked"
+            legacy_active_step.question = None
+            blocked = {
+                "objective_label": legacy_active_step.knowledge_point,
+                "message": "这节旧课程缺少内容验证记录，已安全暂停，也不会改变你的掌握记录。",
+                "reason": "legacy_content_unverified",
+                "suggested_actions": ["重新开始这个知识点", "进入随问继续提问"],
+            }
+            legacy_active_step.content_blocked = blocked
+            state.content_blocked = blocked
+            state.status = "needs_content"
+            state.phase = "content_blocked"
     state._sequence = max((step.sequence for step in state.runtime_steps), default=0)
     return state
 
@@ -485,7 +546,7 @@ def _tool_context(student_id: str, actor_id: str | None, actor_role: str | None)
 # plan
 # --------------------------------------------------------------------------- #
 def _fallback_plan(weakpoints: list[dict[str, Any]], weak_topics: list[str], recent_topics: list[str]) -> list[LessonStep]:
-    """无 LLM 时，直接从学生数据派生计划——换个学生权重不同，计划即不同。"""
+    """从学情中选择一个主目标，避免把无关近期主题拼成一节课。"""
     seen: list[str] = []
     steps: list[LessonStep] = []
     ranked = [w["knowledge_tag"] for w in weakpoints] + weak_topics + recent_topics
@@ -503,221 +564,112 @@ def _fallback_plan(weakpoints: list[dict[str, Any]], weak_topics: list[str], rec
                 rationale=f"错题本中错过 {wrong} 次，优先巩固。" if wrong else "近期学习主题，纳入巩固。",
             )
         )
-        if len(steps) >= MAX_STEPS:
+        if len(steps) >= 1:
             break
     if not steps:
-        steps.append(LessonStep(knowledge_point="鸦片战争", difficulty="easy", rationale="暂无学情，从近代史开篇切入。"))
+        steps.append(LessonStep(knowledge_point="鸦片战争影响", difficulty="easy", rationale="暂无学情，从近代史开篇的核心影响切入。"))
     return steps
 
 
-class _PlanItem(BaseModel):
-    knowledge_point: str
-    difficulty: Difficulty = "medium"
-    strategy: str = "讲解关键史实后用一道选择题检验。"
-    rationale: str = ""
-
-
-class _PlanResponse(BaseModel):
-    lesson_plan: list[_PlanItem]
-
-
-def _match_source_tag(knowledge_point: str, candidate_tags: list[str]) -> str | None:
-    """把（可能被 LLM 扩写的）知识点映射回错题本里的原始短标签，用于课后增删错题。"""
-    best: str | None = None
-    for tag in candidate_tags:
-        tag = (tag or "").strip()
-        if not tag:
-            continue
-        if tag in knowledge_point or knowledge_point in tag:
-            if best is None or len(tag) > len(best):
-                best = tag
-    return best
-
-
 def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], profile: Any, focus_tags: list[str] | None = None, focus_reason: str | None = None) -> list[LessonStep]:
+    """生成受控课时计划：一个主目标，后续仅在有审核关系时再扩支持目标。"""
     weak_topics = list(getattr(profile, "weak_topics", []) or [])
     recent_topics = list(getattr(profile, "recent_topics", []) or [])
-    fallback_steps = _fallback_plan(weakpoints, weak_topics, recent_topics)
-
-    weak_summary = "、".join(
-        f"{w['knowledge_tag']}(错{w['wrong_count']}次)" for w in weakpoints[:8]
-    ) or "（错题本为空）"
-    focus_line = (
-        f"\n本节课必须优先讲解（来自学生刚做错的作业）：{('、'.join(focus_tags))}，把它们排在计划最前。"
-        if focus_tags else ""
-    )
-    # 来自错题本根因诊断的错因提示：让计划针对真实错因调整教学策略
-    reason_line = (
-        f"\n针对优先讲解知识点的错因诊断：{focus_reason}。"
-        "请据此调整教学策略——概念模糊→重讲核心概念并举例；知识遗忘→先带背关键史实再检验；"
-        "审题失误→强调圈画题干关键词；粗心大意→检验时提示复查。"
-        if focus_reason else ""
-    )
-
-    # 注入学生偏好设置
-    preference_prompt = build_preference_prompt(state.student_id)
-
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "你是初中历史辅导 agent，需要为一个学生规划本节课。根据学生的薄弱知识点和近期主题，"
-                f"产出最多 {MAX_STEPS} 个教学步骤的计划，按优先级排序（最薄弱的先教）。\n"
-                "每步包含：knowledge_point（知识点）、difficulty（easy/medium/hard，错得多的从 easy 起）、"
-                "strategy（一句话教学策略）、rationale（为何把它排在这个位置，要引用学情）。\n"
-                "只输出 JSON：{\"lesson_plan\": [{\"knowledge_point\":\"\",\"difficulty\":\"easy\",\"strategy\":\"\",\"rationale\":\"\"}]}"
-                f"{preference_prompt}"
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"年级：{state.grade or '未知'}\n"
-                f"错题本薄弱点：{weak_summary}\n"
-                f"画像薄弱主题：{('、'.join(weak_topics[:6]) or '无')}\n"
-                f"近期学习主题：{('、'.join(recent_topics[:6]) or '无')}\n"
-                f"{focus_line}{reason_line}\n"
-                "请生成本节课计划。"
-            ),
-        },
-    ]
-    try:
-        result = invoke_structured(llm_quality, prompt, model=_PlanResponse, fallback=None)
-    except Exception:
-        result = None
-    if not result or not result.lesson_plan:
-        return fallback_steps
-    candidate_tags = [w["knowledge_tag"] for w in weakpoints] + weak_topics
-    steps = [
-        LessonStep(
-            knowledge_point=item.knowledge_point.strip(),
-            source_tag=_match_source_tag(item.knowledge_point.strip(), candidate_tags),
-            difficulty=item.difficulty,
-            strategy=item.strategy.strip() or "讲解关键史实后用一道选择题检验。",
-            rationale=item.rationale.strip(),
-        )
-        for item in result.lesson_plan[:MAX_STEPS]
-        if item.knowledge_point.strip()
-    ]
-    return steps or fallback_steps
+    if focus_tags and str(focus_tags[0]).strip():
+        tag = str(focus_tags[0]).strip()
+        wrong = next((int(w.get("wrong_count") or 0) for w in weakpoints if w.get("knowledge_tag") == tag), 0)
+        rationale = f"显式聚焦目标；错题本中错过 {wrong} 次。" if wrong else "显式聚焦目标，作为本节主目标。"
+        if focus_reason:
+            rationale += f" 错因提示：{focus_reason}"
+        return [LessonStep(
+            knowledge_point=tag,
+            source_tag=tag,
+            difficulty="easy" if wrong >= 2 else "medium",
+            strategy="先明确学习目标，再区分易混概念并用有效题检验。",
+            rationale=rationale,
+        )]
+    return _fallback_plan(weakpoints, weak_topics, recent_topics)[:1]
 
 
 # --------------------------------------------------------------------------- #
 # act：取材 + 教学 + 出题检验
 # --------------------------------------------------------------------------- #
-class _Teaching(BaseModel):
-    explanation: str
-    key_points: list[str] = Field(default_factory=list)
-    example: str = ""
+def _record_content_event(
+    state: AutoTutorState,
+    step: LessonStep,
+    event_type: str,
+    *,
+    metadata: dict[str, Any],
+    success: bool | None = None,
+) -> None:
+    objective = step.objective
+    event_success = event_type == "auto_tutor_content_verified" if success is None else success
+    try_record_learning_event(
+        LearningEvent(
+            student_id=state.student_id,
+            session_id=state.session_id,
+            feature="auto_tutor",
+            event_type=event_type,
+            grade=state.grade,
+            topic=step.source_tag or step.knowledge_point,
+            success=event_success,
+            score=1.0 if event_success else 0.0,
+            metadata={
+                "objective_id": objective.objective_id if objective else None,
+                "aspect": objective.aspect if objective else None,
+                "content_version": step.content_version,
+                **metadata,
+            },
+        )
+    )
 
 
-class _Question(BaseModel):
-    question: str
-    options: list[str]
-    answer: str
-    explanation: str
-
-
-_DIFFICULTY_HINT = {
-    "easy": "题目直接考查最核心的史实，选项区分度大。",
-    "medium": "题目考查因果或意义，选项有一定迷惑性。",
-    "hard": "题目考查比较、评价或综合分析。",
-}
-
-
-def _fallback_teaching(knowledge_point: str, strategy: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
-    snippets = [str(source.get("snippet") or "").strip() for source in sources[:2]]
-    # A fallback must not echo a retrieved prompt-injection payload directly to
-    # the student. Keep only source text that passes the same guardrail taxonomy.
-    snippets = [snippet for snippet in snippets if snippet and not evaluate_user_input(snippet).blocked]
-    factual_basis = snippets[0][:240] if snippets else f"先抓住「{knowledge_point}」的核心史实、原因与影响。"
-    explanation = f"{factual_basis} 本轮采用的讲法是：{strategy}"
-    return {
-        "explanation": explanation,
-        "key_points": [knowledge_point, "关键史实", "原因与影响"],
-        "example": strategy,
+def _block_content(state: AutoTutorState, step: LessonStep, reason: str) -> None:
+    step.status = "content_blocked"
+    step.question = None
+    step.teaching = None
+    message = "当前教材证据或审定题目不足，暂不生成题目，也不会改变你的掌握记录。"
+    blocked = {
+        "objective_label": step.knowledge_point,
+        "message": message,
+        "reason": reason,
+        "suggested_actions": ["换一个相关知识点", "进入随问继续提问"],
     }
-
-
-def _generate_teaching(step: LessonStep, sources: list[dict[str, Any]]) -> dict[str, Any]:
-    context = build_untrusted_context_block(sources[:3], title="史料") if sources else ""
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "你是初中历史教师。先教学，再检验，不要直接出题。请根据史料和教学策略，"
-                "用学生能理解的语言讲清指定知识点。解释控制在3-5句，列出2-3个关键点，并给一个帮助理解的例子或类比。"
-                "只输出 JSON：{\"explanation\":\"\",\"key_points\":[\"\"],\"example\":\"\"}。"
-            ),
+    step.content_blocked = blocked
+    state.content_blocked = blocked
+    state.phase = "content_blocked"
+    state.status = "needs_content"
+    _record_content_event(
+        state,
+        step,
+        "auto_tutor_content_blocked",
+        metadata={"reason": reason, "content_validation_status": "blocked", "mastery_eligible": False},
+    )
+    _emit(
+        state,
+        "content_blocked",
+        "Content Gate · 内容阻断",
+        "content_gate",
+        "blocked",
+        metadata={
+            "knowledge_point": step.knowledge_point,
+            "reason": reason,
+            "result_summary": message,
         },
-        {
-            "role": "user",
-            "content": (
-                f"知识点：{step.knowledge_point}\n难度：{step.difficulty}\n教学策略：{step.strategy}\n"
-                f"这是第 {step.attempts + 1} 次教学，{'需要换一种讲法' if step.replanned else '首次讲解'}。\n{context}"
-            ).strip(),
-        },
-    ]
-    try:
-        result = invoke_structured(llm_fast, prompt, model=_Teaching, fallback=None)
-    except Exception:
-        result = None
-    if not result or not result.explanation.strip():
-        return _fallback_teaching(step.knowledge_point, step.strategy, sources)
-    return {
-        "explanation": result.explanation.strip(),
-        "key_points": [point.strip() for point in result.key_points[:3] if point.strip()],
-        "example": result.example.strip(),
-    }
-
-
-def _fallback_question(knowledge_point: str) -> dict[str, Any]:
-    return {
-        "question": f"关于「{knowledge_point}」，下列说法最准确的是？",
-        "options": [f"A. {knowledge_point}的基本史实", "B. 与史实不符的说法", "C. 张冠李戴的说法", "D. 完全无关的说法"],
-        "answer": "A",
-        "explanation": f"请复习「{knowledge_point}」的核心史实。",
-        "knowledge_point": knowledge_point,
-    }
-
-
-def _generate_question(knowledge_point: str, difficulty: Difficulty, sources: list[dict[str, Any]]) -> dict[str, Any]:
-    context = build_untrusted_context_block(sources[:3], title="史料") if sources else ""
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "你是初中历史教师，根据史料为指定知识点出一道四选一选择题。"
-                f"{_DIFFICULTY_HINT.get(difficulty, '')}\n"
-                "只输出 JSON：{\"question\":\"题干\",\"options\":[\"A. ..\",\"B. ..\",\"C. ..\",\"D. ..\"],"
-                "\"answer\":\"A\",\"explanation\":\"1-2句解析\"}。answer 为正确选项字母。"
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"知识点：{knowledge_point}\n难度：{difficulty}\n{context}".strip(),
-        },
-    ]
-    try:
-        result = invoke_structured(llm_fast, prompt, model=_Question, fallback=None)
-    except Exception:
-        result = None
-    if not result or len(result.options) < 2:
-        return _fallback_question(knowledge_point)
-    return {
-        "question": result.question.strip(),
-        "options": result.options,
-        "answer": (result.answer.strip() or "A")[:1].upper(),
-        "explanation": result.explanation.strip(),
-        "knowledge_point": knowledge_point,
-    }
+    )
 
 
 def _act(state: AutoTutorState, step: LessonStep, ctx: ToolExecutionContext) -> None:
-    """对当前步骤取材（走工具治理），先教学，再出题检验。"""
+    """结构化取材并通过内容门禁后，才向学生提供讲解和可评分题。"""
     step.status = "active"
-
-    # 1) 取材 —— 通过工具注册表，带来审计 / 治理 / span
+    step.objective = step.objective or build_learning_objective(
+        step.knowledge_point,
+        source_tag=step.source_tag,
+        grade=state.grade,
+        lesson=state.lesson_id,
+        misconception_hint=step.rationale,
+    )
+    objective = step.objective
     tool_started = perf_counter()
     _emit(
         state,
@@ -726,51 +678,95 @@ def _act(state: AutoTutorState, step: LessonStep, ctx: ToolExecutionContext) -> 
         "tool_selection",
         metadata={"tool_name": step.tool, "input_summary": {"query": step.knowledge_point, "k": 4}},
     )
+    retrieval_data: dict[str, Any] = {}
     sources: list[dict[str, Any]] = []
-    retrieval_ok = False
-    retrieval_note = ""
+    retrieval_error: str | None = None
     try:
         result = run_tool(
             "search_history_knowledge",
-            {"query": step.knowledge_point, "grade": state.grade, "topic": step.knowledge_point, "k": 4},
+            {
+                "query": step.knowledge_point,
+                "grade": state.grade,
+                "lesson": state.lesson_id,
+                "topic": objective.entity or step.knowledge_point,
+                "k": 4,
+            },
             context=ctx,
         )
         if result.ok:
-            sources = (result.data or {}).get("sources") or []
-            retrieval_ok = bool(sources)
-            retrieval_note = f"检索到 {len(sources)} 条史料" if sources else "知识库无相关史料，将基于模型自有知识出题"
+            retrieval_data = dict(result.data or {})
+            sources = [source for source in retrieval_data.get("sources", []) if isinstance(source, dict)]
         else:
-            retrieval_note = (result.error.message if result.error else "检索不可用") + "，降级为模型自有知识出题"
-        # 取材失败/无召回不是教学失败：agent 自适应地用模型知识继续。状态用 degraded 区分硬失败。
-        retrieval_status = "success" if retrieval_ok else "degraded"
+            retrieval_error = result.error.message if result.error else "retrieval_failed"
+        sufficiency = retrieval_data.get("evidence_sufficiency") or {}
         _emit(
             state,
             "act_retrieval",
             "Act · 取材",
             "tool_result",
-            retrieval_status,
+            "success" if result.ok else "degraded",
             started_at=tool_started,
             metadata={
                 "tool_name": "search_history_knowledge",
                 "ok": result.ok,
                 "source_count": len(sources),
-                "degraded": not retrieval_ok,
-                "result_summary": f"为「{step.knowledge_point}」{retrieval_note}",
-                **{k: result.metadata.get(k) for k in ("risk_level", "side_effect", "required_role") if result.metadata},
+                "answer_bearing_source_count": int(sufficiency.get("answer_bearing_source_count") or 0),
+                "retrieval_status": sufficiency.get("status") or retrieval_data.get("retrieval_status") or "none",
+                "result_summary": f"已为「{step.knowledge_point}」完成结构化取材与证据诊断",
             },
         )
-    except Exception as exc:  # 取材异常不阻断教学，降级继续
-        _emit(state, "act_retrieval", "Act · 取材", "tool_result", "degraded", started_at=tool_started,
-              metadata={"tool_name": "search_history_knowledge", "degraded": True,
-                        "result_summary": "史料检索不可用，降级为模型自有知识出题"},
-              error={"message": str(exc)})
+    except Exception as exc:
+        retrieval_error = exc.__class__.__name__
+        _emit(
+            state,
+            "act_retrieval",
+            "Act · 取材",
+            "tool_result",
+            "degraded",
+            started_at=tool_started,
+            metadata={"tool_name": "search_history_knowledge", "result_summary": "检索不可用，转入审定内容门禁"},
+            error={"message": str(exc)},
+        )
 
-    step.sources = sources[:4]
+    prepared = prepare_content(
+        objective,
+        retrieval_data,
+        kind="practice",
+        variant_index=step.attempts,
+    )
+    step.evidence_decision = prepared.evidence
+    step.content_validation = prepared.validation
+    step.content_version = prepared.content_version
+    step.evidence_label = prepared.evidence_label
+    step.sources = [source for source in sources if source.get("answer_bearing") is True][:4]
+    if prepared.validation.status != "verified" or prepared.teaching is None or prepared.assessment is None:
+        _block_content(state, step, prepared.blocked_reason or retrieval_error or "content_validation_failed")
+        return
 
-    # 2) 先教学：首次讲解或反思后的重新讲解都形成独立 trace。
+    step.teaching = prepared.teaching.model_dump(mode="json")
+    if step.replanned and state.answer_feedback:
+        correction = str(state.answer_feedback.get("correction") or "").strip()
+        if correction:
+            step.teaching["explanation"] = f"先纠正刚才的混淆：{correction} {step.teaching['explanation']}"
+            step.teaching["example"] = f"先对照你刚才选择的说法，再判断它回答的是不是“{step.objective.target_outcome}”。"
+    step.question = assessment_to_question(prepared.assessment)
+    step.content_blocked = None
+    state.content_blocked = None
+    state.phase = "lesson"
+    state.status = "awaiting_answer"
+    _record_content_event(
+        state,
+        step,
+        "auto_tutor_content_verified",
+        metadata={
+            "assessment_id": prepared.assessment.assessment_id,
+            "assessment_kind": "practice",
+            "content_validation_status": "verified",
+            "mastery_eligible": state.content_gate_mode == "enforce",
+            "generation_mode": prepared.assessment.generation_mode,
+        },
+    )
     teach_started = perf_counter()
-    teaching = _generate_teaching(step, sources)
-    step.teaching = teaching
     _emit(
         state,
         "reteach" if step.replanned else "teach",
@@ -780,28 +776,22 @@ def _act(state: AutoTutorState, step: LessonStep, ctx: ToolExecutionContext) -> 
         metadata={
             "knowledge_point": step.knowledge_point,
             "difficulty": step.difficulty,
-            "strategy": step.strategy,
             "attempt": step.attempts + 1,
-            "key_points": teaching.get("key_points") or [],
-            "result_summary": str(teaching.get("explanation") or "")[:80],
+            "content_validation_status": "verified",
+            "result_summary": str(step.teaching.get("explanation") or "")[:80],
         },
     )
-
-    # 3) 出题检验
-    q_started = perf_counter()
-    question = _generate_question(step.knowledge_point, step.difficulty, sources)
-    step.question = question
     _emit(
         state,
         "act_question",
-        "Act · 出题",
+        "Act · 有效练习",
         "act",
-        started_at=q_started,
         metadata={
             "knowledge_point": step.knowledge_point,
             "difficulty": step.difficulty,
-            "strategy": step.strategy,
-            "result_summary": question["question"][:60],
+            "assessment_id": prepared.assessment.assessment_id,
+            "content_validation_status": "verified",
+            "result_summary": prepared.assessment.stem[:60],
         },
     )
     _emit(
@@ -819,10 +809,29 @@ def _act(state: AutoTutorState, step: LessonStep, ctx: ToolExecutionContext) -> 
 # --------------------------------------------------------------------------- #
 def _judge(step: LessonStep, answer: str) -> tuple[bool, str]:
     question = step.question or {}
-    correct_letter = str(question.get("answer", "A")).strip()[:1].upper()
+    if not step.content_validation or step.content_validation.status != "verified":
+        raise RuntimeError("invalid content cannot enter judge")
+    correct_letter = str(question.get("answer") or "").strip()[:1].upper()
+    if correct_letter not in {"A", "B", "C", "D"}:
+        raise RuntimeError("verified assessment has no valid answer")
     given = (answer or "").strip()[:1].upper()
     is_correct = bool(given) and given == correct_letter
     return is_correct, correct_letter
+
+
+def _assessment_from_question(question: dict[str, Any]) -> AssessmentItem:
+    return AssessmentItem.model_validate({
+        "assessment_id": question.get("assessment_id"),
+        "objective_id": question.get("objective_id"),
+        "kind": question.get("kind"),
+        "stem": question.get("question"),
+        "options": question.get("options_meta") or [],
+        "difficulty": question.get("difficulty") or "medium",
+        "cognitive_action": question.get("cognitive_action") or "explain",
+        "source_ids": question.get("source_ids") or [],
+        "variant_of": question.get("variant_of"),
+        "generation_mode": question.get("generation_mode") or "curated",
+    })
 
 
 # --------------------------------------------------------------------------- #
@@ -841,6 +850,10 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
     """学生答错 → 反思（讲错/超纲/粗心）→ 真实修改计划（补讲/降难度/换例子）。"""
     reflect_started = perf_counter()
     question = step.question or {}
+    assessment = _assessment_from_question(question)
+    feedback = build_answer_feedback(assessment, answer)
+    selected_option = next((option for option in assessment.options if option.option_id == feedback["selected_option"]), None)
+    correct_option = next(option for option in assessment.options if option.is_correct)
     prompt = [
         {
             "role": "system",
@@ -855,15 +868,20 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
             "role": "user",
             "content": (
                 f"知识点：{step.knowledge_point}\n难度：{step.difficulty}\n"
-                f"题目：{question.get('question', '')}\n正确答案：{question.get('answer', '')}\n"
-                f"学生选择：{answer}\n本步已尝试次数：{step.attempts}"
+                f"学习目标：{step.objective.model_dump(mode='json') if step.objective else {}}\n"
+                f"题目：{question.get('question', '')}\n"
+                f"学生所选：{selected_option.text if selected_option else answer}\n"
+                f"对应误区：{selected_option.misconception_code if selected_option else 'invalid_option'}\n"
+                f"正确选项：{correct_option.text}\n正确依据：{correct_option.feedback}\n"
+                f"历史错因：{step.rationale}\n当前讲解：{(step.teaching or {}).get('explanation', '')}\n"
+                f"本步已尝试次数：{step.attempts}"
             ),
         },
     ]
     fallback = _Reflection(
-        diagnosis="学生答错，可能是讲解不够清晰或难度偏高。",
+        diagnosis=feedback["message"],
         adjustment="reteach",
-        explanation=f"我们再梳理一下「{step.knowledge_point}」的核心史实，然后用一道更基础的题检验。",
+        explanation=feedback["correction"],
     )
     try:
         reflection = invoke_structured(llm_quality, prompt, model=_Reflection, fallback=fallback)
@@ -942,16 +960,14 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
 # exit ticket：课后退出票检验
 # --------------------------------------------------------------------------- #
 def _select_exit_ticket_target(state: AutoTutorState) -> tuple[LessonStep | None, str]:
-    for step in state.lesson_plan:
-        if step.status == "struggling":
-            return step, "struggling_step"
-    for step in state.lesson_plan:
-        if step.replanned:
-            return step, "replanned_step"
-    for step in state.lesson_plan:
-        if step.status == "mastered":
-            return step, "mastered_step"
-    return (state.lesson_plan[0], "fallback") if state.lesson_plan else (None, "fallback")
+    if not state.lesson_plan:
+        return None, "fallback"
+    primary = state.lesson_plan[0]
+    if primary.status == "struggling":
+        return primary, "struggling_step"
+    if primary.replanned:
+        return primary, "replanned_step"
+    return primary, "fallback"
 
 
 def _start_exit_ticket(state: AutoTutorState, ctx: ToolExecutionContext) -> None:
@@ -961,19 +977,54 @@ def _start_exit_ticket(state: AutoTutorState, ctx: ToolExecutionContext) -> None
         _finalize(state)
         return
     difficulty: Difficulty = "easy" if target.status == "struggling" else "medium"
-    sources = target.sources[:4]
-    question = _generate_question(target.knowledge_point, difficulty, sources)
+    if target.objective is None:
+        _block_content(state, target, "exit_ticket_objective_missing")
+        return
+    retrieval_data = {
+        "sources": target.sources,
+        "evidence_sufficiency": target.evidence_decision.model_dump(mode="json") if target.evidence_decision else {},
+    }
+    practice_assessment_id = str((target.question or {}).get("assessment_id") or "") or None
+    practice_assessment = _assessment_from_question(target.question) if target.question else None
+    prepared = prepare_content(
+        target.objective,
+        retrieval_data,
+        kind="exit_ticket",
+        excluded_assessment_id=practice_assessment_id,
+        excluded_assessment=practice_assessment,
+    )
+    if prepared.validation.status != "verified" or prepared.assessment is None:
+        target.content_validation = prepared.validation
+        _block_content(state, target, prepared.blocked_reason or "exit_ticket_validation_failed")
+        return
+    question = assessment_to_question(prepared.assessment)
     state.exit_ticket = ExitTicket(
         knowledge_point=target.knowledge_point,
         source_tag=target.source_tag,
         difficulty=difficulty,
         strategy="课后退出票检验：用一道迁移题确认本节辅导是否真正生效。",
         question=question,
-        sources=sources,
+        sources=target.sources[:4],
         generated_from=generated_from,  # type: ignore[arg-type]
+        objective=target.objective,
+        content_validation=prepared.validation,
+        content_version=prepared.content_version,
+        evidence_label=prepared.evidence_label,
     )
     state.phase = "exit_ticket"
     state.status = "awaiting_answer"
+    _record_content_event(
+        state,
+        target,
+        "auto_tutor_content_verified",
+        metadata={
+            "assessment_id": prepared.assessment.assessment_id,
+            "assessment_kind": "exit_ticket",
+            "content_validation_status": "verified",
+            "mastery_eligible": state.content_gate_mode == "enforce",
+            "generation_mode": prepared.assessment.generation_mode,
+        },
+    )
     _emit(
         state,
         "exit_ticket",
@@ -986,6 +1037,7 @@ def _start_exit_ticket(state: AutoTutorState, ctx: ToolExecutionContext) -> None
             "source_tag": state.exit_ticket.source_tag,
             "difficulty": state.exit_ticket.difficulty,
             "generated_from": generated_from,
+            "assessment_id": prepared.assessment.assessment_id,
             "result_summary": f"为「{state.exit_ticket.knowledge_point}」生成课后退出票，等待学生完成最后检验",
         },
     )
@@ -994,17 +1046,44 @@ def _start_exit_ticket(state: AutoTutorState, ctx: ToolExecutionContext) -> None
 def _submit_exit_ticket_answer(state: AutoTutorState, answer: str) -> tuple[bool, str]:
     if state.exit_ticket is None:
         raise RuntimeError("exit ticket not prepared")
+    if not state.exit_ticket.content_validation or state.exit_ticket.content_validation.status != "verified":
+        raise RuntimeError("invalid exit ticket cannot enter judge")
+    assessment = _assessment_from_question(state.exit_ticket.question)
     given = (answer or "").strip()[:1].upper()
-    correct_letter = str(state.exit_ticket.question.get("answer", "A")).strip()[:1].upper()
+    correct_letter = str(state.exit_ticket.question.get("answer") or "").strip()[:1].upper()
+    if correct_letter not in {"A", "B", "C", "D"}:
+        raise RuntimeError("verified exit ticket has no valid answer")
     is_correct = bool(given) and given == correct_letter
+    feedback = build_answer_feedback(assessment, given)
+    state.answer_feedback = feedback
+    primary = state.lesson_plan[0] if state.lesson_plan else None
+    practice = primary.practice_result if primary else None
+    mastery_gate_passed = verified_mastery(
+        practice_assessment_id=str((practice or {}).get("assessment_id") or "") or None,
+        practice_objective_id=str((practice or {}).get("objective_id") or "") or None,
+        practice_correct=bool((practice or {}).get("is_correct")),
+        practice_validation_status=(practice or {}).get("content_validation_status"),
+        exit_assessment_id=assessment.assessment_id,
+        exit_objective_id=assessment.objective_id,
+        exit_correct=is_correct,
+        exit_validation_status=state.exit_ticket.content_validation.status,
+    )
+    mastery_verified = bool(mastery_gate_passed and state.content_gate_mode == "enforce")
+    state.verified_mastery = mastery_verified
+    if primary and mastery_verified:
+        primary.status = "mastered"
     state.exit_ticket_result = ExitTicketResult(
         knowledge_point=state.exit_ticket.knowledge_point,
         source_tag=state.exit_ticket.source_tag,
         selected_answer=given,
         correct_answer=correct_letter,
         is_correct=is_correct,
-        explanation=str(state.exit_ticket.question.get("explanation", "")),
+        explanation=feedback["correction"],
         mastery_signal="exit_ticket_passed" if is_correct else "exit_ticket_failed",
+        assessment_id=assessment.assessment_id,
+        objective_id=assessment.objective_id,
+        content_validation_status=state.exit_ticket.content_validation.status,
+        verified_mastery=mastery_verified,
     )
     _emit(
         state,
@@ -1017,7 +1096,8 @@ def _submit_exit_ticket_answer(state: AutoTutorState, answer: str) -> tuple[bool
             "answer": given,
             "correct": correct_letter,
             "is_correct": is_correct,
-            "result_summary": "退出票通过，记录掌握证据" if is_correct else "退出票未通过，回流错题与复习",
+            "verified_mastery": mastery_verified,
+            "result_summary": "退出票通过，掌握证据已验证" if mastery_verified else "退出票已作答，掌握尚未验证",
         },
     )
     return is_correct, correct_letter
@@ -1030,87 +1110,121 @@ def _finalize(state: AutoTutorState) -> None:
     if state.status == "completed":
         return
     finalize_started = perf_counter()
-    mastered = [s.knowledge_point for s in state.lesson_plan if s.status == "mastered"]
-    struggling = [s.knowledge_point for s in state.lesson_plan if s.status == "struggling"]
-    event_types = ["auto_tutor_step"]
-
+    event_types: list[str] = []
     for step in state.lesson_plan:
-        if step.status not in ("mastered", "struggling"):
+        practice = step.practice_result or {}
+        if not practice:
             continue
-        success = step.status == "mastered"
         tag = step.source_tag or step.knowledge_point
-        try_record_learning_event(
-            LearningEvent(
+        practice_ok = bool(practice.get("is_correct"))
+        metadata = {
+            "objective_id": practice.get("objective_id"),
+            "aspect": step.objective.aspect if step.objective else None,
+            "content_version": step.content_version,
+            "assessment_id": practice.get("assessment_id"),
+            "assessment_kind": "practice",
+            "content_validation_status": practice.get("content_validation_status"),
+            "mastery_eligible": False,
+            "generation_mode": (step.question or {}).get("generation_mode"),
+            "legacy_practice_result": True,
+            "difficulty": step.difficulty,
+            "attempts": step.attempts,
+            "replanned": step.replanned,
+        }
+        for event_type in ("auto_tutor_step",):
+            try_record_learning_event(LearningEvent(
                 student_id=state.student_id,
                 session_id=state.session_id,
                 feature="auto_tutor",
-                event_type="auto_tutor_step",
+                event_type=event_type,
                 grade=state.grade,
                 topic=tag,
-                success=success,
-                score=1.0 if success else 0.0,
-                metadata={"difficulty": step.difficulty, "attempts": step.attempts, "replanned": step.replanned},
-            )
-        )
-        try:
-            if success:
-                # 答对累积掌握证据，连续答对达阈值才移出错题本（接入 SM-2）
-                record_correct_evidence(state.student_id, tag)
-            else:
-                # 仍薄弱 → 记入/强化错题本，自动进入今日复习池
-                record_weakpoint(state.student_id, tag, source="auto_tutor")
-        except Exception:
-            pass
+                success=practice_ok,
+                score=1.0 if practice_ok else 0.0,
+                metadata=metadata,
+            ))
+            event_types.append(event_type)
 
     weakpoint_action = "not_recorded"
     review_action = "no_new_review_needed"
     exit_ticket_summary = "退出票未生成"
+    primary = state.lesson_plan[0] if state.lesson_plan else None
     if state.exit_ticket and state.exit_ticket_result:
-        event_types.append("auto_tutor_exit_ticket")
-        ticket_tag = state.exit_ticket.source_tag or state.exit_ticket.knowledge_point
-        ticket_ok = state.exit_ticket_result.is_correct
-        try_record_learning_event(
-            LearningEvent(
+        ticket = state.exit_ticket
+        result = state.exit_ticket_result
+        ticket_tag = ticket.source_tag or ticket.knowledge_point
+        ticket_metadata = {
+            "objective_id": result.objective_id,
+            "aspect": ticket.objective.aspect if ticket.objective else None,
+            "content_version": ticket.content_version,
+            "assessment_id": result.assessment_id,
+            "assessment_kind": "exit_ticket",
+            "content_validation_status": result.content_validation_status,
+            "mastery_eligible": state.content_gate_mode == "enforce",
+            "generation_mode": ticket.question.get("generation_mode"),
+            "generated_from": ticket.generated_from,
+            "replans": state.replans,
+        }
+        for event_type in ("auto_tutor_exit_ticket_answered", "auto_tutor_exit_ticket"):
+            try_record_learning_event(LearningEvent(
                 student_id=state.student_id,
                 session_id=state.session_id,
                 feature="auto_tutor",
-                event_type="auto_tutor_exit_ticket",
+                event_type=event_type,
                 grade=state.grade,
                 topic=ticket_tag,
-                success=ticket_ok,
-                score=1.0 if ticket_ok else 0.0,
-                metadata={
-                    "session_phase": "exit_ticket",
-                    "difficulty": state.exit_ticket.difficulty,
-                    "generated_from": state.exit_ticket.generated_from,
-                    "replans": state.replans,
-                    "selected_answer": state.exit_ticket_result.selected_answer,
-                    "correct_answer": state.exit_ticket_result.correct_answer,
-                },
-            )
-        )
+                success=result.is_correct,
+                score=1.0 if result.is_correct else 0.0,
+                metadata=ticket_metadata,
+            ))
+            event_types.append(event_type)
+
         try:
-            if ticket_ok:
+            if state.verified_mastery:
                 record_correct_evidence(state.student_id, ticket_tag)
-                weakpoint_action = "correct_evidence_recorded"
-            else:
+                weakpoint_action = "verified_correct_evidence_recorded"
+                try_record_learning_event(LearningEvent(
+                    student_id=state.student_id,
+                    session_id=state.session_id,
+                    feature="auto_tutor",
+                    event_type="auto_tutor_verified_mastery",
+                    grade=state.grade,
+                    topic=ticket_tag,
+                    success=True,
+                    score=1.0,
+                    metadata={**ticket_metadata, "mastery_eligible": True},
+                ))
+                event_types.append("auto_tutor_verified_mastery")
+            elif not result.is_correct or (primary and primary.status == "struggling"):
                 record_weakpoint(state.student_id, ticket_tag, source="auto_tutor_exit_ticket")
                 weakpoint_action = "weakpoint_recorded"
                 review_action = "weakpoint_added_to_review_pool"
+            elif state.content_gate_mode in {"off", "shadow"}:
+                weakpoint_action = "rollout_unverified_no_mastery_write"
         except Exception:
             weakpoint_action = "record_failed"
-        exit_ticket_summary = f"退出票{'通过' if ticket_ok else '未通过'}：{state.exit_ticket.knowledge_point}"
+        exit_ticket_summary = (
+            f"退出票通过并已验证掌握：{ticket.knowledge_point}"
+            if state.verified_mastery
+            else f"退出票{'答对' if result.is_correct else '未通过'}，掌握尚未验证：{ticket.knowledge_point}"
+        )
 
+    mastered = [step.knowledge_point for step in state.lesson_plan if step.status == "mastered"]
+    practiced = [step.knowledge_point for step in state.lesson_plan if step.status == "practiced"]
+    struggling = [step.knowledge_point for step in state.lesson_plan if step.status == "struggling"]
     state.evidence = EvidenceSummary(
         exit_ticket_recorded=bool(state.exit_ticket_result),
-        learning_event_types=event_types,
+        learning_event_types=list(dict.fromkeys(event_types)),
         weakpoint_action=weakpoint_action,
         review_action=review_action,
         tutor_effectiveness_ready=bool(state.exit_ticket_result),
+        verified_mastery=state.verified_mastery,
+        content_validation_status=state.exit_ticket_result.content_validation_status if state.exit_ticket_result else None,
     )
 
     summary = (
-        f"AutoTutor 本节课：掌握 {('、'.join(mastered) or '无')}；"
+        f"AutoTutor 本节课：已验证掌握 {('、'.join(mastered) or '无')}；"
+        f"完成有效练习但尚未验证 {('、'.join(practiced) or '无')}；"
         f"仍需巩固 {('、'.join(struggling) or '无')}；触发 {state.replans} 次重规划；{exit_ticket_summary}。"
     )
     state.summary = summary
@@ -1120,13 +1234,14 @@ def _finalize(state: AutoTutorState) -> None:
         memory_type="review_goal",
         content={
             "mastered": mastered,
+            "practiced": practiced,
             "struggling": struggling,
             "session_id": state.session_id,
             "exit_ticket": state.exit_ticket_result.model_dump() if state.exit_ticket_result else None,
             "evidence": state.evidence.model_dump() if state.evidence else None,
         },
         source_feature="auto_tutor",
-        confidence=0.85 if state.exit_ticket_result and state.exit_ticket_result.is_correct else 0.75,
+        confidence=0.9 if state.verified_mastery else 0.7,
         reason="AutoTutor 自主辅导课后退出票与学习证据，用于排下一次复习。",
         metadata={"replans": state.replans, "exit_ticket_recorded": bool(state.exit_ticket_result)},
     )
@@ -1139,6 +1254,7 @@ def _finalize(state: AutoTutorState) -> None:
         started_at=finalize_started,
         metadata={
             "mastered": mastered,
+            "practiced": practiced,
             "struggling": struggling,
             "replans": state.replans,
             "exit_ticket_result": state.exit_ticket_result.model_dump() if state.exit_ticket_result else None,
@@ -1159,11 +1275,18 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
     current = state.lesson_plan[state.current_step_index] if state.current_step_index < len(state.lesson_plan) else None
     current_question = None
     if state.phase == "exit_ticket" and state.exit_ticket and state.status == "awaiting_answer":
+        objective = state.exit_ticket.objective
         current_question = {
             "kind": "exit_ticket",
+            "assessment_id": state.exit_ticket.question.get("assessment_id"),
             "knowledge_point": state.exit_ticket.knowledge_point,
+            "objective": {
+                "objective_id": objective.objective_id,
+                "label": state.exit_ticket.knowledge_point,
+            } if objective else None,
+            "content_status": state.exit_ticket.content_validation.status if state.exit_ticket.content_validation else "blocked",
+            "evidence_label": state.exit_ticket.evidence_label,
             "difficulty": state.exit_ticket.difficulty,
-            "strategy": state.exit_ticket.strategy,
             "question": state.exit_ticket.question.get("question"),
             "options": state.exit_ticket.question.get("options"),
             "step_index": len(state.lesson_plan),
@@ -1172,16 +1295,38 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
     elif current and current.question and state.status == "awaiting_answer":
         # 不向前端泄露答案
         current_question = {
-            "kind": "lesson",
+            "kind": "practice",
+            "assessment_id": current.question.get("assessment_id"),
             "knowledge_point": current.knowledge_point,
+            "objective": {
+                "objective_id": current.objective.objective_id,
+                "label": current.knowledge_point,
+            } if current.objective else None,
+            "content_status": current.content_validation.status if current.content_validation else "blocked",
+            "evidence_label": current.evidence_label,
             "difficulty": current.difficulty,
-            "strategy": current.strategy,
-            "teaching": current.teaching,
+            "teaching": {
+                key: value
+                for key, value in (current.teaching or {}).items()
+                if key in {"explanation", "key_points", "example"}
+            } if current.teaching else None,
             "question": current.question.get("question"),
             "options": current.question.get("options"),
             "step_index": state.current_step_index,
             "replanned": current.replanned,
         }
+    primary = state.lesson_plan[0] if state.lesson_plan else None
+    practice = primary.practice_result if primary else None
+    exit_validation = state.exit_ticket.content_validation.status if state.exit_ticket and state.exit_ticket.content_validation else None
+    public_runtime_steps = []
+    for runtime_step in state.runtime_steps:
+        payload = runtime_step.model_dump()
+        payload["metadata"] = {
+            key: value
+            for key, value in (payload.get("metadata") or {}).items()
+            if key not in {"answer", "correct", "source_ids", "answer_bearing_source_ids", "input_summary"}
+        }
+        public_runtime_steps.append(payload)
     return {
         "session_id": state.session_id,
         "run_id": state.run_id,
@@ -1190,17 +1335,24 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         "grade": state.grade,
         "status": state.status,
         "phase": state.phase,
+        "content_gate_mode": state.content_gate_mode,
+        "legacy_unverified": state.legacy_unverified,
         "revision": state.revision,
         "lesson_plan": [
             {
                 "knowledge_point": s.knowledge_point,
                 "source_tag": s.source_tag,
                 "difficulty": s.difficulty,
-                "strategy": s.strategy,
-                "rationale": s.rationale,
                 "status": s.status,
                 "attempts": s.attempts,
                 "replanned": s.replanned,
+                "objective": {
+                    "objective_id": s.objective.objective_id,
+                    "entity": s.objective.entity,
+                    "aspect": s.objective.aspect,
+                    "target_outcome": s.objective.target_outcome,
+                } if s.objective else None,
+                "content_status": s.content_validation.status if s.content_validation else None,
             }
             for s in state.lesson_plan
         ],
@@ -1211,7 +1363,19 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         "summary": state.summary,
         "exit_ticket_result": state.exit_ticket_result.model_dump() if state.exit_ticket_result else None,
         "evidence": state.evidence.model_dump() if state.evidence else None,
-        "runtime_steps": [s.model_dump() for s in state.runtime_steps],
+        "answer_feedback": state.answer_feedback,
+        "mastery": {
+            "status": "verified" if state.verified_mastery else "not_yet_verified",
+            "practice_verified": bool(practice and practice.get("content_validation_status") == "verified"),
+            "practice_correct": bool(practice and practice.get("is_correct")),
+            "exit_ticket_verified": bool(state.exit_ticket_result and exit_validation == "verified"),
+        },
+        "content_blocked": {
+            key: value
+            for key, value in (state.content_blocked or {}).items()
+            if key in {"objective_label", "message", "suggested_actions"}
+        } if state.content_blocked else None,
+        "runtime_steps": public_runtime_steps,
     }
 
 
@@ -1334,7 +1498,7 @@ def _autotutor_side_effect_ledger(state: AutoTutorState) -> list[dict[str, Any]]
 
 
 def _start_runtime_run(state: AutoTutorState, *, actor_id: str | None, actor_role: str | None) -> None:
-    if not state.run_id:
+    if not state.run_id or state.status != "awaiting_answer":
         return
     from agent_runtime.context import RuntimeV2Settings
 
@@ -1462,8 +1626,11 @@ def start_session(
     trace_id: str | None = None,
     focus_tags: list[str] | None = None,
     focus_reason: str | None = None,
+    lesson_id: str | None = None,
+    max_minutes: int | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
+    content_gate = ContentGateSettings.from_env()
     if idempotency_key:
         existing = _load_start_idempotent_session(student_id, idempotency_key)
         if existing is not None:
@@ -1471,6 +1638,8 @@ def start_session(
             replay = _public_state(existing)
             replay["idempotent_replay"] = True
             return replay
+    if content_gate.kill_switch:
+        raise AutoTutorUnavailableError("AutoTutor 内容安全开关已暂停新课程")
     trace_id = trace_id or current_trace_id() or uuid4().hex
     set_trace_id(trace_id)
     now = time.time()
@@ -1480,6 +1649,9 @@ def start_session(
         trace_id=trace_id,
         student_id=student_id,
         grade=grade,
+        lesson_id=lesson_id,
+        max_minutes=max(5, min(int(max_minutes or 12), 45)),
+        content_gate_mode=content_gate.selected_mode(student_id),
         created_at=now,
         updated_at=now,
     )
@@ -1518,7 +1690,10 @@ def start_session(
     ctx = _tool_context(student_id, actor_id, actor_role)
     _act(state, state.lesson_plan[0], ctx)
     state.updated_at = time.time()
-    _start_runtime_run(state, actor_id=actor_id, actor_role=actor_role)
+    if state.status == "awaiting_answer":
+        _start_runtime_run(state, actor_id=actor_id, actor_role=actor_role)
+    else:
+        state.run_id = None
     _store.cache(state)
     try:
         _persist_session(state, start_idempotency_key=idempotency_key)
@@ -1570,6 +1745,8 @@ def _submit_answer_locked(
         raise LookupError("autotutor session not found")
     if state.status == "completed":
         return _public_state(state)
+    if state.status != "awaiting_answer" or state.phase == "content_blocked":
+        return _public_state(state)
     claimed_revision = state.revision if expected_revision is None else expected_revision
     if claimed_revision != state.revision:
         result = _public_state(state)
@@ -1617,6 +1794,30 @@ def _submit_answer_locked(
         step.attempts += 1
 
         is_correct, correct_letter = _judge(step, answer)
+        assessment = _assessment_from_question(step.question or {})
+        answer_feedback = build_answer_feedback(assessment, answer)
+        state.answer_feedback = answer_feedback
+        step.practice_result = {
+            "assessment_id": assessment.assessment_id,
+            "objective_id": assessment.objective_id,
+            "is_correct": is_correct,
+            "selected_answer": answer_feedback["selected_option"],
+            "content_validation_status": step.content_validation.status if step.content_validation else "blocked",
+        }
+        _record_content_event(
+            state,
+            step,
+            "auto_tutor_practice_answered",
+            success=is_correct,
+            metadata={
+                "assessment_id": assessment.assessment_id,
+                "assessment_kind": "practice",
+                "content_validation_status": step.content_validation.status if step.content_validation else "blocked",
+                "mastery_eligible": False,
+                "generation_mode": assessment.generation_mode,
+                "is_correct": is_correct,
+            },
+        )
         _emit(
             state,
             "judge",
@@ -1626,7 +1827,6 @@ def _submit_answer_locked(
             metadata={
                 "knowledge_point": step.knowledge_point,
                 "answer": (answer or "")[:1].upper(),
-                "correct": correct_letter,
                 "is_correct": is_correct,
                 "attempt": step.attempts,
                 "result_summary": "答对，进入下一步" if is_correct else "答错，触发反思",
@@ -1644,8 +1844,8 @@ def _submit_answer_locked(
 
         last_reflection: ReflectionRecord | None = None
         if is_correct:
-            step.status = "mastered"
-            state.mastery_delta[step.knowledge_point] = round(0.3 if step.replanned else 0.4, 2)
+            step.status = "practiced"
+            state.mastery_delta[step.knowledge_point] = 0.0
             _advance(state, ctx)
         else:
             if step.attempts < MAX_ATTEMPTS_PER_STEP and state.replans < MAX_REPLANS:

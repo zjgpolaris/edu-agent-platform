@@ -26,7 +26,13 @@ def main() -> None:
                 "query": case["query"],
                 "topic": case["expected_entity"],
             }).model_dump()
-            if result["ok"] is True and result["data"]["retrieval_status"] == "none":
+            data = result["data"]
+            has_no_answer_bearing_evidence = (
+                data["retrieval_status"] in {"none", "partial"}
+                and data["evidence_sufficiency"]["answer_bearing_source_count"] == 0
+                and all(source["answer_bearing"] is False for source in data["sources"])
+            )
+            if result["ok"] is True and has_no_answer_bearing_evidence:
                 passed += 1
     finally:
         history_search.search_with_scores_and_diagnostics = original
@@ -37,4 +43,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
