@@ -1,9 +1,4 @@
-"""Grounded deterministic questions for the student review flow.
-
-The review page must remain answerable when the external model is unavailable.
-This module builds one conservative multiple-choice question from the local
-history corpus instead of exposing an unusable placeholder to students.
-"""
+"""Curriculum-reviewed questions and release gates for student review."""
 from __future__ import annotations
 
 import hashlib
@@ -15,8 +10,23 @@ from typing import Any
 
 
 CORPUS_PATH = Path(__file__).resolve().parents[2] / "knowledge_base" / "history" / "corpus.json"
+QUALITY_CONTRACT_VERSION = 3
 _LETTERS = "ABCD"
 _PLACEHOLDER_MARKERS = ("选项一", "选项二", "选项三", "选项四", "暂无选项", "题目内容")
+_LOW_QUALITY_MARKERS = (
+    "完全由单一人物",
+    "与当时的社会矛盾和时代背景无关",
+    "教材没有提供任何",
+    "没有产生任何历史影响",
+    "与当时的社会背景完全无关",
+    "直接建立了社会主义制度",
+    "立即摆脱了半殖民地半封建社会",
+    "彻底完成了反帝反封建的历史任务",
+)
+_HIDDEN_MATERIAL_REFERENCES = (
+    "该材料", "材料中", "根据材料", "结合材料", "以上材料",
+    "由此", "这些变化", "这最可能", "这最能说明",
+)
 _ASPECTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("历史意义", ("意义", "影响", "推动", "促进", "终结", "奠定")),
     ("意义", ("意义", "影响", "推动", "促进", "终结", "奠定")),
@@ -99,104 +109,198 @@ def _best_corpus_row(tag: str, topic: str, aspect_terms: tuple[str, ...]) -> dic
     return candidates[0][2]
 
 
-def _clean_sentence(value: str, max_chars: int = 110) -> str:
-    text = re.sub(r"\s+", " ", value).strip(" ，,；;。")
-    text = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", text)
-    if len(text) <= max_chars:
-        return text
-    shortened = text[:max_chars]
-    boundary = max(shortened.rfind("，"), shortened.rfind("；"), shortened.rfind("。"))
-    return shortened[:boundary].strip(" ，,；;。") if boundary >= max_chars // 2 else shortened.rstrip(" ，,；;。")
+def _option_text(value: Any) -> str:
+    return re.sub(r"^[A-Da-d][.、．]\s*", "", str(value or "").strip())
 
 
-def _extract_claim(row: dict[str, Any], topic: str, aspect: str, aspect_terms: tuple[str, ...]) -> str:
-    text = re.sub(r"\s+", " ", str(row.get("text") or "")).strip()
-    text = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", text)
-    if aspect in {"目的", "根本目的"}:
-        match = re.search(r"(?:根本)?目的(?:是|在于)([^，。；]+)", text)
-        if match:
-            return _clean_sentence(match.group(1), 70)
-        match = re.search(r"旨在[“\"]?([^，。；”\"]+)", text)
-        if match:
-            return _clean_sentence(match.group(1), 70)
-
-    sentences = [part.strip() for part in re.split(r"(?<=[。！？；])", text) if part.strip()]
-    ranked: list[tuple[int, int, str]] = []
-    for sentence in sentences:
-        compact_sentence = _compact(sentence)
-        score = (8 if topic in compact_sentence else 0) + sum(
-            3 for term in aspect_terms if _compact(term) in compact_sentence
-        )
-        ranked.append((score, -len(sentence), sentence))
-    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    return _clean_sentence(ranked[0][2] if ranked else text)
+def _split_material_question(stem: str) -> tuple[str | None, str]:
+    text = str(stem or "").strip()
+    first, separator, rest = text.partition("。")
+    if separator and len(first) >= 16 and len(rest.strip()) >= 8:
+        return first + "。", rest.strip()
+    for marker in ("这最能说明", "该材料最适合说明", "由此应怎样", "这些变化最能说明"):
+        index = text.find(marker)
+        if index >= 16:
+            return text[:index].rstrip("，,；;。") + "。", text[index:]
+    return None, text
 
 
-def _question_text(topic: str, aspect: str, *, is_variant: bool) -> str:
-    prefix = "换一个角度思考：" if is_variant else ""
-    if aspect in {"目的", "根本目的"}:
-        return f"{prefix}根据教材，{topic}的根本目的是什么？"
-    if aspect in {"历史意义", "意义", "影响"}:
-        return f"{prefix}下列哪一项准确概括了{topic}的{aspect}？"
-    if aspect in {"原因", "失败原因", "背景"}:
-        return f"{prefix}下列哪一项符合教材对{topic}{aspect}的说明？"
-    if aspect in {"主要内容", "内容", "措施"}:
-        return f"{prefix}下列哪一项属于{topic}的{aspect}？"
-    if aspect == "结果":
-        return f"{prefix}{topic}产生了怎样的结果？"
-    return f"{prefix}下列哪一项是教材对{topic}的准确表述？"
+def _curated_entry(tag: str):
+    """Resolve the reviewed AutoTutor pack without importing its runtime state machine."""
+    from agents.autotutor_content import build_learning_objective, find_curated_content, load_curated_content
+
+    objective = build_learning_objective(tag)
+    entry = find_curated_content(objective)
+    if entry is not None:
+        return entry
+    compact_entity = _compact(objective.entity or tag)
+    same_entity = [item for item in load_curated_content() if _compact(item.entity) == compact_entity]
+    return same_entity[0] if len(same_entity) == 1 else None
 
 
-def _distractors(topic: str, aspect: str) -> list[str]:
-    if aspect in {"目的", "根本目的"}:
-        return [
-            "推翻清政府并建立资产阶级共和国",
-            "彻底完成反帝反封建的历史任务",
-            "建立社会主义制度并消灭封建土地制度",
-        ]
-    if aspect in {"历史意义", "意义", "影响"}:
-        return [
-            "使中国立即摆脱了半殖民地半封建社会",
-            "彻底完成了反帝反封建的历史任务",
-            "直接建立了社会主义制度",
-        ]
-    if aspect in {"原因", "失败原因", "背景"}:
-        return [
-            "完全由单一人物的个人意愿决定",
-            "与当时的社会矛盾和时代背景无关",
-            "教材没有提供任何可以判断的历史条件",
-        ]
-    if aspect in {"主要内容", "内容", "措施"}:
-        return [
-            f"彻底否定并停止与{topic}有关的一切活动",
-            "把其他历史时期的制度直接照搬到当时",
-            "只提出口号，没有采取任何实际措施",
-        ]
-    return [
-        f"{topic}没有产生任何历史影响",
-        f"{topic}与当时的社会背景完全无关",
-        "把不同历史时期的事件混为一谈",
-    ]
+def build_curated_review_question(
+    tag: str,
+    *,
+    is_variant: bool = False,
+    seed_question: dict[str, Any] | None = None,
+    target_difficulty: str | None = None,
+    selection_seed: str = "",
+) -> dict[str, Any] | None:
+    """Convert one curriculum-reviewed assessment into the review contract."""
+    entry = _curated_entry(tag)
+    if entry is None:
+        return None
+    practice = list(entry.practice_items)
+    exit_items = list(entry.exit_ticket_items)
+    if is_variant and target_difficulty != "easy":
+        candidates = [*exit_items, *practice]
+    else:
+        candidates = practice
+    if target_difficulty:
+        matched = [item for item in candidates if item.difficulty == target_difficulty]
+        if matched:
+            candidates = matched
+    previous_id = str((seed_question or {}).get("question_id") or "")
+    fresh = [item for item in candidates if item.assessment_id != previous_id]
+    if fresh:
+        candidates = fresh
+    if not candidates:
+        return None
+
+    def candidate_key(item: Any) -> tuple[int, int, int, str]:
+        lengths = [len(_compact(option.text)) for option in item.options]
+        balance = max(lengths) - min(lengths) if lengths else 999
+        variant_priority = 0 if (is_variant and (item.kind == "exit_ticket" or item.variant_of)) else 1
+        cognition_priority = 0 if item.cognitive_action in {"explain", "compare", "apply"} else 1
+        digest = hashlib.sha256(f"{selection_seed}:{item.assessment_id}".encode("utf-8")).hexdigest()
+        return variant_priority, cognition_priority, balance, digest
+
+    source_label = entry.source_refs[0].label if entry.source_refs else entry.lesson
+    for item in sorted(candidates, key=candidate_key):
+        if is_variant and item.review_prompt and item.feedback_material:
+            material = item.feedback_material.strip()
+            question = item.review_prompt.strip()
+            material_timing = "after_answer"
+        else:
+            material, question = _split_material_question(item.stem)
+            material_timing = "before_answer" if material else None
+        options = [f"{_LETTERS[index]}. {option.text}" for index, option in enumerate(item.options)]
+        correct = next(option.option_id for option in item.options if option.is_correct)
+        feedback = {option.option_id: option.feedback for option in item.options}
+        result = {
+            "question_id": item.assessment_id,
+            "tag": str(tag or "").strip(),
+            "material": material,
+            "material_timing": material_timing,
+            "question": question,
+            "options": options,
+            "answer": correct,
+            "explanation": feedback[correct],
+            "option_feedback": feedback,
+            "difficulty": item.difficulty,
+            "cognitive_action": item.cognitive_action,
+            "lesson_label": entry.lesson,
+            "source_label": source_label,
+            "done": False,
+            "correct": None,
+            "is_variant": is_variant,
+            "generation_source": "curriculum_reviewed",
+            "quality_contract_version": QUALITY_CONTRACT_VERSION,
+            "quality_status": "verified",
+        }
+        if not review_question_quality_reasons(result, require_variant=is_variant):
+            return result
+    return None
 
 
-def _rotate_options(tag: str, correct: str, distractors: list[str], seed: str = "") -> tuple[list[str], str]:
-    offset = hashlib.sha256(f"{tag}|{seed}".encode("utf-8")).digest()[0] % 4
-    values = distractors[:3]
-    values.insert(offset, correct)
-    options = [f"{_LETTERS[index]}. {value}" for index, value in enumerate(values)]
-    return options, _LETTERS[offset]
-
-
-def is_usable_choice_question(data: dict[str, Any] | None) -> bool:
+def review_question_quality_reasons(
+    data: dict[str, Any] | None,
+    *,
+    require_variant: bool | None = None,
+) -> list[str]:
+    """Deterministic gate for student-facing junior-history choice questions."""
     if not isinstance(data, dict):
-        return False
+        return ["question_not_object"]
+    reasons: list[str] = []
     question = str(data.get("question") or "").strip()
     options = data.get("options")
     answer = str(data.get("answer") or "").strip().upper()[:1]
     if not question or not isinstance(options, list) or len(options) != 4 or answer not in _LETTERS:
-        return False
-    combined = question + " " + " ".join(str(option) for option in options)
-    return all(str(option).strip() for option in options) and not any(marker in combined for marker in _PLACEHOLDER_MARKERS)
+        return ["choice_structure_invalid"]
+    normalized_options = [_option_text(option) for option in options]
+    if not all(normalized_options):
+        reasons.append("choice_option_empty")
+    if len({_compact(option) for option in normalized_options}) != 4:
+        reasons.append("choice_options_not_unique")
+    combined = " ".join([question, str(data.get("material") or ""), *normalized_options])
+    if any(marker in combined for marker in _PLACEHOLDER_MARKERS):
+        reasons.append("placeholder_content")
+    if any(marker in combined for marker in _LOW_QUALITY_MARKERS):
+        reasons.append("implausible_distractor")
+    correct_index = _LETTERS.index(answer)
+    correct_length = len(_compact(normalized_options[correct_index]))
+    distractor_lengths = [len(_compact(value)) for index, value in enumerate(normalized_options) if index != correct_index]
+    if distractor_lengths and correct_length > max(distractor_lengths) + 14 and correct_length > min(distractor_lengths) * 1.8:
+        reasons.append("answer_length_giveaway")
+    variant_required = bool(data.get("is_variant")) if require_variant is None else require_variant
+    if variant_required:
+        if not data.get("is_variant"):
+            reasons.append("variant_flag_missing")
+        if len(str(data.get("material") or "").strip()) < 16:
+            reasons.append("variant_material_missing")
+        if data.get("material_timing") != "after_answer":
+            reasons.append("variant_material_timing_invalid")
+        if any(marker in question for marker in _HIDDEN_MATERIAL_REFERENCES):
+            reasons.append("question_depends_on_hidden_material")
+        if str(data.get("cognitive_action") or "") not in {"explain", "compare", "apply"}:
+            reasons.append("variant_cognitive_level_too_low")
+    if str(data.get("difficulty") or "") not in {"easy", "medium", "hard"}:
+        reasons.append("difficulty_missing")
+    if str(data.get("cognitive_action") or "") not in {"recall", "explain", "compare", "apply"}:
+        reasons.append("cognitive_action_missing")
+    return list(dict.fromkeys(reasons))
+
+
+def is_usable_choice_question(data: dict[str, Any] | None) -> bool:
+    return not review_question_quality_reasons(data)
+
+
+def public_review_question(task: dict[str, Any], *, reveal_answer: bool = False) -> dict[str, Any]:
+    """Hide answer-bearing fields until the server has judged the submission."""
+    allowed = {
+        "question_id", "tag", "question", "options", "difficulty", "material_timing",
+        "cognitive_action", "lesson_label", "source_label", "done", "correct",
+        "is_variant", "generation_source", "quality_contract_version", "quality_status",
+        "adaptive_message", "pending_generate", "blocked_message",
+    }
+    public = {key: value for key, value in task.items() if key in allowed}
+    if task.get("material_timing") == "before_answer":
+        public["material"] = task.get("material")
+    if reveal_answer:
+        public.update({
+            "material": task.get("material"),
+            "answer": task.get("answer"),
+            "explanation": task.get("explanation"),
+            "selected_feedback": task.get("selected_feedback"),
+        })
+    return public
+
+
+def blocked_review_question(tag: str, reason: str) -> dict[str, Any]:
+    return {
+        "tag": str(tag or "历史知识点").strip() or "历史知识点",
+        "question": "",
+        "options": [],
+        "answer": "",
+        "explanation": "",
+        "done": False,
+        "correct": None,
+        "pending_generate": True,
+        "quality_contract_version": QUALITY_CONTRACT_VERSION,
+        "quality_status": "blocked",
+        "blocked_reason": reason,
+        "blocked_message": "当前缺少达到练习标准的可靠题目，本题不会计入掌握结果。",
+    }
 
 
 def build_grounded_review_question(
@@ -204,31 +308,24 @@ def build_grounded_review_question(
     *,
     is_variant: bool = False,
     seed_question: dict[str, Any] | None = None,
+    target_difficulty: str | None = None,
+    selection_seed: str = "",
 ) -> dict[str, Any]:
     normalized_tag = str(tag or "历史知识点").strip() or "历史知识点"
+    curated = build_curated_review_question(
+        normalized_tag,
+        is_variant=is_variant,
+        seed_question=seed_question,
+        target_difficulty=target_difficulty,
+        selection_seed=selection_seed,
+    )
+    if curated is not None:
+        return curated
     topic, aspect, aspect_terms = _split_tag(normalized_tag)
     row = _best_corpus_row(normalized_tag, topic, aspect_terms)
-    if row:
-        claim = _extract_claim(row, topic, aspect, aspect_terms)
-        meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
-        source = str(meta.get("source") or "本地历史教材语料")
-        generation_source = "trusted_corpus"
-    else:
-        claim = f"应依据教材中的人物、事件、原因和影响来核对“{normalized_tag}”"
-        source = "复习方法"
-        generation_source = "study_strategy"
-        aspect = "核心史实"
-
-    seed = str((seed_question or {}).get("question") or "")
-    options, answer = _rotate_options(normalized_tag, claim, _distractors(topic, aspect), seed)
-    return {
-        "tag": normalized_tag,
-        "question": _question_text(topic, aspect, is_variant=is_variant),
-        "options": options,
-        "answer": answer,
-        "explanation": f"教材依据：{claim}。来源：{source}。",
-        "done": False,
-        "correct": None,
-        "is_variant": is_variant,
-        "generation_source": generation_source,
-    }
+    if row is None:
+        return blocked_review_question(normalized_tag, "reviewed_content_missing")
+    # A corpus paragraph can support generation, but it cannot by itself prove
+    # that three synthetic distractors are historically valid. Fail closed
+    # instead of shipping the old generic/absurd-option fallback.
+    return blocked_review_question(normalized_tag, "reviewed_assessment_missing")

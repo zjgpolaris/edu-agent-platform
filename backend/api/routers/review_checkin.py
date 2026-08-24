@@ -4,7 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from security.auth import Actor, assert_student_access, require_auth
-from services.review_service import create_today_session, get_mastery_overview, get_today_session, submit_answer as _submit_review
+from services.review_service import (
+    ReviewConflictError,
+    create_today_session,
+    get_mastery_overview,
+    get_today_session,
+    public_review_session,
+    submit_answer as _submit_review,
+)
 from services.check_in_service import check_in, get_check_in_status, get_achievements, get_check_in_history
 from services.learning_preference_service import get_preferences, set_preferences, get_preference_schema
 from services.root_cause_service import analyze_root_cause, get_latest_root_cause, get_root_cause_summary
@@ -13,8 +20,8 @@ router = APIRouter(tags=["review"])
 
 
 class ReviewSubmitRequest(BaseModel):
-    task_index: int
-    is_correct: bool
+    task_index: int = Field(ge=0)
+    selected_answer: str = Field(pattern="^[A-Da-d]$")
 
 
 class PreferenceUpdateRequest(BaseModel):
@@ -34,14 +41,26 @@ async def review_today(student_id: str, actor: Actor = Depends(require_auth)):
     today = _date.today().isoformat()
     session = await run_in_threadpool(get_today_session, student_id, today)
     if session:
-        return session
-    return await run_in_threadpool(create_today_session, student_id, today)
+        return public_review_session(session)
+    created = await run_in_threadpool(create_today_session, student_id, today)
+    return public_review_session(created)
 
 
 @router.post("/api/students/{student_id}/review/submit")
 async def review_submit(student_id: str, req: ReviewSubmitRequest, actor: Actor = Depends(require_auth)):
     assert_student_access(actor, student_id)
-    return await run_in_threadpool(_submit_review, student_id, _date.today().isoformat(), req.task_index, req.is_correct)
+    try:
+        return await run_in_threadpool(
+            _submit_review,
+            student_id,
+            _date.today().isoformat(),
+            req.task_index,
+            req.selected_answer,
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/students/{student_id}/mastery-overview")

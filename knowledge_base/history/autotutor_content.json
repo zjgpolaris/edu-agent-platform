@@ -83,6 +83,8 @@
           "objective_id": "history:戊戌变法:cause:v1",
           "kind": "exit_ticket",
           "stem": "某次改革只依靠少数上层人物，既没有可靠军队，也没有广泛社会支持。用戊戌变法的经验判断，这最可能暴露什么问题？",
+          "review_prompt": "从政治力量基础看，戊戌变法失败最能说明下列哪一问题？",
+          "feedback_material": "某次改革只依靠少数上层人物，既没有可靠军队，也没有广泛社会支持。",
           "options": [
             {"option_id": "A", "text": "改革力量薄弱，面对既得利益集团反击时难以坚持", "is_correct": true, "feedback": "正确。你把戊戌变法失败原因迁移到了新的改革情境。", "source_ids": ["autotutor:textbook:wuxu:cause:v1"]},
             {"option_id": "B", "text": "改革一定会立即完成思想启蒙", "is_correct": false, "misconception_code": "cause_impact_confusion", "feedback": "思想影响不能代替对失败风险的判断。"},
@@ -173,6 +175,8 @@
           "objective_id": "history:洋务运动:purpose:v1",
           "kind": "exit_ticket",
           "stem": "洋务派创办近代企业、编练新式军队，却没有改变清朝政治制度。这最能说明其根本目的是什么？",
+          "review_prompt": "洋务派学习西方技术、创办企业和编练军队的根本目的是什么？",
+          "feedback_material": "洋务派创办近代企业、编练新式军队，却没有改变清朝政治制度。",
           "options": [
             {"option_id": "A", "text": "借助新技术巩固原有统治", "is_correct": true, "feedback": "正确。材料中的做法服务于维护和巩固清政府统治。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"]},
             {"option_id": "B", "text": "建立资产阶级共和国", "is_correct": false, "misconception_code": "movement_goal_confusion", "feedback": "洋务派没有改变封建政治制度的目标。"},
@@ -263,6 +267,8 @@
           "objective_id": "history:赤壁之战:impact:v1",
           "kind": "exit_ticket",
           "stem": "一场战役使北方势力统一全国的计划受阻，南方两支力量获得发展空间。该材料最适合说明赤壁之战的哪项影响？",
+          "review_prompt": "赤壁之战对当时政治力量格局产生了什么影响？",
+          "feedback_material": "一场战役使北方势力统一全国的计划受阻，南方两支力量获得发展空间。",
           "options": [
             {"option_id": "A", "text": "推动三国鼎立局面的形成", "is_correct": true, "feedback": "正确。你根据战后力量变化判断出了战役影响。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"]},
             {"option_id": "B", "text": "促成秦朝统一", "is_correct": false, "misconception_code": "period_confusion", "feedback": "秦朝统一远早于赤壁之战。"},
@@ -353,6 +359,8 @@
           "objective_id": "history:辛亥革命:significance:v1",
           "kind": "exit_ticket",
           "stem": "辛亥革命结束了君主专制制度，但中国社会性质没有根本改变。由此应怎样评价它？",
+          "review_prompt": "下列哪一项是对辛亥革命历史意义和局限的全面评价？",
+          "feedback_material": "辛亥革命结束了君主专制制度，但中国社会性质没有根本改变。",
           "options": [
             {"option_id": "A", "text": "既有重大的制度和思想意义，也存在未完成革命任务的局限", "is_correct": true, "feedback": "正确。这是兼顾历史贡献和局限的评价。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"]},
             {"option_id": "B", "text": "因为有局限，所以没有任何历史意义", "is_correct": false, "misconception_code": "all_or_nothing_evaluation", "feedback": "有局限不等于没有意义，应同时评价贡献和不足。"},
@@ -443,6 +451,8 @@
           "objective_id": "history:鸦片战争:impact:v1",
           "kind": "exit_ticket",
           "stem": "如果一个国家战败后被迫割地、协定关税并开放通商口岸，这些变化最能说明鸦片战争后的哪项影响？",
+          "review_prompt": "鸦片战争后，中国社会性质和国家主权发生了怎样的变化？",
+          "feedback_material": "如果一个国家战败后被迫割地、协定关税并开放通商口岸，国家主权将受到破坏。",
           "options": [
             {"option_id": "A", "text": "国家主权遭到破坏，社会性质开始发生变化", "is_correct": true, "feedback": "正确。你从条约权益变化推断出了社会影响。", "source_ids": ["autotutor:textbook:opium:impact:v1"]},
             {"option_id": "B", "text": "国家主权得到进一步巩固", "is_correct": false, "misconception_code": "impact_reversal", "feedback": "割地和协定关税都意味着主权受损。"},

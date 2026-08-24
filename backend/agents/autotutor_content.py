@@ -89,6 +89,8 @@ class AssessmentItem(BaseModel):
     objective_id: str
     kind: AssessmentKind
     stem: str
+    review_prompt: str | None = None
+    feedback_material: str | None = None
     options: list[AssessmentOption]
     difficulty: Difficulty
     cognitive_action: CognitiveAction

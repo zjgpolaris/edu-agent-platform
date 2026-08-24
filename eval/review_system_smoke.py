@@ -102,34 +102,28 @@ def accepts_valid_questions() -> None:
         "question": "武则天是哪个朝代的皇帝？",
         "options": ["A.汉朝", "B.唐朝", "C.宋朝", "D.明朝"],
         "answer": "B",
+        "difficulty": "easy",
+        "cognitive_action": "recall",
+        "quality_contract_version": 3,
+        "quality_status": "verified",
     }
     assert not is_unusable_question(valid), "正常题被误判为占位题"
 
 
-def model_failure_uses_grounded_questions() -> None:
-    """没有模型凭证时也必须返回学生可作答、教材有据的题。"""
-    import llm_config
-
-    class FailingLlm:
-        def invoke(self, _messages):
-            raise RuntimeError("credentials are not configured")
-
-    original = llm_config.llm_fast
-    llm_config.llm_fast = FailingLlm()
-    try:
-        purpose = _generate_question("洋务运动目的")
-        significance = _generate_question("辛亥革命历史意义")
-        variant = generate_variant("洋务运动目的", purpose)
-    finally:
-        llm_config.llm_fast = original
+def reviewed_questions_do_not_need_model() -> None:
+    """审定题选择不依赖外部模型，离线也能稳定出题。"""
+    purpose = _generate_question("洋务运动目的")
+    significance = _generate_question("辛亥革命历史意义")
+    variant = generate_variant("洋务运动目的", purpose)
 
     assert not is_unusable_question(purpose), purpose
-    assert "维护和巩固清政府的统治" in " ".join(purpose["options"]), purpose
+    assert "清政府的统治" in " ".join(purpose["options"]), purpose
     assert purpose["answer"] in "ABCD", purpose
-    assert purpose.get("generation_source") == "trusted_corpus", purpose
+    assert purpose.get("generation_source") == "curriculum_reviewed", purpose
     assert not is_unusable_question(significance), significance
     assert "君主专制制度" in " ".join(significance["options"]), significance
     assert not is_unusable_question(variant) and variant.get("is_variant") is True, variant
+    assert variant.get("material"), variant
     assert "题目生成失败" not in str(purpose) + str(significance)
 
 
@@ -141,7 +135,7 @@ if __name__ == "__main__":
         ("session_cached", session_cached),
         ("detects_placeholder_questions", detects_placeholder_questions),
         ("accepts_valid_questions", accepts_valid_questions),
-        ("model_failure_uses_grounded_questions", model_failure_uses_grounded_questions),
+        ("reviewed_questions_do_not_need_model", reviewed_questions_do_not_need_model),
     ]
     passed = sum(run_case(n, fn) for n, fn in cases)
     print(f"review_system_smoke={passed}/{len(cases)}")

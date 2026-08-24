@@ -1,17 +1,16 @@
-"""错题变式生成服务
+"""错题变式选题与缓存服务
 
 当学生在某个知识点上反复答错（wrong_count >= VARIANT_THRESHOLD），
-复习时不再重复出原题，而是 LLM 生成一道"换汤不换药"的变式题：
-同一知识点、不同题面/情境/干扰项，帮助学生真正理解而非靠记忆蒙对。
+复习时不再重复原题，而是从课程审定内容包选择一道带新材料/情境的迁移题。
+没有审定题时阻断，不把一次模型生成直接发布给学生。
 
 对外接口
 --------
 generate_variant(tag, seed_question=None) -> dict
-    无论如何都调 LLM 生成一道新变式题。seed_question 用于提示 LLM
-    "不要和这道题一样"，可为 None（首次或无历史题目时）。
+    选择一道审定变式题；seed_question 用于避开上一道 assessment。
 
 get_or_create_variant(student_id, tag, seed_question=None) -> dict
-    先查本地缓存（当天已生成），命中则直接返回；否则调 generate_variant
+    先查本地缓存（当天已选择），命中则直接返回；否则调 generate_variant
     落库后返回。调用方无需关心是否命中缓存。
 
 get_cached_variant(student_id, tag, today) -> dict | None
@@ -29,7 +28,11 @@ from sqlalchemy import text
 
 from db.engine import get_connection
 from student_profile import now_iso
-from services.history_review_question import build_grounded_review_question, is_usable_choice_question
+from services.history_review_question import (
+    build_curated_review_question,
+    build_grounded_review_question,
+    is_usable_choice_question,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -61,41 +64,32 @@ def _seed_hash(seed_question: dict | None) -> str | None:
     return hashlib.sha1(prompt.encode()).hexdigest()[:16] if prompt else None
 
 
-def generate_variant(tag: str, seed_question: dict | None = None) -> dict[str, Any]:
-    """调 LLM 生成变式题。seed_question 为本 tag 上次出现的题目（可 None）。"""
-    from llm_config import llm_fast  # 延迟导入避免循环依赖
-
-    avoid_block = ""
-    if seed_question:
-        original = str(seed_question.get("question") or seed_question.get("prompt") or "").strip()
-        if original:
-            avoid_block = f"\n【原题（请勿重复相同题面）】\n{original}\n"
-
-    prompt = (
-        f"为初中历史知识点「{tag}」出一道选择题变式题。"
-        f"{avoid_block}"
-        "要求：考查相同知识点，但题面情境、问法或干扰项与原题明显不同，"
-        "让学生需要真正理解才能作答，而非靠记忆套答。\n"
-        "严格返回 JSON，不要其他内容：\n"
-        '{"question":"题目内容","options":["A.选项一","B.选项二","C.选项三","D.选项四"],'
-        '"answer":"A","explanation":"简短解析（1-2句）","is_variant":true}'
+def generate_variant(
+    tag: str,
+    seed_question: dict | None = None,
+    *,
+    target_difficulty: str = "medium",
+    selection_seed: str = "",
+) -> dict[str, Any]:
+    """选择审定变式题。seed_question 为本 tag 上次出现的题目（可 None）。"""
+    curated = build_curated_review_question(
+        tag,
+        is_variant=True,
+        seed_question=seed_question,
+        target_difficulty=target_difficulty,
+        selection_seed=selection_seed,
     )
+    if curated is not None:
+        return curated
 
-    try:
-        raw = llm_fast.invoke([{"role": "user", "content": prompt}]).content
-        start, end = raw.find("{"), raw.rfind("}") + 1
-        data = json.loads(raw[start:end])
-        data["is_variant"] = True
-        data["tag"] = tag
-        data.setdefault("done", False)
-        data.setdefault("correct", None)
-        if not is_usable_choice_question(data):
-            raise ValueError("variant question is unusable")
-    except Exception as exc:
-        _log.warning("variant_service: LLM 生成失败 tag=%s: %s", tag, exc)
-        data = build_grounded_review_question(tag, is_variant=True, seed_question=seed_question)
-
-    return data
+    _log.info("variant_service: reviewed assessment missing; blocked tag=%s", tag)
+    return build_grounded_review_question(
+        tag,
+        is_variant=True,
+        seed_question=seed_question,
+        target_difficulty=target_difficulty,
+        selection_seed=selection_seed,
+    )
 
 
 def get_or_create_variant(
@@ -104,6 +98,7 @@ def get_or_create_variant(
     seed_question: dict | None = None,
     *,
     today: str | None = None,
+    target_difficulty: str = "medium",
 ) -> dict[str, Any]:
     """查缓存；当天已有变式题则直接返回，否则生成并落库。
 
@@ -121,11 +116,16 @@ def get_or_create_variant(
 
     # 1. 先查今日缓存
     cached = get_cached_variant(student_id, tag, today)
-    if cached and is_usable_choice_question(cached):
+    if cached and is_usable_choice_question(cached) and cached.get("difficulty") == target_difficulty:
         return cached
 
     # 2. 生成新变式题
-    variant = generate_variant(tag, seed_question)
+    variant = generate_variant(
+        tag,
+        seed_question,
+        target_difficulty=target_difficulty,
+        selection_seed=f"{student_id}:{today}:{tag}",
+    )
 
     # 3. 落库
     try:

@@ -1,7 +1,7 @@
 """Smoke test: 错题变式生成
 
 覆盖场景：
-1. generate_variant 离线降级（无 LLM）返回合法结构
+1. generate_variant 从审定题包返回合法材料变式
 2. get_or_create_variant 首次生成并落库
 3. get_or_create_variant 当天再次调用命中缓存（不二次生成）
 4. should_use_variant 阈值判断
@@ -44,32 +44,10 @@ def run_case(name: str, fn) -> bool:
         return False
 
 
-# ── Case 1: 降级生成结构合法 ────────────────────────────────────────────────────
-def c1_fallback_structure() -> None:
-    """mock llm_fast.invoke 抛异常，验证降级题目结构完整。"""
-    import unittest.mock as mock
-    from services import variant_service
-
-    with mock.patch("services.variant_service.generate_variant", wraps=variant_service.generate_variant):
-        # 直接用内部降级逻辑：patch llm_fast.invoke 抛异常
-        pass
-
-    # 直接测试降级路径：llm_fast 不可用时 generate_variant 应返回合法 dict
-    import importlib
-    import types
-    fake_llm = types.SimpleNamespace(invoke=lambda msgs: (_ for _ in ()).throw(RuntimeError("no llm")))
-    with mock.patch.dict(sys.modules, {"llm_config": types.SimpleNamespace(llm_fast=fake_llm)}):
-        # 由于 llm_config 已被真实导入，直接 patch generate_variant 内部 llm_fast
-        original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
-        pass
-
-    # 退而求其次：直接构造异常场景，验证返回结构
+# ── Case 1: 审定材料变式结构合法 ────────────────────────────────────────────────
+def c1_reviewed_structure() -> None:
     from services.variant_service import generate_variant
-    import unittest.mock as mock
-
-    with mock.patch("llm_config.llm_fast") as mock_llm:
-        mock_llm.invoke.side_effect = RuntimeError("mock lm failure")
-        result = generate_variant(TAG, seed_question=None)
+    result = generate_variant(TAG, seed_question=None)
 
     _check_question_structure(result, expect_variant=True)
 
@@ -90,10 +68,17 @@ def c2_create_and_persist() -> None:
     import unittest.mock as mock
 
     fake_q = {
-        "question": "【变式】关于鸦片战争的叙述，下列正确的是？",
-        "options": ["A. 1840年英国发动", "B. 1850年法国发动", "C. 1860年俄国发动", "D. 以上都不对"],
+        "question_id": "smoke-opium-variant-1",
+        "material": "1840年，英国军舰驶入中国海面，战争由此爆发。",
+        "question": "鸦片战争的发动者和开始时间分别是什么？",
+        "options": ["A. 1840年英国发动", "B. 1850年法国发动", "C. 1860年俄国发动", "D. 1894年日本发动"],
         "answer": "A",
         "explanation": "鸦片战争始于1840年，由英国发动。",
+        "difficulty": "medium",
+        "cognitive_action": "apply",
+        "quality_contract_version": 3,
+        "quality_status": "verified",
+        "material_timing": "after_answer",
         "is_variant": True,
         "tag": TAG,
         "done": False,
@@ -116,7 +101,7 @@ def c3_cache_hit() -> None:
     import unittest.mock as mock
 
     call_count = {"n": 0}
-    def counting_generate(tag, seed_question=None):
+    def counting_generate(tag, seed_question=None, **_kwargs):
         call_count["n"] += 1
         return {"question": "SHOULD NOT BE CALLED", "options": [], "answer": "", "explanation": "", "is_variant": True, "tag": tag, "done": False, "correct": None}
 
@@ -151,15 +136,20 @@ def c5_review_uses_variant() -> None:
     variant_calls = {"n": 0}
     original_calls = {"n": 0}
 
-    def fake_variant(sid, tag, seed_question=None, *, today=None):
+    def fake_variant(sid, tag, seed_question=None, *, today=None, target_difficulty="medium"):
         variant_calls["n"] += 1
-        return {"question": f"变式题-{tag}", "options": ["A", "B", "C", "D"], "answer": "A",
-                "explanation": "解析", "is_variant": True, "tag": tag, "done": False, "correct": None}
+        return {"question_id": "fake-variant", "material": "这是一段用于验证变式题路径的历史材料。",
+                "question": f"关于{tag}的独立判断题", "options": ["A.甲项", "B.乙项", "C.丙项", "D.丁项"], "answer": "A",
+                "explanation": "解析", "difficulty": target_difficulty, "cognitive_action": "apply",
+                "quality_contract_version": 3, "quality_status": "verified", "material_timing": "after_answer",
+                "is_variant": True, "tag": tag, "done": False, "correct": None}
 
-    def fake_generate(tag):
+    def fake_generate(tag, **_kwargs):
         original_calls["n"] += 1
-        return {"question": f"普通题-{tag}", "options": ["A", "B", "C", "D"], "answer": "A",
-                "explanation": "解析", "is_variant": False, "tag": tag, "done": False, "correct": None}
+        return {"question_id": "fake-normal", "question": f"普通题-{tag}", "options": ["A.甲项", "B.乙项", "C.丙项", "D.丁项"], "answer": "A",
+                "explanation": "解析", "difficulty": "easy", "cognitive_action": "recall",
+                "quality_contract_version": 3, "quality_status": "verified",
+                "is_variant": False, "tag": tag, "done": False, "correct": None}
 
     with mock.patch("services.review_service.get_or_create_variant", fake_variant), \
          mock.patch("services.review_service._generate_question", fake_generate):
@@ -176,14 +166,7 @@ def c5_review_uses_variant() -> None:
 def c6_variant_compatible_with_session() -> None:
     """变式题应包含 done/correct 字段，与 review submit_answer 兼容。"""
     from services.variant_service import generate_variant
-    import unittest.mock as mock
-
-    fake_content = '{"question":"测试变式题","options":["A.一","B.二","C.三","D.四"],"answer":"B","explanation":"解析","is_variant":true}'
-    mock_resp = type("R", (), {"content": fake_content})()
-
-    with mock.patch("llm_config.llm_fast") as mock_llm:
-        mock_llm.invoke.return_value = mock_resp
-        result = generate_variant(TAG)
+    result = generate_variant(TAG)
 
     assert "done" in result, "变式题应含 done 字段（供 review session 用）"
     assert "correct" in result, "变式题应含 correct 字段"
@@ -192,7 +175,7 @@ def c6_variant_compatible_with_session() -> None:
 
 if __name__ == "__main__":
     cases = [
-        ("C1 降级生成结构合法", c1_fallback_structure),
+        ("C1 审定变式结构合法", c1_reviewed_structure),
         ("C2 首次生成并落库", c2_create_and_persist),
         ("C3 当天缓存命中", c3_cache_hit),
         ("C4 should_use_variant 阈值", c4_threshold),

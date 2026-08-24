@@ -10,9 +10,20 @@ from typing import Any
 from sqlalchemy import text
 
 from db.engine import get_connection
-from student_profile import now_iso
-from services.history_review_question import build_grounded_review_question, is_usable_choice_question
-from services.weakpoint_service import get_weakpoints
+from student_profile import (
+    LearningEvent,
+    init_db as init_profile_db,
+    now_iso,
+    record_learning_event_with_connection,
+)
+from services.history_review_question import (
+    QUALITY_CONTRACT_VERSION,
+    build_curated_review_question,
+    build_grounded_review_question,
+    is_usable_choice_question,
+    public_review_question,
+)
+from services.weakpoint_service import apply_weakpoint_evidence_with_connection, get_weakpoints
 from services.variant_service import get_or_create_variant, should_use_variant
 
 
@@ -43,64 +54,43 @@ def _decay_weight(last_wrong_at: str) -> float:
     return 1.0
 
 
-_PLACEHOLDER_OPTS = {"选项一", "选项二", "选项三", "选项四", "选项文字", "题目内容", "题目"}
+class ReviewConflictError(ValueError):
+    """The same review task was already answered with another option."""
 
-def _generate_question(tag: str) -> dict[str, Any]:
-    import logging
-    from llm_config import llm_fast
 
-    _log = logging.getLogger(__name__)
-
-    # 使用与目标 tag 无关的固定示例，防止模型照抄示例内容
-    prompt = (
-        f"你是历史老师，请为知识点「{tag}」出一道四选一选择题。\n"
-        "只输出一个 JSON 对象，不要输出其他任何内容（不要 markdown、不要注释）。\n"
-        "JSON 格式参考（下面是示例，请用「{tag}」的真实内容替换，不要照抄）：\n"
-        '{"question":"武则天是哪个朝代的皇帝？",'
-        '"options":["A.汉朝","B.唐朝","C.宋朝","D.明朝"],'
-        '"answer":"B",'
-        '"explanation":"武则天是中国历史上唯一的女皇帝，统治时期属于唐朝。"}\n'
-        f"现在请针对「{tag}」出题："
-    )
-
-    def _try_parse(raw: str) -> dict[str, Any] | None:
-        start, end = raw.find("{"), raw.rfind("}") + 1
-        if start < 0 or end <= start:
-            return None
-        try:
-            data = json.loads(raw[start:end])
-        except json.JSONDecodeError:
-            return None
-        if not is_usable_choice_question(data):
-            return None
-        return data
-
-    for attempt in range(2):
-        try:
-            raw = llm_fast.invoke([{"role": "user", "content": prompt}]).content
-            data = _try_parse(raw)
-            if data is not None:
-                return {**data, "tag": tag, "done": False, "correct": None}
-            _log.warning("review _generate_question placeholder_detected attempt=%s tag=%s raw_preview=%s",
-                         attempt + 1, tag, raw[:120])
-        except Exception as exc:
-            _log.warning("review _generate_question failed attempt=%s tag=%s: %s", attempt + 1, tag, exc)
-
-    # 模型不可用时仍必须给学生一道可作答、可判分、教材有据的题。
-    fallback = build_grounded_review_question(tag)
-    _log.info(
-        "review _generate_question grounded_fallback tag=%s source=%s",
+def _generate_question(
+    tag: str,
+    *,
+    is_variant: bool = False,
+    seed_question: dict[str, Any] | None = None,
+    target_difficulty: str = "easy",
+    selection_seed: str = "",
+) -> dict[str, Any]:
+    curated = build_curated_review_question(
         tag,
-        fallback.get("generation_source"),
+        is_variant=is_variant,
+        seed_question=seed_question,
+        target_difficulty=target_difficulty,
+        selection_seed=selection_seed,
     )
-    return fallback
+    if curated is not None:
+        return curated
+    # 当前只有审定内容包能同时证明题干、答案和干扰项质量。教材段落可用于
+    # 讲解或后续出题草稿，但不能自动证明一道选择题达到学生发布标准。
+    return build_grounded_review_question(
+        tag,
+        is_variant=is_variant,
+        seed_question=seed_question,
+        target_difficulty=target_difficulty,
+        selection_seed=selection_seed,
+    )
 
 
 def get_today_session(student_id: str, today: str, *, hydrate: bool = True) -> dict | None:
     """读取今日复习 session。
 
-    hydrate=True（默认，复习页）：把作业错题追加的 pending_generate 占位题按需生成真题。
-    hydrate=False（徽标轮询等只需计数的场景）：不触发 LLM 生成，直接返回占位题。
+    hydrate=True（默认，复习页）：从审定题包补齐占位题并升级不合格旧题。
+    hydrate=False（徽标轮询等只需计数的场景）：不做题目升级，直接返回已有任务。
     """
     _ensure_table()
     with get_connection() as conn:
@@ -124,41 +114,70 @@ def is_unusable_question(task: dict[str, Any]) -> bool:
     """
     if task.get("pending_generate") or task.get("_generation_failed"):
         return True
-    options = task.get("options") or []
-    if len(options) != 4 or not all(str(o).strip() for o in options):
+    if int(task.get("quality_contract_version") or 0) != QUALITY_CONTRACT_VERSION:
         return True
-    if not str(task.get("answer") or "").strip():
+    if task.get("quality_status") != "verified":
         return True
-    combined = " ".join(str(o) for o in options) + " " + str(task.get("question") or "")
-    return any(p in combined for p in _PLACEHOLDER_OPTS) or "暂无选项" in combined
+    return not is_usable_choice_question(task)
+
+
+def _adaptive_profile(wp: dict[str, Any]) -> tuple[bool, str, str]:
+    wrong_count = int(wp.get("wrong_count") or 0)
+    correct_streak = int(wp.get("correct_streak") or 0)
+    if wrong_count < 4 and (should_use_variant(wrong_count) or correct_streak >= 1):
+        message = (
+            "已完成一次基础辨析，先独立作答，再用对照材料确认是否真正理解。"
+            if correct_streak >= 1
+            else "这个知识点近期反复出错，先独立作答，再用对照材料检查理解。"
+        )
+        return True, "medium", message
+    message = (
+        "这个知识点错误较多，先用基础辨析稳住核心史实。"
+        if wrong_count >= 4
+        else "根据近期错题安排一道基础辨析。"
+    )
+    return False, "easy", message
 
 
 def _hydrate_pending_tasks(student_id: str, today: str, tasks: list[dict]) -> list[dict]:
     """为无法作答的未答题目按需生成真实题目并落库。
 
-    覆盖两类：作业错题追加的 pending_generate 占位题，以及早先生成失败
-    被写库的坏题。生成再次失败时保留占位标记，下次打开复习页会重试，
-    避免把"选项一/二/三/四"永久固化给学生。
+    覆盖两类：作业错题追加的 pending_generate 占位题，以及早先已写库但
+    不满足质量合同的题。缺少审定题时保留 blocked 状态，不向学生发布。
     """
-    pending = [t for t in tasks if not t.get("done") and is_unusable_question(t)]
-    if not pending:
-        return tasks
+    weakpoints = {item["knowledge_tag"]: item for item in get_weakpoints(student_id)}
     changed = False
-    for t in pending:
-        generated = _generate_question(t.get("tag", ""))
-        if generated.get("_generation_failed"):
-            # 保留占位标记，下次读取时重试；本次不覆盖已有内容
-            t["pending_generate"] = True
+    for index, task in enumerate(tasks):
+        if task.get("done"):
             continue
-        t.update(
-            question=generated.get("question", t.get("question", "")),
-            options=generated.get("options", []),
-            answer=generated.get("answer", ""),
-            explanation=generated.get("explanation", ""),
+        wp = weakpoints.get(str(task.get("tag") or ""))
+        if wp:
+            is_variant, target_difficulty, adaptive_message = _adaptive_profile(wp)
+        else:
+            is_variant = bool(task.get("is_variant"))
+            target_difficulty = str(task.get("target_difficulty") or task.get("difficulty") or ("medium" if is_variant else "easy"))
+            adaptive_message = str(task.get("adaptive_message") or "")
+        adaptive_mismatch = bool(wp) and (
+            bool(task.get("is_variant")) != is_variant
+            or str(task.get("difficulty") or "") != target_difficulty
         )
-        t.pop("pending_generate", None)
-        t.pop("_generation_failed", None)
-        changed = True
+        if not is_unusable_question(task) and not adaptive_mismatch:
+            continue
+        generated = _generate_question(
+            str(task.get("tag") or ""),
+            is_variant=is_variant,
+            seed_question=task,
+            target_difficulty=target_difficulty,
+            selection_seed=f"{student_id}:{today}:{index}",
+        )
+        replacement = {
+            **generated,
+            **({"adaptive_message": adaptive_message} if adaptive_message else {}),
+        }
+        if replacement != task:
+            task.clear()
+            task.update(replacement)
+            changed = True
     if changed:
         with get_connection() as conn:
             conn.execute(
@@ -169,15 +188,29 @@ def _hydrate_pending_tasks(student_id: str, today: str, tasks: list[dict]) -> li
 
 
 def _pick_question(student_id: str, today: str, wp: dict[str, Any]) -> dict[str, Any]:
-    """为单个薄弱点选题策略：答错次数达阈值则生成变式题，否则普通出题。"""
+    """Pick a reviewed assessment using the student's current evidence state."""
     import logging
     tag = wp["knowledge_tag"]
+    is_variant, target_difficulty, adaptive_message = _adaptive_profile(wp)
     try:
-        if should_use_variant(wp.get("wrong_count", 0)):
-            return get_or_create_variant(student_id, tag, today=today)
+        if is_variant:
+            task = get_or_create_variant(
+                student_id,
+                tag,
+                today=today,
+                target_difficulty=target_difficulty,
+            )
+            task["adaptive_message"] = adaptive_message
+            return task
     except Exception as exc:
         logging.getLogger(__name__).warning("review: 变式题生成失败 tag=%s: %s", tag, exc)
-    return _generate_question(tag)
+    task = _generate_question(
+        tag,
+        target_difficulty=target_difficulty,
+        selection_seed=f"{student_id}:{today}:{tag}",
+    )
+    task["adaptive_message"] = adaptive_message
+    return task
 
 
 def create_today_session(student_id: str, today: str) -> dict:
@@ -198,6 +231,27 @@ def create_today_session(student_id: str, today: str) -> dict:
              "tasks": json.dumps(tasks, ensure_ascii=False), "total": len(tasks), "ts": now_iso()},
         )
     return {"date": today, "completed": 0, "total": len(tasks), "tasks": tasks}
+
+
+def public_review_session(session: dict[str, Any]) -> dict[str, Any]:
+    """Serialize a review session without pre-disclosing answers or feedback."""
+    public_tasks: list[dict[str, Any]] = []
+    blocked_tags: list[str] = []
+    for task_index, task in enumerate(session.get("tasks") or []):
+        if is_unusable_question(task):
+            blocked_tags.append(str(task.get("tag") or "历史知识点"))
+            continue
+        public = public_review_question(task)
+        public["task_index"] = task_index
+        public_tasks.append(public)
+    return {
+        "date": session.get("date"),
+        "completed": sum(1 for task in public_tasks if task.get("done")),
+        "total": len(public_tasks),
+        "tasks": public_tasks,
+        "blocked_count": len(blocked_tags),
+        "blocked_tags": blocked_tags,
+    }
 
 
 def merge_new_weakpoints_to_today(student_id: str, new_tags: list[str], today: str) -> None:
@@ -232,36 +286,103 @@ def merge_new_weakpoints_to_today(student_id: str, new_tags: list[str], today: s
         )
 
 
-def submit_answer(student_id: str, today: str, task_idx: int, is_correct: bool) -> dict:
+def submit_answer(student_id: str, today: str, task_idx: int, selected_answer: str) -> dict:
+    selected = str(selected_answer or "").strip().upper()[:1]
+    if selected not in "ABCD":
+        raise ValueError("selected_answer must be A, B, C or D")
     _ensure_table()
+    init_profile_db()
     with get_connection() as conn:
         row = conn.execute(
-            text("SELECT tasks_json FROM review_sessions WHERE student_id=:sid AND date=:date"),
+            text("SELECT tasks_json, completed, total FROM review_sessions WHERE student_id=:sid AND date=:date"),
             {"sid": student_id, "date": today},
         ).mappings().fetchone()
         if not row:
             raise ValueError("review session not found")
-        tasks = json.loads(row["tasks_json"])
+        original_tasks_json = row["tasks_json"]
+        tasks = json.loads(original_tasks_json)
         if not 0 <= task_idx < len(tasks):
             raise ValueError("invalid task_index")
-        tasks[task_idx].update(done=True, correct=is_correct)
-        completed = sum(1 for t in tasks if t["done"])
-        conn.execute(
-            text("UPDATE review_sessions SET tasks_json=:tasks, completed=:c WHERE student_id=:sid AND date=:date"),
-            {"tasks": json.dumps(tasks, ensure_ascii=False), "c": completed, "sid": student_id, "date": today},
+        task = tasks[task_idx]
+        if is_unusable_question(task):
+            raise ValueError("review question is not answerable")
+        if task.get("done"):
+            if task.get("selected_answer") != selected:
+                raise ReviewConflictError("review task already answered with another option")
+            scoreable = [item for item in tasks if not is_unusable_question(item)]
+            return {
+                "completed": sum(1 for item in scoreable if item.get("done")),
+                "total": len(scoreable),
+                "is_correct": bool(task.get("correct")),
+                "replayed": True,
+                "task": public_review_question(task, reveal_answer=True),
+            }
+
+        answer = str(task.get("answer") or "").strip().upper()[:1]
+        is_correct = selected == answer
+        feedback = task.get("option_feedback") if isinstance(task.get("option_feedback"), dict) else {}
+        task.update(
+            done=True,
+            correct=is_correct,
+            selected_answer=selected,
+            selected_feedback=str(feedback.get(selected) or task.get("explanation") or "").strip(),
         )
-    # 复习作答回写错题本：答对累积掌握证据，答错强化薄弱点，让复习真正影响掌握度
-    tag = str(tasks[task_idx].get("tag") or "").strip()
-    if tag:
-        try:
-            from services.weakpoint_service import record_correct_evidence, record_weakpoint
-            if is_correct:
-                record_correct_evidence(student_id, tag)
-            else:
-                record_weakpoint(student_id, tag, source="review")
-        except Exception:
-            pass
-    return {"completed": completed, "total": len(tasks), "task": tasks[task_idx]}
+        completed = sum(1 for t in tasks if t.get("done"))
+        updated = conn.execute(
+            text("""UPDATE review_sessions SET tasks_json=:tasks, completed=:c
+                  WHERE student_id=:sid AND date=:date AND tasks_json=:expected"""),
+            {
+                "tasks": json.dumps(tasks, ensure_ascii=False),
+                "c": completed,
+                "sid": student_id,
+                "date": today,
+                "expected": original_tasks_json,
+            },
+        )
+        if updated.rowcount != 1:
+            raise ReviewConflictError("review task changed while submitting")
+
+        tag = str(task.get("tag") or "").strip()
+        question_id = str(task.get("question_id") or f"task-{task_idx}")
+        effect_key = f"review:{student_id}:{today}:{task_idx}:{question_id}"
+        if tag:
+            apply_weakpoint_evidence_with_connection(
+                conn,
+                evidence_key=effect_key,
+                student_id=student_id,
+                knowledge_tag=tag,
+                evidence_type="verified_correct" if is_correct else "wrong",
+                source_feature="review",
+                source_session_id=f"review:{today}",
+                assessment_id=question_id,
+            )
+            record_learning_event_with_connection(
+                conn,
+                LearningEvent(
+                    student_id=student_id,
+                    session_id=f"review:{today}",
+                    feature="review",
+                    event_type="review_answered",
+                    topic=tag,
+                    score=1.0 if is_correct else 0.0,
+                    success=is_correct,
+                    metadata={
+                        "assessment_id": question_id,
+                        "difficulty": task.get("difficulty"),
+                        "cognitive_action": task.get("cognitive_action"),
+                        "is_variant": bool(task.get("is_variant")),
+                    },
+                ),
+                effect_key=f"{effect_key}:event",
+            )
+    scoreable = [item for item in tasks if not is_unusable_question(item)]
+    return {
+        "completed": sum(1 for item in scoreable if item.get("done")),
+        "total": len(scoreable),
+        "is_correct": is_correct,
+        "replayed": False,
+        "task": public_review_question(task, reveal_answer=True),
+    }
 
 
 def get_mastery_overview(student_id: str) -> dict:

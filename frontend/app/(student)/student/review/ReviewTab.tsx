@@ -8,23 +8,32 @@ import { normalizeError } from "@/lib/api";
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 type Task = {
+  task_index?: number;
   tag: string; question: string; options: string[];
-  answer: string; explanation: string; done: boolean; correct: boolean | null;
+  answer?: string; explanation?: string; selected_feedback?: string;
+  done: boolean; correct: boolean | null;
+  material?: string | null;
+  material_timing?: "before_answer" | "after_answer";
+  difficulty?: "easy" | "medium" | "hard";
+  cognitive_action?: "recall" | "explain" | "compare" | "apply";
+  lesson_label?: string; source_label?: string;
+  adaptive_message?: string;
+  quality_status?: "verified" | "blocked";
+  blocked_message?: string;
   is_variant?: boolean;
   pending_generate?: boolean;
 };
-type Session = { date: string; completed: number; total: number; tasks: Task[] };
-
-const PLACEHOLDER_MARKERS = ["选项一", "选项二", "选项三", "选项四", "暂无选项", "题目内容"];
+type Session = {
+  date: string; completed: number; total: number; tasks: Task[];
+  blocked_count?: number; blocked_tags?: string[];
+};
 
 /** 后端出题失败时会留下无法作答的占位题，前端不能把它当正常题呈现。 */
 function isUnusableTask(task: Task): boolean {
-  if (task.pending_generate) return true;
+  if (task.pending_generate || task.quality_status === "blocked") return true;
   if (!task.options || task.options.length !== 4) return true;
   if (task.options.some(o => !o?.trim())) return true;
-  if (!task.answer?.trim()) return true;
-  const combined = task.options.join(" ") + " " + (task.question || "");
-  return PLACEHOLDER_MARKERS.some(m => combined.includes(m));
+  return !task.question?.trim();
 }
 
 const CSS = `
@@ -64,7 +73,11 @@ const CSS = `
 .rv-tag::before { content:'◆';font-size:7px; }
 .rv-variant-badge { display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid rgba(88,128,72,.35);border-radius:2px;background:rgba(88,128,72,.07);color:#4a7a3c;font-size:10px;letter-spacing:.1em; }
 .rv-variant-badge::before { content:'∿';font-size:11px; }
+.rv-level-badge { display:inline-flex;align-items:center;padding:2px 8px;border:1px solid rgba(96,72,44,.2);border-radius:2px;background:rgba(96,72,44,.04);color:var(--ink-soft);font-size:10px;letter-spacing:.08em; }
 .rv-qmeta { font-size:11px;color:var(--muted);letter-spacing:.1em;flex-shrink:0; }
+.rv-adaptive { margin:-8px 0 16px;padding:8px 11px;border-left:2px solid rgba(88,128,72,.48);background:rgba(88,128,72,.055);color:#47673e;font-size:11px;line-height:1.65;letter-spacing:.03em; }
+.rv-material { margin:0 0 16px;padding:13px 15px;border:1px solid rgba(96,72,44,.16);border-radius:3px;background:rgba(96,72,44,.035);color:var(--ink-soft);font-size:13px;line-height:1.8;letter-spacing:.025em;position:relative;z-index:1; }
+.rv-material::before { content:'对照材料';display:block;color:var(--cinnabar);font-size:10px;font-weight:700;letter-spacing:.18em;margin-bottom:5px; }
 .rv-q { font-size:16px;font-weight:600;line-height:1.9;color:var(--ink);margin-bottom:22px;letter-spacing:.03em;position:relative;z-index:1; }
 .rv-opts { display:flex;flex-direction:column;gap:9px; }
 .rv-opt { display:flex;align-items:center;gap:14px;padding:12px 16px;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;text-align:left;width:100%;color:var(--ink-soft);font-size:14px;letter-spacing:.02em;font-family:var(--font-body-family);transition:border-color .18s,background .18s,color .18s; }
@@ -150,7 +163,13 @@ export default function ReviewTab() {
     try {
       const res = await fetch(`${API}/api/students/${studentId}/review/today`, { headers: authHeaders(token), signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setSession(await res.json());
+      const nextSession = await res.json() as Session;
+      const nextIndex = nextSession.tasks.findIndex(t => !t.done);
+      setCurrent(nextIndex >= 0 ? nextIndex : Math.max(0, nextSession.tasks.length - 1));
+      setSelected(null);
+      setRevealed(false);
+      setCardKey(k => k + 1);
+      setSession(nextSession);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       setError(normalizeError(e, "今日复习加载失败，请稍后重试"));
@@ -168,30 +187,22 @@ export default function ReviewTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId, token]);
 
-  useEffect(() => {
-    if (!session) return;
-    const idx = session.tasks.findIndex(t => !t.done);
-    setCurrent(idx >= 0 ? idx : session.tasks.length - 1);
-    setSelected(null); setRevealed(false); setCardKey(k => k + 1);
-  }, [session?.completed]); // eslint-disable-line
-
   async function handleSubmit() {
     if (!selected || !session || !studentId || !token || submitting) return;
+    const task = session.tasks[current];
     setSubmitting(true);
     setSubmitError("");
-    const task = session.tasks[current];
-    const is_correct = selected.charAt(0) === task.answer.charAt(0);
     try {
       const res = await fetch(`${API}/api/students/${studentId}/review/submit`, {
         method: "POST",
         headers: { ...authHeaders(token), "Content-Type": "application/json" },
-        body: JSON.stringify({ task_index: current, is_correct }),
+        body: JSON.stringify({ task_index: task.task_index ?? current, selected_answer: selected.charAt(0) }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSession(prev => prev ? {
         ...prev, completed: data.completed,
-        tasks: prev.tasks.map((t, i) => i === current ? { ...t, done: true, correct: is_correct } : t),
+        tasks: prev.tasks.map((t, i) => i === current ? { ...t, ...data.task, done: true, correct: data.is_correct } : t),
       } : prev);
       setRevealed(true);
     } catch (e) {
@@ -245,8 +256,12 @@ export default function ReviewTab() {
       <div className="rv-inner">
         <div className="rv-empty">
           <div className="rv-empty-c">卷</div>
-          <div className="rv-empty-t">暂无复习任务</div>
-          <div className="rv-empty-s">完成练习或作业批改后<br />这里会出现个性化复习内容</div>
+          <div className="rv-empty-t">{session?.blocked_count ? "暂无可发布复习题" : "暂无复习任务"}</div>
+          <div className="rv-empty-s">
+            {session?.blocked_count
+              ? `有 ${session.blocked_count} 个薄弱点暂时缺少通过内容校验的题目，系统不会据此判断掌握情况。`
+              : <>完成练习或作业批改后<br />这里会出现个性化复习内容</>}
+          </div>
           <div className="rv-empty-actions">
             <Link href="/student/assignments" className="rv-empty-link">去完成作业</Link>
             <Link href="/student/quiz" className="rv-empty-link">做智能练习</Link>
@@ -288,7 +303,7 @@ export default function ReviewTab() {
           })}
         </div>
 
-        {allDone ? (
+        {allDone && !revealed ? (
           <div className="rv-card rv-sum">
             <div className="rv-corner tl" /><div className="rv-corner br" />
             <div className="rv-seal">{pct >= 80 ? "优" : pct >= 60 ? "良" : "继"}</div>
@@ -314,19 +329,28 @@ export default function ReviewTab() {
               <div className="rv-tag-group">
                 <span className="rv-tag">{task.tag}</span>
                 {task.is_variant && <span className="rv-variant-badge">变式题</span>}
+                {task.difficulty && (
+                  <span className="rv-level-badge">
+                    {task.difficulty === "easy"
+                      ? "基础辨析"
+                      : task.difficulty === "hard"
+                        ? "综合挑战"
+                        : task.material_timing === "after_answer" ? "先答后证" : "材料迁移"}
+                  </span>
+                )}
               </div>
               <span className="rv-qmeta">{current + 1} / {session.total}</span>
             </div>
             {isUnusableTask(task) ? (
               <div className="rv-regen">
-                <p className="rv-regen-title">这道题还没出好</p>
+                <p className="rv-regen-title">这道题暂不作答</p>
                 <p className="rv-regen-desc">
-                  「{task.tag}」的题目生成失败了，所以暂时没法作答。重新加载会再出一次题；
-                  也可以先跳到下一题，稍后回来。
+                  {task.blocked_message || `「${task.tag}」暂时没有通过内容校验的可靠题目。`}
+                  系统不会用这道题判断你的掌握情况。
                 </p>
                 <div className="rv-regen-actions">
                   <button type="button" className="rv-btn rv-btn-outline" onClick={() => void loadSession()}>
-                    重新出题
+                    重新检查
                   </button>
                   {session.tasks.some((t, i) => i > current && !t.done) && (
                     <button type="button" className="rv-btn rv-btn-fill" onClick={handleNext}>
@@ -337,12 +361,13 @@ export default function ReviewTab() {
               </div>
             ) : (
             <>
+            {task.adaptive_message && <div className="rv-adaptive">{task.adaptive_message}</div>}
             <div className="rv-q">{task.question}</div>
             <div className="rv-opts">
               {task.options.map((opt, i) => {
                 const letter = opt.charAt(0);
                 const isSel  = selected === opt;
-                const isOk   = revealed && letter === task.answer.charAt(0);
+                const isOk   = revealed && letter === task.answer?.charAt(0);
                 const isBad  = revealed && isSel && !isOk;
                 const cls    = isOk ? "ok" : isBad ? "bad" : isSel ? "sel" : "";
                 return (
@@ -360,9 +385,10 @@ export default function ReviewTab() {
                 );
               })}
             </div>
+            {revealed && task.material && <div className="rv-material">{task.material}</div>}
             {revealed && (
               <div className="rv-expl">
-                <span className="rv-expl-lbl">解析</span>{task.explanation}
+                <span className="rv-expl-lbl">解析</span>{task.selected_feedback || task.explanation}
               </div>
             )}
             {submitError && <p className="rv-error-text" role="alert">{submitError}</p>}
@@ -372,7 +398,13 @@ export default function ReviewTab() {
                   {submitting ? "提交中…" : selected ? "确认答案" : "先选择一个答案"}
                 </button>
               ) : (
-                <button type="button" onClick={handleNext} className="rv-btn rv-btn-fill">下一题 →</button>
+                <button
+                  type="button"
+                  onClick={allDone ? () => setRevealed(false) : handleNext}
+                  className="rv-btn rv-btn-fill"
+                >
+                  {allDone ? "查看结果" : "下一题 →"}
+                </button>
               )}
             </div>
             </>

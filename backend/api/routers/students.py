@@ -12,6 +12,7 @@ from student_profile import (
     list_memory_entries, set_memory_entry_status, suggest_review_plan,
     try_record_learning_event,
 )
+from services.history_review_question import public_review_question
 from services.weakpoint_service import get_weakpoints
 from services.variant_service import get_or_create_variant
 from services.knowledge_graph_service import build_graph as build_knowledge_graph, predict_risks as predict_knowledge_risks
@@ -92,7 +93,7 @@ async def student_variant_question(student_id: str, tag: str, actor: Actor = Dep
         raise HTTPException(status_code=400, detail="tag 不能为空")
     import datetime
     variant = get_or_create_variant(student_id, tag, today=datetime.date.today().isoformat())
-    return {"variant": variant, "tag": tag, "student_id": student_id}
+    return {"variant": public_review_question(variant), "tag": tag, "student_id": student_id}
 
 
 @router.post("/{student_id}/events")

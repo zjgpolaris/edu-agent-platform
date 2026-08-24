@@ -124,9 +124,12 @@ def hydrate_generates_pending_tasks() -> None:
     # hydrate=True 时把 pending_generate 占位题生成真题并清除标记（stub 掉 LLM）
     import services.review_service as rs
     orig = rs._generate_question
-    rs._generate_question = lambda tag: {  # type: ignore
+    rs._generate_question = lambda tag, **_kwargs: {  # type: ignore
+        "question_id": "assignment-loop-generated",
         "question": f"[生成]{tag}？", "options": ["A. 甲", "B. 乙", "C. 丙", "D. 丁"],
         "answer": "A", "explanation": "解析", "tag": tag, "done": False, "correct": None,
+        "difficulty": "easy", "cognitive_action": "recall",
+        "quality_contract_version": 3, "quality_status": "verified",
     }
     try:
         session = rs.get_today_session(STUDENT, TODAY, hydrate=True)
