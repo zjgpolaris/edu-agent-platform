@@ -19,6 +19,8 @@ from agent_runtime.event_store import ensure_runtime_tables  # noqa: E402
 from agent_runtime.readiness import runtime_schema_readiness  # noqa: E402
 from db.engine import get_connection  # noqa: E402
 from db.schema import autotutor_sessions  # noqa: E402
+from student_profile import init_db  # noqa: E402
+from services.weakpoint_service import _ensure_table  # noqa: E402
 
 
 def main() -> None:
@@ -30,16 +32,19 @@ def main() -> None:
     with get_connection() as conn:
         autotutor_sessions.create(bind=conn, checkfirst=True)
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('008')"))
+        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('009')"))
+    init_db()
+    _ensure_table()
 
     after = runtime_schema_readiness()
     assert after == {
         "status": "ready",
         "schema_ready": True,
         "database_dialect": "sqlite",
-        "required_alembic_version": "008",
-        "alembic_version": "008",
+        "required_alembic_version": "009",
+        "alembic_version": "009",
         "missing_tables": [],
+        "missing_columns": [],
     }
     print("agent_runtime_schema_readiness_smoke=PASS")
 

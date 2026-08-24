@@ -104,15 +104,15 @@ async def learning_assistant_create_session(req: LearningAssistantSessionCreateR
     if req.source_feature == "auto_tutor":
         if not req.source_session_id:
             raise HTTPException(status_code=400, detail="AutoTutor 来源必须提供 source_session_id")
-        from agents.auto_tutor import get_learning_assistant_context
+        from agents.auto_tutor import get_learning_assistant_handoff
         try:
-            context = await run_in_threadpool(get_learning_assistant_context, req.source_session_id)
+            handoff = await run_in_threadpool(get_learning_assistant_handoff, req.source_session_id)
         except LookupError:
             raise HTTPException(status_code=404, detail="AutoTutor 辅导会话不存在")
-        assert_student_access(actor, str(context["student_id"]))
-        if str(context["student_id"]) != req.student_id:
+        assert_student_access(actor, handoff.student_id)
+        if handoff.student_id != req.student_id:
             raise HTTPException(status_code=403, detail="无权使用该辅导会话")
-        context.pop("student_id", None)
+        context = handoff.context.model_dump(mode="json")
         existing = await run_in_threadpool(get_active_source_session, req.student_id, req.source_feature, req.source_session_id)
         if existing:
             record_event_if_student(
@@ -569,7 +569,11 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
 
 @router.post("/api/autotutor/answer")
 async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = Depends(require_auth)):
-    from agents.auto_tutor import get_session as autotutor_get, submit_answer as autotutor_answer
+    from agents.auto_tutor import (
+        AutoTutorIdempotencyConflict,
+        get_session as autotutor_get,
+        submit_answer as autotutor_answer,
+    )
     from security.auth import auth_required
     try:
         session = await run_in_threadpool(autotutor_get, req.session_id)
@@ -593,6 +597,8 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="辅导会话不存在或已过期，请重新开始")
+    except AutoTutorIdempotencyConflict:
+        raise HTTPException(status_code=409, detail="同一幂等键不能提交不同答案")
 
 
 @router.get("/api/autotutor/session/{session_id}")

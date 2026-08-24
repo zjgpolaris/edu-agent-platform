@@ -56,10 +56,10 @@ def main() -> None:
     assert answered["revision"] == loaded["revision"] + 1
     attempts_after_first = sum(step["attempts"] for step in answered["lesson_plan"])
 
-    # Replaying the same optimistic revision must not judge a second question or
-    # increment attempts again.
+    # Replaying the same optimistic revision and payload must return the stored
+    # transition response without judging a second question.
     replayed = asyncio.run(autotutor_submit_answer(request, Actor(actor_id="demo-student", role="student")))
-    assert replayed.get("stale_answer_ignored") is True
+    assert replayed.get("idempotent_replay") is True
     assert sum(step["attempts"] for step in replayed["lesson_plan"]) == attempts_after_first
     print("autotutor_session_recovery_smoke=PASS")
 

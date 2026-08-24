@@ -28,18 +28,20 @@ def validate_plan_policy(
             binding = registry.resolve(step.operation, caller)
         except (LookupError, PermissionError) as exc:
             raise PlanPolicyError(str(exc)) from exc
-        if (binding.kind == "tool") != (step.kind == "tool"):
+        if step.kind != binding.step_kind:
             raise PlanPolicyError("plan step kind does not match capability binding")
+        if step.side_effect != binding.side_effect or step.risk_level != binding.risk_level:
+            raise PlanPolicyError("plan step risk and side effect must match capability binding")
+        if step.timeout_seconds != binding.default_timeout_seconds:
+            raise PlanPolicyError("plan step timeout must match capability binding")
+        if step.side_effect in {"write", "session_create"} and not step.idempotency_key:
+            raise PlanPolicyError("durable side-effect step requires idempotency key")
         if binding.kind == "tool":
             spec = TOOLS[str(binding.tool_name)]
             try:
                 step.input = spec.input_model.model_validate(step.input).model_dump()
             except Exception as exc:
                 raise PlanPolicyError("tool step input does not match ToolSpec") from exc
-            if step.side_effect != spec.side_effect or step.risk_level != spec.risk_level:
-                raise PlanPolicyError("tool step risk and side effect must match ToolSpec")
-            if step.timeout_seconds != spec.timeout_seconds:
-                raise PlanPolicyError("tool step timeout must match ToolSpec")
     return plan
 
 

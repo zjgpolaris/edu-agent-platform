@@ -28,9 +28,11 @@ learning_events = Table(
     Column("data_scope", Text, nullable=False, server_default="runtime"),
     Column("metadata_json", Text, nullable=False),
     Column("created_at", Text, nullable=False),
+    Column("effect_key", Text),
     Index("idx_learning_events_student_created", "student_id", "created_at"),
     Index("idx_learning_events_scope_created", "data_scope", "created_at"),
     Index("idx_learning_events_feature_type_created", "feature", "event_type", "created_at"),
+    Index("uq_learning_events_effect_key", "effect_key", unique=True),
 )
 
 student_profiles = Table(
@@ -163,6 +165,19 @@ weakpoints = Table(
     Column("source", Text, nullable=False),
     Column("correct_streak", Integer, nullable=False, server_default="0"),
     Index("idx_weakpoints_student", "student_id"),
+)
+
+weakpoint_evidence = Table(
+    "weakpoint_evidence", metadata,
+    Column("evidence_key", Text, primary_key=True),
+    Column("student_id", Text, nullable=False),
+    Column("knowledge_tag", Text, nullable=False),
+    Column("evidence_type", Text, nullable=False),
+    Column("source_feature", Text, nullable=False),
+    Column("source_session_id", Text),
+    Column("assessment_id", Text),
+    Column("created_at", Text, nullable=False),
+    Index("idx_weakpoint_evidence_student_tag_created", "student_id", "knowledge_tag", "created_at"),
 )
 
 game_rounds = Table(
@@ -326,8 +341,10 @@ autotutor_sessions = Table(
     Column("revision", Integer, nullable=False, server_default="0"),
     Column("state_json", Text, nullable=False),
     Column("inflight_idempotency_key", Text),
+    Column("inflight_request_hash", Text),
     Column("start_idempotency_key", Text),
     Column("last_idempotency_key", Text),
+    Column("last_request_hash", Text),
     Column("last_response_json", Text),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),

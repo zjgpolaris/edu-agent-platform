@@ -19,6 +19,9 @@ from rag.history_query import HistoryAspect, HistoryQuestionType, parse_history_
 
 Difficulty = Literal["easy", "medium", "hard"]
 AssessmentKind = Literal["practice", "exit_ticket"]
+CognitiveAction = Literal["recall", "explain", "compare", "apply"]
+DIFFICULTY_RANK: dict[Difficulty, int] = {"easy": 0, "medium": 1, "hard": 2}
+COGNITIVE_RANK: dict[CognitiveAction, int] = {"recall": 0, "explain": 1, "compare": 2, "apply": 3}
 APPROVED_REVIEW_STATUSES = {"teacher_reviewed", "curriculum_reviewed"}
 FORBIDDEN_PLACEHOLDERS = ("基本史实", "与史实不符", "张冠李戴", "完全无关")
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,7 +91,7 @@ class AssessmentItem(BaseModel):
     stem: str
     options: list[AssessmentOption]
     difficulty: Difficulty
-    cognitive_action: Literal["recall", "explain", "compare", "apply"]
+    cognitive_action: CognitiveAction
     source_ids: list[str]
     variant_of: str | None = None
     generation_mode: Literal["curated", "llm", "deterministic_fallback"]
@@ -139,6 +142,13 @@ class PreparedContent(BaseModel):
     content_version: str | None = None
     evidence_label: str | None = None
     blocked_reason: str | None = None
+
+
+class AssessmentSelection(BaseModel):
+    status: Literal["selected", "blocked"]
+    assessment: AssessmentItem | None = None
+    target_difficulty: Difficulty
+    reason_codes: list[str] = Field(default_factory=list)
 
 
 class ContentGateSettings(BaseModel):
@@ -320,6 +330,47 @@ def _stable_option_order(item: AssessmentItem) -> AssessmentItem:
     return item.model_copy(update={"options": relabeled})
 
 
+def select_assessment(
+    pool: list[AssessmentItem],
+    *,
+    kind: AssessmentKind,
+    target_difficulty: Difficulty,
+    excluded_assessment_ids: set[str] | None = None,
+    preferred_cognitive_actions: list[CognitiveAction] | None = None,
+    seed: str = "",
+) -> AssessmentSelection:
+    """Select a fresh assessment whose declared difficulty matches the plan."""
+    excluded = excluded_assessment_ids or set()
+    candidates = [
+        item
+        for item in pool
+        if item.kind == kind
+        and item.difficulty == target_difficulty
+        and item.assessment_id not in excluded
+    ]
+    if not candidates:
+        return AssessmentSelection(
+            status="blocked",
+            target_difficulty=target_difficulty,
+            reason_codes=["no_fresh_assessment_for_target_difficulty"],
+        )
+
+    preferred = preferred_cognitive_actions or []
+    preferred_rank = {action: index for index, action in enumerate(preferred)}
+
+    def sort_key(item: AssessmentItem) -> tuple[int, int, str]:
+        preference = preferred_rank.get(item.cognitive_action, len(preferred_rank) + 1)
+        digest = hashlib.sha256(f"{seed}:{item.assessment_id}".encode("utf-8")).hexdigest()
+        return preference, COGNITIVE_RANK[item.cognitive_action], digest
+
+    selected = min(candidates, key=sort_key)
+    return AssessmentSelection(
+        status="selected",
+        assessment=selected,
+        target_difficulty=target_difficulty,
+    )
+
+
 def validate_content(
     objective: LearningObjective,
     evidence: TeachingEvidenceDecision,
@@ -328,6 +379,7 @@ def validate_content(
     *,
     excluded_assessment_id: str | None = None,
     excluded_assessment: AssessmentItem | None = None,
+    require_transfer: bool = False,
 ) -> ContentValidation:
     reasons: list[str] = []
     objective_alignment = bool(
@@ -399,7 +451,12 @@ def validate_content(
             independent_id
             and independent_stem
             and independent_options
-            and (excluded_assessment is None or cognitive_advanced or contextual_variant)
+            and (
+                excluded_assessment is None
+                or not require_transfer
+                or cognitive_advanced
+                or contextual_variant
+            )
         )
         if not independent:
             reasons.append("assessment_not_independent")
@@ -451,6 +508,10 @@ def prepare_content(
     *,
     kind: AssessmentKind,
     variant_index: int = 0,
+    target_difficulty: Difficulty | None = None,
+    excluded_assessment_ids: set[str] | None = None,
+    preferred_cognitive_actions: list[CognitiveAction] | None = None,
+    selection_seed: str | None = None,
     excluded_assessment_id: str | None = None,
     excluded_assessment: AssessmentItem | None = None,
 ) -> PreparedContent:
@@ -464,6 +525,7 @@ def prepare_content(
             None,
             excluded_assessment_id=excluded_assessment_id,
             excluded_assessment=excluded_assessment,
+            require_transfer=kind == "exit_ticket" and excluded_assessment is not None,
         )
         reason = "missing_reviewed_content" if curated is None else "content_review_status_invalid"
         return PreparedContent(
@@ -482,7 +544,29 @@ def prepare_content(
         generation_mode="curated",
     )
     pool = curated.practice_items if kind == "practice" else curated.exit_ticket_items
-    assessment = _stable_option_order(pool[variant_index % len(pool)]) if pool else None
+    indexed_assessment = pool[variant_index % len(pool)] if pool else None
+    effective_target = target_difficulty or (
+        indexed_assessment.difficulty if indexed_assessment else "medium"
+    )
+    excluded_ids = set(excluded_assessment_ids or set())
+    if excluded_assessment_id:
+        excluded_ids.add(excluded_assessment_id)
+    if target_difficulty is None and indexed_assessment is not None and indexed_assessment.assessment_id not in excluded_ids:
+        selection = AssessmentSelection(
+            status="selected",
+            assessment=indexed_assessment,
+            target_difficulty=indexed_assessment.difficulty,
+        )
+    else:
+        selection = select_assessment(
+            pool,
+            kind=kind,
+            target_difficulty=effective_target,
+            excluded_assessment_ids=excluded_ids,
+            preferred_cognitive_actions=preferred_cognitive_actions,
+            seed=selection_seed or f"{objective.objective_id}:{variant_index}:{kind}",
+        )
+    assessment = _stable_option_order(selection.assessment) if selection.assessment else None
     if assessment is not None:
         assessment = assessment.model_copy(update={"objective_id": objective.objective_id, "kind": kind})
     validation = validate_content(
@@ -492,7 +576,11 @@ def prepare_content(
         assessment,
         excluded_assessment_id=excluded_assessment_id,
         excluded_assessment=excluded_assessment,
+        require_transfer=kind == "exit_ticket" and excluded_assessment is not None,
     )
+    reason_codes = list(dict.fromkeys([*selection.reason_codes, *validation.reason_codes]))
+    if reason_codes != validation.reason_codes:
+        validation = validation.model_copy(update={"reason_codes": reason_codes})
     blocked_reason = validation.reason_codes[0] if validation.status == "blocked" and validation.reason_codes else None
     return PreparedContent(
         objective=objective,

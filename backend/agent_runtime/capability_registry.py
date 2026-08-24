@@ -27,6 +27,9 @@ class CapabilityBinding(BaseModel):
     tool_name: str | None = None
     durability_mode: Literal["trace_only", "observable", "resumable", "queued"]
     requires_evidence: bool = False
+    step_kind: Literal["tool", "generation", "subgraph", "verification", "control"]
+    side_effect: Literal["none", "read", "write", "session_create", "external_call"] = "none"
+    risk_level: Literal["low", "medium", "high"] = "low"
     default_timeout_seconds: int = Field(default=15, ge=1, le=300)
 
     model_config = {"arbitrary_types_allowed": True}
@@ -37,6 +40,8 @@ class CapabilityBinding(BaseModel):
             raise ValueError("tool capability must reference ToolSpec.name")
         if self.kind != "tool" and self.tool_name:
             raise ValueError("only tool capabilities may reference ToolSpec.name")
+        if self.kind == "tool" and self.step_kind != "tool":
+            raise ValueError("tool capability must use tool step kind")
         self.input_model.model_json_schema()
         self.output_model.model_json_schema()
         return self
@@ -57,6 +62,8 @@ class CapabilityRegistry:
                 raise ValueError("tool capability input_model must come from ToolSpec")
             if binding.default_timeout_seconds != spec.timeout_seconds:
                 raise ValueError("tool capability timeout must come from ToolSpec")
+            if binding.side_effect != spec.side_effect or binding.risk_level != spec.risk_level:
+                raise ValueError("tool capability risk must come from ToolSpec")
         self._bindings[binding.name] = binding
 
     def resolve(self, operation: str, caller: str) -> CapabilityBinding:
@@ -99,28 +106,31 @@ def build_default_registry() -> CapabilityRegistry:
                 tool_name=tool_name,
                 durability_mode="observable",
                 requires_evidence=evidence,
+                step_kind="tool",
+                side_effect=spec.side_effect,
+                risk_level=spec.risk_level,
                 default_timeout_seconds=spec.timeout_seconds,
             )
         )
-    for name, kind, callers, evidence, durability in [
-        ("history_character.answer", "subgraph", ["history_ui"], True, "observable"),
-        ("essay.grade", "subgraph", ["chinese_api"], False, "resumable"),
-        ("debate.run", "subgraph", ["debate_api"], True, "observable"),
-        ("timeline.generate", "function", ["game_tool"], True, "trace_only"),
-        ("card.generate", "function", ["game_tool"], True, "trace_only"),
-        ("answer_from_sources", "generation", ["learning_assistant"], True, "observable"),
-        ("answer_from_lesson", "generation", ["learning_assistant"], True, "observable"),
-        ("quiz_from_sources", "generation", ["learning_assistant"], True, "observable"),
-        ("quiz_from_lesson", "generation", ["learning_assistant"], True, "observable"),
-        ("chat_answer", "generation", ["learning_assistant"], False, "observable"),
-        ("auto_tutor.plan", "function", ["auto_tutor"], False, "resumable"),
-        ("auto_tutor.teach", "generation", ["auto_tutor"], True, "resumable"),
-        ("auto_tutor.observe_judge", "function", ["auto_tutor"], False, "resumable"),
-        ("auto_tutor.finalize", "function", ["auto_tutor"], False, "resumable"),
-        ("essay.grade_structured", "generation", ["chinese_api"], False, "resumable"),
-        ("essay.critic", "function", ["chinese_api"], False, "resumable"),
-        ("essay.revise", "generation", ["chinese_api"], False, "resumable"),
-        ("essay.finalize", "function", ["chinese_api"], False, "resumable"),
+    for name, kind, callers, evidence, durability, step_kind, side_effect, risk_level, timeout in [
+        ("history_character.answer", "subgraph", ["history_ui"], True, "observable", "subgraph", "external_call", "low", 120),
+        ("essay.grade", "subgraph", ["chinese_api"], False, "resumable", "subgraph", "external_call", "low", 120),
+        ("debate.run", "subgraph", ["debate_api"], True, "observable", "subgraph", "external_call", "low", 120),
+        ("timeline.generate", "function", ["game_tool"], True, "trace_only", "control", "none", "low", 15),
+        ("card.generate", "function", ["game_tool"], True, "trace_only", "control", "none", "low", 15),
+        ("answer_from_sources", "generation", ["learning_assistant"], True, "observable", "generation", "external_call", "low", 20),
+        ("answer_from_lesson", "generation", ["learning_assistant"], True, "observable", "generation", "external_call", "low", 20),
+        ("quiz_from_sources", "generation", ["learning_assistant"], True, "observable", "generation", "external_call", "low", 20),
+        ("quiz_from_lesson", "generation", ["learning_assistant"], True, "observable", "generation", "external_call", "low", 20),
+        ("chat_answer", "generation", ["learning_assistant"], False, "observable", "generation", "external_call", "low", 20),
+        ("auto_tutor.plan", "function", ["auto_tutor"], False, "resumable", "control", "none", "low", 15),
+        ("auto_tutor.teach", "generation", ["auto_tutor"], True, "resumable", "generation", "external_call", "low", 30),
+        ("auto_tutor.observe_judge", "function", ["auto_tutor"], False, "resumable", "control", "none", "low", 15),
+        ("auto_tutor.finalize", "function", ["auto_tutor"], False, "resumable", "control", "write", "medium", 15),
+        ("essay.grade_structured", "generation", ["chinese_api"], False, "resumable", "generation", "external_call", "low", 30),
+        ("essay.critic", "function", ["chinese_api"], False, "resumable", "verification", "external_call", "low", 20),
+        ("essay.revise", "generation", ["chinese_api"], False, "resumable", "generation", "external_call", "low", 30),
+        ("essay.finalize", "function", ["chinese_api"], False, "resumable", "control", "none", "low", 15),
     ]:
         registry.register(CapabilityBinding(
             name=name,
@@ -132,5 +142,9 @@ def build_default_registry() -> CapabilityRegistry:
             allowed_callers=callers,
             durability_mode=durability,
             requires_evidence=evidence,
+            step_kind=step_kind,
+            side_effect=side_effect,
+            risk_level=risk_level,
+            default_timeout_seconds=timeout,
         ))
     return registry

@@ -77,6 +77,14 @@ def _loads(value: str | None, default: Any) -> Any:
 
 
 def _session(row: dict[str, Any]) -> dict[str, Any]:
+    context = _loads(row.get("context_json"), {})
+    if row.get("source_feature") == "auto_tutor":
+        from agents.autotutor_public import sanitize_autotutor_assistant_context
+
+        context = sanitize_autotutor_assistant_context(
+            context,
+            source_session_id=row.get("source_session_id"),
+        )
     return {
         "session_id": row["session_id"],
         "student_id": row["student_id"],
@@ -84,7 +92,7 @@ def _session(row: dict[str, Any]) -> dict[str, Any]:
         "status": row["status"],
         "source_feature": row["source_feature"],
         "source_session_id": row.get("source_session_id"),
-        "context": _loads(row.get("context_json"), {}),
+        "context": context,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -144,6 +152,14 @@ def create_session(
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ensure_tables()
+    safe_context = context or {}
+    if source_feature == "auto_tutor":
+        from agents.autotutor_public import sanitize_autotutor_assistant_context
+
+        safe_context = sanitize_autotutor_assistant_context(
+            safe_context,
+            source_session_id=source_session_id,
+        )
     now = now_iso()
     session_id = f"la_{uuid4().hex[:16]}"
     with get_connection() as conn:
@@ -158,7 +174,7 @@ def create_session(
             "student_id": student_id,
             "source_feature": source_feature,
             "source_session_id": source_session_id,
-            "context_json": json.dumps(context or {}, ensure_ascii=False),
+            "context_json": json.dumps(safe_context, ensure_ascii=False),
             "created_at": now,
             "updated_at": now,
         })

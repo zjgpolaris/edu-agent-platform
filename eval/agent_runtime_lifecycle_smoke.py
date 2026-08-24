@@ -46,7 +46,7 @@ def _plan(operation: str) -> AgentPlan:
             kind="generation",
             operation=operation,
             side_effect="external_call",
-            timeout_seconds=15,
+            timeout_seconds=20,
         )],
     )
 

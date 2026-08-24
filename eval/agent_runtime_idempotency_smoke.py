@@ -90,6 +90,9 @@ def _controller(run_id: str, *, value: str, key: str) -> RuntimeRunController:
         allowed_callers=["learning_assistant"],
         tool_name=spec.name,
         durability_mode="observable",
+        step_kind="tool",
+        side_effect=spec.side_effect,
+        risk_level=spec.risk_level,
         default_timeout_seconds=spec.timeout_seconds,
     ))
     controller.route({"agent_type": "learning_assistant"})

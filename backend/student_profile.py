@@ -114,7 +114,8 @@ def init_db() -> None:
               id TEXT PRIMARY KEY, student_id TEXT NOT NULL, session_id TEXT,
               feature TEXT NOT NULL, event_type TEXT NOT NULL, grade TEXT,
               topic TEXT, lesson_id TEXT, book_id TEXT, score REAL, success INTEGER,
-              data_scope TEXT NOT NULL DEFAULT 'runtime', metadata_json TEXT NOT NULL, created_at TEXT NOT NULL)"""))
+              data_scope TEXT NOT NULL DEFAULT 'runtime', metadata_json TEXT NOT NULL,
+              created_at TEXT NOT NULL, effect_key TEXT)"""))
         conn.execute(text("""CREATE TABLE IF NOT EXISTS student_profiles (
               student_id TEXT PRIMARY KEY, grade TEXT,
               recent_topics_json TEXT NOT NULL, recent_lessons_json TEXT NOT NULL,
@@ -142,8 +143,11 @@ def init_db() -> None:
             event_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(learning_events)"))}
             if "data_scope" not in event_columns:
                 conn.execute(text("ALTER TABLE learning_events ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'runtime'"))
+            if "effect_key" not in event_columns:
+                conn.execute(text("ALTER TABLE learning_events ADD COLUMN effect_key TEXT"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_learning_events_scope_created ON learning_events(data_scope, created_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_learning_events_feature_type_created ON learning_events(feature, event_type, created_at)"))
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_learning_events_effect_key ON learning_events(effect_key)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_memory_entries_student_status ON memory_entries(student_id, status, updated_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_memory_entries_source_event ON memory_entries(source_event_id)"))
         # SQLite only: patch older databases missing interaction_summary_json
@@ -427,8 +431,13 @@ def _record_profile_memories_for_event(conn: Any, event: LearningEvent, *, event
             ), now=created_at)
 
 
-def record_learning_event(event: LearningEvent) -> str | None:
-    init_db()
+def record_learning_event_with_connection(
+    conn: Any,
+    event: LearningEvent,
+    *,
+    effect_key: str | None = None,
+) -> str | None:
+    """Insert one event and derived profile/memory updates on an existing transaction."""
     metadata = dict(event.metadata)
     trace_id = current_trace_id()
     if trace_id and "trace_id" not in metadata:
@@ -436,39 +445,48 @@ def record_learning_event(event: LearningEvent) -> str | None:
     scope = normalize_data_scope(event.data_scope or metadata.get("data_scope") or os.getenv("EDU_AGENT_DATA_SCOPE", "runtime"))
     metadata["data_scope"] = scope
     event = LearningEvent.model_validate({**event.model_dump(), "data_scope": scope, "metadata": _safe_metadata(metadata)})
-    event_id = uuid4().hex
+    event_id = hashlib.sha256(effect_key.encode("utf-8")).hexdigest()[:32] if effect_key else uuid4().hex
     created_at = now_iso()
-    with get_connection() as conn:
-        _upsert_student(conn, event.student_id, event.grade)
-        conn.execute(
-            text("""INSERT INTO learning_events (
-                id, student_id, session_id, feature, event_type, grade, topic, lesson_id,
-                book_id, score, success, data_scope, metadata_json, created_at
-            ) VALUES (
-                :id, :student_id, :session_id, :feature, :event_type, :grade, :topic, :lesson_id,
-                :book_id, :score, :success, :data_scope, :metadata, :created_at
-            )"""),
-            {
-                "id": event_id,
-                "student_id": event.student_id,
-                "session_id": event.session_id,
-                "feature": event.feature,
-                "event_type": event.event_type,
-                "grade": event.grade,
-                "topic": event.topic,
-                "lesson_id": event.lesson_id,
-                "book_id": event.book_id,
-                "score": event.score,
-                "success": None if event.success is None else int(event.success),
-                "data_scope": scope,
-                "metadata": _json_dump(event.metadata),
-                "created_at": created_at,
-            },
-        )
-        profile = _update_profile(_load_profile(conn, event.student_id), event)
-        _save_profile(conn, profile)
-        _record_profile_memories_for_event(conn, event, event_id=event_id, created_at=created_at)
+    params = {
+        "id": event_id,
+        "student_id": event.student_id,
+        "session_id": event.session_id,
+        "feature": event.feature,
+        "event_type": event.event_type,
+        "grade": event.grade,
+        "topic": event.topic,
+        "lesson_id": event.lesson_id,
+        "book_id": event.book_id,
+        "score": event.score,
+        "success": None if event.success is None else int(event.success),
+        "data_scope": scope,
+        "metadata": _json_dump(event.metadata),
+        "created_at": created_at,
+        "effect_key": effect_key,
+    }
+    statement = """INSERT INTO learning_events (
+        id, student_id, session_id, feature, event_type, grade, topic, lesson_id,
+        book_id, score, success, data_scope, metadata_json, created_at, effect_key
+    ) VALUES (
+        :id, :student_id, :session_id, :feature, :event_type, :grade, :topic, :lesson_id,
+        :book_id, :score, :success, :data_scope, :metadata, :created_at, :effect_key
+    )"""
+    if effect_key:
+        statement += " ON CONFLICT(effect_key) DO NOTHING"
+    inserted = conn.execute(text(statement), params)
+    if inserted.rowcount != 1:
+        return None
+    _upsert_student(conn, event.student_id, event.grade)
+    profile = _update_profile(_load_profile(conn, event.student_id), event)
+    _save_profile(conn, profile)
+    _record_profile_memories_for_event(conn, event, event_id=event_id, created_at=created_at)
     return event_id
+
+
+def record_learning_event(event: LearningEvent) -> str | None:
+    init_db()
+    with get_connection() as conn:
+        return record_learning_event_with_connection(conn, event)
 
 
 def try_record_learning_event(event: LearningEvent) -> str | None:
@@ -491,6 +509,12 @@ def upsert_memory_entry(entry: MemoryEntryUpsert) -> str:
     with get_connection() as conn:
         _upsert_student(conn, entry.student_id, None)
         return _upsert_memory_entry(conn, entry, now=now)
+
+
+def upsert_memory_entry_with_connection(conn: Any, entry: MemoryEntryUpsert) -> str:
+    """Use the caller's transaction for an idempotent memory upsert."""
+    _upsert_student(conn, entry.student_id, None)
+    return _upsert_memory_entry(conn, entry, now=now_iso())
 
 
 def list_memory_entries(

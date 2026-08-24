@@ -6,7 +6,7 @@ from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
 
-RUNTIME_SCHEMA_HEAD = "008"
+RUNTIME_SCHEMA_HEAD = "009"
 RUNTIME_TABLES = {
     "autotutor_sessions",
     "agent_runs",
@@ -14,6 +14,7 @@ RUNTIME_TABLES = {
     "agent_run_artifacts",
     "agent_checkpoints",
     "agent_side_effects",
+    "weakpoint_evidence",
 }
 
 
@@ -24,6 +25,16 @@ def runtime_schema_readiness() -> dict[str, Any]:
             dialect = str(conn.dialect.name)
             tables = set(sa_inspect(conn).get_table_names())
             missing = sorted(RUNTIME_TABLES - tables)
+            missing_columns: list[str] = []
+            if "learning_events" not in tables:
+                missing.append("learning_events")
+            elif "effect_key" not in {column["name"] for column in sa_inspect(conn).get_columns("learning_events")}:
+                missing_columns.append("learning_events.effect_key")
+            if "autotutor_sessions" in tables:
+                session_columns = {column["name"] for column in sa_inspect(conn).get_columns("autotutor_sessions")}
+                for column in ("inflight_request_hash", "last_request_hash"):
+                    if column not in session_columns:
+                        missing_columns.append(f"autotutor_sessions.{column}")
             alembic_version = None
             if "alembic_version" in tables:
                 alembic_version = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar()
@@ -34,7 +45,7 @@ def runtime_schema_readiness() -> dict[str, Any]:
             "required_alembic_version": RUNTIME_SCHEMA_HEAD,
             "error_type": exc.__class__.__name__,
         }
-    ready = not missing and str(alembic_version or "") == RUNTIME_SCHEMA_HEAD
+    ready = not missing and not missing_columns and str(alembic_version or "") == RUNTIME_SCHEMA_HEAD
     return {
         "status": "ready" if ready else "not_ready",
         "schema_ready": ready,
@@ -42,4 +53,5 @@ def runtime_schema_readiness() -> dict[str, Any]:
         "required_alembic_version": RUNTIME_SCHEMA_HEAD,
         "alembic_version": alembic_version,
         "missing_tables": missing,
+        "missing_columns": missing_columns,
     }

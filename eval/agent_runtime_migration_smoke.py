@@ -1,4 +1,4 @@
-"""SQLite upgrade/downgrade coverage for Agent Runtime v2 migrations 007/008."""
+"""SQLite upgrade/downgrade coverage through Agent Runtime migration 009."""
 from __future__ import annotations
 
 import os
@@ -17,6 +17,7 @@ RUNTIME_TABLES = {
     "agent_run_artifacts",
     "agent_checkpoints",
     "agent_side_effects",
+    "weakpoint_evidence",
 }
 LEGACY_AUTOTUTOR_COLUMNS = {
     "session_id",
@@ -31,8 +32,10 @@ V2_AUTOTUTOR_COLUMNS = {
     "run_id",
     "revision",
     "inflight_idempotency_key",
+    "inflight_request_hash",
     "start_idempotency_key",
     "last_idempotency_key",
+    "last_request_hash",
     "last_response_json",
 }
 
@@ -73,6 +76,17 @@ def _assert_v2(db_path: Path) -> None:
     assert LEGACY_AUTOTUTOR_COLUMNS | V2_AUTOTUTOR_COLUMNS <= columns
     assert "idx_autotutor_sessions_run" in indexes
     assert "idx_autotutor_sessions_start_idempotency" in indexes
+    with sqlite3.connect(db_path) as conn:
+        learning_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(learning_events)")}
+        learning_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(learning_events)")}
+        evidence_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(weakpoint_evidence)")}
+        assert "effect_key" in learning_columns
+        assert "uq_learning_events_effect_key" in learning_indexes
+        assert "idx_weakpoint_evidence_student_tag_created" in evidence_indexes
+        for suffix in ("a", "b"):
+            conn.execute("""INSERT INTO learning_events (
+                id, student_id, feature, event_type, data_scope, metadata_json, created_at, effect_key
+            ) VALUES (?, 'student_1', 'eval', 'legacy', 'eval', '{}', 'now', NULL)""", (f"legacy-{suffix}",))
 
 
 def _assert_downgraded(db_path: Path) -> None:

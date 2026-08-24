@@ -54,6 +54,23 @@
             {"option_id": "D", "text": "传播了变法图强思想", "is_correct": false, "misconception_code": "cause_significance_confusion", "feedback": "传播思想属于影响或意义，不是失败原因。"}
           ],
           "difficulty": "easy",
+          "cognitive_action": "explain",
+          "source_ids": ["autotutor:textbook:wuxu:cause:v1"],
+          "variant_of": "wuxu-cause-practice-1",
+          "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "wuxu-cause-practice-3",
+          "objective_id": "history:戊戌变法:cause:v1",
+          "kind": "practice",
+          "stem": "从政治力量对比看，戊戌变法为什么难以持续推进？",
+          "options": [
+            {"option_id": "A", "text": "维新派缺少可靠力量，又受到掌权顽固派的强烈反击", "is_correct": true, "feedback": "正确。力量基础薄弱与顽固派反击共同导致变法难以持续。", "source_ids": ["autotutor:textbook:wuxu:cause:v1"]},
+            {"option_id": "B", "text": "维新派已经掌握全国军队和地方政权", "is_correct": false, "misconception_code": "power_base_reversal", "feedback": "维新派并未掌握可靠军队和广泛地方力量。"},
+            {"option_id": "C", "text": "变法的思想启蒙作用使其立即失败", "is_correct": false, "misconception_code": "cause_impact_confusion", "feedback": "思想启蒙是影响，不能解释政治上的失败。"},
+            {"option_id": "D", "text": "清廷顽固派主动支持全部变法措施", "is_correct": false, "misconception_code": "historical_reversal", "feedback": "顽固派利益受到触动并强烈阻挠变法。"}
+          ],
+          "difficulty": "medium",
           "cognitive_action": "compare",
           "source_ids": ["autotutor:textbook:wuxu:cause:v1"],
           "variant_of": "wuxu-cause-practice-1",
@@ -131,6 +148,23 @@
           "source_ids": ["autotutor:textbook:westernization:purpose:v1"],
           "variant_of": "westernization-purpose-practice-1",
           "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "westernization-purpose-practice-3",
+          "objective_id": "history:洋务运动:purpose:v1",
+          "kind": "practice",
+          "stem": "洋务派学习西方技术，最终想维护什么？",
+          "options": [
+            {"option_id": "A", "text": "清政府的统治", "is_correct": true, "feedback": "正确。学习技术和自强求富都服务于维护清政府统治。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"]},
+            {"option_id": "B", "text": "资产阶级共和国", "is_correct": false, "misconception_code": "movement_goal_confusion", "feedback": "洋务派没有建立资产阶级共和国的目标。"},
+            {"option_id": "C", "text": "民主科学思想", "is_correct": false, "misconception_code": "movement_period_confusion", "feedback": "民主与科学属于新文化运动的重要口号。"},
+            {"option_id": "D", "text": "群众革命政权", "is_correct": false, "misconception_code": "actor_confusion", "feedback": "洋务派是清朝官员，不以发动群众革命为目的。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "recall",
+          "source_ids": ["autotutor:textbook:westernization:purpose:v1"],
+          "variant_of": "westernization-purpose-practice-1",
+          "generation_mode": "curated"
         }
       ],
       "exit_ticket_items": [
@@ -201,6 +235,23 @@
           ],
           "difficulty": "medium",
           "cognitive_action": "explain",
+          "source_ids": ["autotutor:textbook:redcliff:impact:v1"],
+          "variant_of": "redcliff-impact-practice-1",
+          "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "redcliff-impact-practice-3",
+          "objective_id": "history:赤壁之战:impact:v1",
+          "kind": "practice",
+          "stem": "赤壁之战为哪一政治局面的形成奠定了基础？",
+          "options": [
+            {"option_id": "A", "text": "三国鼎立", "is_correct": true, "feedback": "正确。曹操南下受阻，孙刘势力获得发展空间。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"]},
+            {"option_id": "B", "text": "秦朝统一", "is_correct": false, "misconception_code": "period_confusion", "feedback": "秦朝统一发生在赤壁之战之前很久。"},
+            {"option_id": "C", "text": "南北朝对峙", "is_correct": false, "misconception_code": "period_confusion", "feedback": "南北朝属于更晚时期。"},
+            {"option_id": "D", "text": "西晋长期统一", "is_correct": false, "misconception_code": "later_outcome_confusion", "feedback": "西晋统一发生在三国之后，不是赤壁之战直接奠定的格局。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "recall",
           "source_ids": ["autotutor:textbook:redcliff:impact:v1"],
           "variant_of": "redcliff-impact-practice-1",
           "generation_mode": "curated"
@@ -277,6 +328,23 @@
           "source_ids": ["autotutor:textbook:xinhai:significance:v1"],
           "variant_of": "xinhai-significance-practice-1",
           "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "xinhai-significance-practice-3",
+          "objective_id": "history:辛亥革命:significance:v1",
+          "kind": "practice",
+          "stem": "辛亥革命结束了中国长期存在的哪一制度？",
+          "options": [
+            {"option_id": "A", "text": "君主专制制度", "is_correct": true, "feedback": "正确。辛亥革命终结了两千多年的君主专制制度。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"]},
+            {"option_id": "B", "text": "半殖民地半封建社会", "is_correct": false, "misconception_code": "significance_overstatement", "feedback": "辛亥革命没有根本改变中国的社会性质。"},
+            {"option_id": "C", "text": "外国侵略势力", "is_correct": false, "misconception_code": "anti_imperial_completion", "feedback": "辛亥革命没有彻底完成反帝任务。"},
+            {"option_id": "D", "text": "全部封建经济", "is_correct": false, "misconception_code": "scope_overstatement", "feedback": "革命终结的是君主专制制度，不能扩大为全部封建经济。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "recall",
+          "source_ids": ["autotutor:textbook:xinhai:significance:v1"],
+          "variant_of": "xinhai-significance-practice-1",
+          "generation_mode": "curated"
         }
       ],
       "exit_ticket_items": [
@@ -347,6 +415,23 @@
           ],
           "difficulty": "medium",
           "cognitive_action": "apply",
+          "source_ids": ["autotutor:textbook:opium:impact:v1"],
+          "variant_of": "opium-impact-practice-1",
+          "generation_mode": "curated"
+        },
+        {
+          "assessment_id": "opium-impact-practice-3",
+          "objective_id": "history:鸦片战争:impact:v1",
+          "kind": "practice",
+          "stem": "鸦片战争后，中国开始进入哪一历史阶段？",
+          "options": [
+            {"option_id": "A", "text": "近代史阶段", "is_correct": true, "feedback": "正确。鸦片战争成为中国近代史的开端。", "source_ids": ["autotutor:textbook:opium:impact:v1"]},
+            {"option_id": "B", "text": "社会主义建设时期", "is_correct": false, "misconception_code": "period_confusion", "feedback": "社会主义建设时期远晚于鸦片战争。"},
+            {"option_id": "C", "text": "秦汉统一时期", "is_correct": false, "misconception_code": "period_confusion", "feedback": "秦汉时期远早于鸦片战争。"},
+            {"option_id": "D", "text": "完全殖民地时期", "is_correct": false, "misconception_code": "social_nature_overstatement", "feedback": "教材表述是开始沦为半殖民地半封建社会，不是完全殖民地。"}
+          ],
+          "difficulty": "easy",
+          "cognitive_action": "recall",
           "source_ids": ["autotutor:textbook:opium:impact:v1"],
           "variant_of": "opium-impact-practice-1",
           "generation_mode": "curated"

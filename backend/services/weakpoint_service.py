@@ -15,33 +15,127 @@ _MASTERY_THRESHOLD = 2  # 连续答对多少次判定掌握并移出错题本
 
 def _ensure_table() -> None:
     with get_connection() as conn:
-        conn.execute(text("""CREATE TABLE IF NOT EXISTS weakpoints (
-              student_id TEXT NOT NULL, knowledge_tag TEXT NOT NULL,
-              wrong_count INTEGER NOT NULL DEFAULT 1,
-              last_wrong_at TEXT NOT NULL, source TEXT NOT NULL,
-              correct_streak INTEGER NOT NULL DEFAULT 0,
-              PRIMARY KEY (student_id, knowledge_tag))"""))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_weakpoints_student ON weakpoints(student_id)"))
-        # 旧库补列
-        existing = {c["name"] for c in inspect(conn).get_columns("weakpoints")}
-        if "correct_streak" not in existing:
-            conn.execute(text("ALTER TABLE weakpoints ADD COLUMN correct_streak INTEGER NOT NULL DEFAULT 0"))
+        _ensure_tables_with_connection(conn)
+
+
+def _ensure_tables_with_connection(conn: Any) -> None:
+    if conn.dialect.name != "sqlite":
+        tables = set(inspect(conn).get_table_names())
+        missing = {"weakpoints", "weakpoint_evidence"} - tables
+        if missing:
+            raise RuntimeError(f"weakpoint schema is not migrated: {', '.join(sorted(missing))}")
+        return
+    conn.execute(text("""CREATE TABLE IF NOT EXISTS weakpoints (
+          student_id TEXT NOT NULL, knowledge_tag TEXT NOT NULL,
+          wrong_count INTEGER NOT NULL DEFAULT 1,
+          last_wrong_at TEXT NOT NULL, source TEXT NOT NULL,
+          correct_streak INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (student_id, knowledge_tag))"""))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_weakpoints_student ON weakpoints(student_id)"))
+    conn.execute(text("""CREATE TABLE IF NOT EXISTS weakpoint_evidence (
+          evidence_key TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL,
+          knowledge_tag TEXT NOT NULL,
+          evidence_type TEXT NOT NULL,
+          source_feature TEXT NOT NULL,
+          source_session_id TEXT,
+          assessment_id TEXT,
+          created_at TEXT NOT NULL)"""))
+    conn.execute(text("""CREATE INDEX IF NOT EXISTS idx_weakpoint_evidence_student_tag_created
+          ON weakpoint_evidence(student_id, knowledge_tag, created_at)"""))
+    existing = {c["name"] for c in inspect(conn).get_columns("weakpoints")}
+    if "correct_streak" not in existing:
+        conn.execute(text("ALTER TABLE weakpoints ADD COLUMN correct_streak INTEGER NOT NULL DEFAULT 0"))
+
+
+def _record_weakpoint_with_connection(conn: Any, student_id: str, knowledge_tag: str, source: str) -> None:
+    conn.execute(
+        text("""INSERT INTO weakpoints (student_id, knowledge_tag, wrong_count, last_wrong_at, source, correct_streak)
+        VALUES (:student_id, :tag, 1, :ts, :source, 0)
+        ON CONFLICT(student_id, knowledge_tag) DO UPDATE SET
+          wrong_count = weakpoints.wrong_count + 1,
+          last_wrong_at = excluded.last_wrong_at,
+          source = excluded.source,
+          correct_streak = 0"""),
+        {"student_id": student_id, "tag": knowledge_tag, "ts": now_iso(), "source": source},
+    )
+
+
+def _record_correct_evidence_with_connection(
+    conn: Any,
+    student_id: str,
+    knowledge_tag: str,
+    *,
+    mastery_threshold: int = _MASTERY_THRESHOLD,
+) -> dict[str, Any]:
+    row = conn.execute(
+        text("SELECT correct_streak FROM weakpoints WHERE student_id=:sid AND knowledge_tag=:tag"),
+        {"sid": student_id, "tag": knowledge_tag},
+    ).mappings().fetchone()
+    if not row:
+        return {"removed": False, "reason": "not_tracked"}
+    streak = int(row["correct_streak"] or 0) + 1
+    if streak >= mastery_threshold:
+        conn.execute(
+            text("DELETE FROM weakpoints WHERE student_id=:sid AND knowledge_tag=:tag"),
+            {"sid": student_id, "tag": knowledge_tag},
+        )
+        return {"removed": True, "correct_streak": streak}
+    conn.execute(
+        text("UPDATE weakpoints SET correct_streak=:s WHERE student_id=:sid AND knowledge_tag=:tag"),
+        {"s": streak, "sid": student_id, "tag": knowledge_tag},
+    )
+    return {"removed": False, "correct_streak": streak}
+
+
+def apply_weakpoint_evidence_with_connection(
+    conn: Any,
+    *,
+    evidence_key: str,
+    student_id: str,
+    knowledge_tag: str,
+    evidence_type: str,
+    source_feature: str,
+    source_session_id: str | None,
+    assessment_id: str | None,
+) -> dict[str, Any]:
+    """Record the evidence fact and update its aggregate at most once."""
+    _ensure_tables_with_connection(conn)
+    if evidence_type not in {"wrong", "verified_correct"}:
+        raise ValueError("invalid weakpoint evidence type")
+    inserted = conn.execute(
+        text("""INSERT INTO weakpoint_evidence (
+            evidence_key, student_id, knowledge_tag, evidence_type, source_feature,
+            source_session_id, assessment_id, created_at
+        ) VALUES (
+            :evidence_key, :student_id, :knowledge_tag, :evidence_type, :source_feature,
+            :source_session_id, :assessment_id, :created_at
+        ) ON CONFLICT(evidence_key) DO NOTHING"""),
+        {
+            "evidence_key": evidence_key,
+            "student_id": student_id,
+            "knowledge_tag": knowledge_tag,
+            "evidence_type": evidence_type,
+            "source_feature": source_feature,
+            "source_session_id": source_session_id,
+            "assessment_id": assessment_id,
+            "created_at": now_iso(),
+        },
+    )
+    if inserted.rowcount != 1:
+        return {"applied": False, "reason": "duplicate_evidence"}
+    if evidence_type == "wrong":
+        _record_weakpoint_with_connection(conn, student_id, knowledge_tag, source_feature)
+        return {"applied": True, "action": "weakpoint_recorded"}
+    result = _record_correct_evidence_with_connection(conn, student_id, knowledge_tag)
+    return {"applied": True, "action": "correct_evidence_recorded", **result}
 
 
 def record_weakpoint(student_id: str, knowledge_tag: str, source: str) -> None:
     """记录/强化一个薄弱点（答错）。答错说明未掌握，连对计数清零。"""
     _ensure_table()
     with get_connection() as conn:
-        conn.execute(
-            text("""INSERT INTO weakpoints (student_id, knowledge_tag, wrong_count, last_wrong_at, source, correct_streak)
-            VALUES (:student_id, :tag, 1, :ts, :source, 0)
-            ON CONFLICT(student_id, knowledge_tag) DO UPDATE SET
-              wrong_count = weakpoints.wrong_count + 1,
-              last_wrong_at = excluded.last_wrong_at,
-              source = excluded.source,
-              correct_streak = 0"""),
-            {"student_id": student_id, "tag": knowledge_tag, "ts": now_iso(), "source": source},
-        )
+        _record_weakpoint_with_connection(conn, student_id, knowledge_tag, source)
 
 
 def record_correct_evidence(
@@ -58,24 +152,12 @@ def record_correct_evidence(
     """
     _ensure_table()
     with get_connection() as conn:
-        row = conn.execute(
-            text("SELECT correct_streak FROM weakpoints WHERE student_id=:sid AND knowledge_tag=:tag"),
-            {"sid": student_id, "tag": knowledge_tag},
-        ).mappings().fetchone()
-        if not row:
-            return {"removed": False, "reason": "not_tracked"}
-        streak = int(row["correct_streak"] or 0) + 1
-        if streak >= mastery_threshold:
-            conn.execute(
-                text("DELETE FROM weakpoints WHERE student_id=:sid AND knowledge_tag=:tag"),
-                {"sid": student_id, "tag": knowledge_tag},
-            )
-            return {"removed": True, "correct_streak": streak}
-        conn.execute(
-            text("UPDATE weakpoints SET correct_streak=:s WHERE student_id=:sid AND knowledge_tag=:tag"),
-            {"s": streak, "sid": student_id, "tag": knowledge_tag},
+        return _record_correct_evidence_with_connection(
+            conn,
+            student_id,
+            knowledge_tag,
+            mastery_threshold=mastery_threshold,
         )
-        return {"removed": False, "correct_streak": streak}
 
 
 def get_weakpoints(student_id: str) -> list[dict[str, Any]]:

@@ -27,6 +27,7 @@ type CurrentQuestion = {
   evidence_label?: string | null;
   knowledge_point: string;
   difficulty: string;
+  cognitive_action?: "recall" | "explain" | "compare" | "apply";
   teaching?: {
     explanation: string;
     key_points: string[];
@@ -36,6 +37,10 @@ type CurrentQuestion = {
   options: string[];
   step_index: number;
   replanned: boolean;
+  adaptation?: {
+    type: "reteach" | "lower_difficulty" | "change_example";
+    student_message: string;
+  } | null;
 };
 type Reflection = {
   step_index: number;
@@ -519,7 +524,9 @@ function AutoTutorInner() {
               )}
               {q.kind !== "exit_ticket" && q.teaching && (
                 <div style={{ border: "1px solid var(--line, #e2ded3)", background: "rgba(47,111,79,0.05)", borderRadius: 10, padding: "12px 14px", margin: "10px 0 14px" }}>
-                  <strong style={{ color: "var(--jade-dark,#2f6f4f)" }}>{q.replanned ? "换一种讲法" : "先理解，再作答"}</strong>
+                  <strong style={{ color: "var(--jade-dark,#2f6f4f)" }}>
+                    {q.adaptation?.student_message || (q.replanned ? "换一种讲法" : "先理解，再作答")}
+                  </strong>
                   <p style={{ margin: "7px 0", lineHeight: 1.7 }}>{q.teaching.explanation}</p>
                   {!!q.teaching.key_points?.length && (
                     <div className="learning-runtime-chips">
