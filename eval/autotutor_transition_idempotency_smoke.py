@@ -108,7 +108,9 @@ def main() -> None:
     assert completed["status"] == "completed"
     before = _counts(session_id, student_id)
     assert before[1] == 0
-    assert before[2] == 1
+    # Verified AutoTutor mastery now persists a distinct retrieval + independent
+    # evidence pair; neither is treated as retained mastery.
+    assert before[2] == 2
     assert before[3] == 1
 
     replay = submit_answer(

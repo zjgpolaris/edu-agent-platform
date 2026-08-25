@@ -176,8 +176,31 @@ weakpoint_evidence = Table(
     Column("source_feature", Text, nullable=False),
     Column("source_session_id", Text),
     Column("assessment_id", Text),
+    Column("evidence_stage", Text),
+    Column("assessment_fingerprint", Text),
+    Column("parent_evidence_key", Text),
+    Column("eligible_at", Text),
+    Column("occurred_at", Text),
     Column("created_at", Text, nullable=False),
     Index("idx_weakpoint_evidence_student_tag_created", "student_id", "knowledge_tag", "created_at"),
+    Index(
+        "idx_weakpoint_evidence_chain",
+        "student_id", "knowledge_tag", "evidence_stage", "assessment_fingerprint", "occurred_at",
+    ),
+)
+
+review_mastery_state = Table(
+    "review_mastery_state", metadata,
+    Column("student_id", Text, primary_key=True),
+    Column("knowledge_tag", Text, primary_key=True),
+    Column("status", Text, nullable=False),
+    Column("retrieval_evidence_key", Text),
+    Column("verification_evidence_key", Text),
+    Column("retention_evidence_key", Text),
+    Column("retention_due_at", Text),
+    Column("revision", Integer, nullable=False, server_default="0"),
+    Column("updated_at", Text, nullable=False),
+    Index("idx_review_mastery_due", "status", "retention_due_at"),
 )
 
 game_rounds = Table(
@@ -213,6 +236,11 @@ review_sessions = Table(
     Column("completed", Integer, nullable=False, server_default="0"),
     Column("total", Integer, nullable=False),
     Column("created_at", Text, nullable=False),
+    Column("revision", Integer, nullable=False, server_default="0"),
+    Column("status", Text, nullable=False, server_default="active"),
+    Column("last_idempotency_key", Text),
+    Column("last_request_hash", Text),
+    Column("last_response_json", Text),
     Index("idx_review_sessions_student_date", "student_id", "date", unique=True),
 )
 

@@ -48,6 +48,7 @@ from agents.autotutor_content import (
     LearningObjective,
     TeachingEvidenceDecision,
     answer_feedback as build_answer_feedback,
+    assessment_fingerprint,
     assessment_to_question,
     build_learning_objective,
     prepare_content,
@@ -1205,8 +1206,8 @@ def _finalize(state: AutoTutorState) -> None:
             event_types.append(event_type)
 
         if state.verified_mastery:
-            weakpoint_action = "verified_correct_evidence_recorded"
-            evidence_type: Literal["wrong", "verified_correct"] = "verified_correct"
+            weakpoint_action = "independent_correct_evidence_recorded"
+            evidence_type: Literal["independent_correct"] = "independent_correct"
             if primary is not None:
                 _record_content_event(
                     state,
@@ -1216,6 +1217,23 @@ def _finalize(state: AutoTutorState) -> None:
                     metadata={**ticket_metadata, "mastery_eligible": True},
                 )
             event_types.append("auto_tutor_verified_mastery")
+            practice_result = primary.practice_result if primary is not None else None
+            practice_id = str((practice_result or {}).get("assessment_id") or "")
+            retrieval_key = (
+                f"autotutor:{state.session_id}:revision:{state.revision}:"
+                f"weakpoint:retrieval_correct:{practice_id}"
+            )
+            if primary is not None and practice_id:
+                state._pending_weakpoint_evidence.append(WeakpointEvidenceIntent(
+                    evidence_key=retrieval_key,
+                    student_id=state.student_id,
+                    knowledge_tag=ticket_tag,
+                    evidence_type="retrieval_correct",
+                    source_session_id=state.session_id,
+                    assessment_id=practice_id,
+                    evidence_stage="retrieval",
+                    assessment_fingerprint=assessment_fingerprint(_assessment_from_question(primary.question or {})),
+                ))
             evidence_key = (
                 f"autotutor:{state.session_id}:revision:{state.revision}:"
                 f"weakpoint:{evidence_type}:{result.assessment_id}"
@@ -1227,6 +1245,9 @@ def _finalize(state: AutoTutorState) -> None:
                 evidence_type=evidence_type,
                 source_session_id=state.session_id,
                 assessment_id=result.assessment_id,
+                evidence_stage="verification",
+                assessment_fingerprint=assessment_fingerprint(_assessment_from_question(ticket.question or {})),
+                parent_evidence_key=retrieval_key if practice_id else None,
             ))
         elif not result.is_correct or (primary and primary.status == "struggling"):
             weakpoint_action = "weakpoint_recorded"
@@ -1243,6 +1264,8 @@ def _finalize(state: AutoTutorState) -> None:
                 evidence_type=evidence_type,
                 source_session_id=state.session_id,
                 assessment_id=result.assessment_id,
+                evidence_stage="verification",
+                assessment_fingerprint=assessment_fingerprint(_assessment_from_question(ticket.question or {})),
             ))
         elif state.content_gate_mode in {"off", "shadow"}:
             weakpoint_action = "rollout_unverified_no_mastery_write"

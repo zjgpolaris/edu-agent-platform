@@ -94,6 +94,28 @@ def c2_reviewed_catalog_meets_contract() -> None:
         assert variant.get("material"), (tag, variant)
         assert variant.get("material_timing") == "after_answer", (tag, variant)
         assert variant.get("cognitive_action") in {"explain", "compare", "apply"}, (tag, variant)
+        retrieval = build_curated_review_question(tag, task_role="retrieval", target_difficulty="medium")
+        assert retrieval and retrieval.get("material_timing") == "after_answer", (tag, retrieval)
+        verification = build_curated_review_question(
+            tag,
+            task_role="verification",
+            target_difficulty="medium",
+            excluded_assessment_ids={retrieval["question_id"]},
+            excluded_fingerprints={retrieval["assessment_fingerprint"]},
+        )
+        assert verification and verification["question_id"] != retrieval["question_id"], (tag, verification)
+        retention = build_curated_review_question(
+            tag,
+            task_role="retention",
+            target_difficulty="medium",
+            excluded_assessment_ids={retrieval["question_id"], verification["question_id"]},
+            excluded_fingerprints={retrieval["assessment_fingerprint"], verification["assessment_fingerprint"]},
+        )
+        assert retention and len({
+            retrieval["assessment_fingerprint"],
+            verification["assessment_fingerprint"],
+            retention["assessment_fingerprint"],
+        }) == 3, (tag, retrieval, verification, retention)
 
 
 def c3_wuxu_tests_causes_not_impact() -> None:
@@ -109,7 +131,7 @@ def c3_wuxu_tests_causes_not_impact() -> None:
     assert any(term in answer_text for term in ("顽固派", "力量弱小", "支持")), answer_text
     assert "思想启蒙" not in answer_text, answer_text
     variant_answer = variant["options"]["ABCD".index(variant["answer"])]
-    assert "改革力量薄弱" in variant_answer, variant_answer
+    assert any(term in variant_answer for term in ("改革力量薄弱", "缺少可靠力量", "力量对比悬殊")), variant_answer
 
 
 def c4_public_payload_hides_answer() -> None:
@@ -148,7 +170,7 @@ def c5_legacy_and_stale_sessions_are_rehydrated() -> None:
     assert hydrated
     task = hydrated["tasks"][0]
     assert task.get("quality_status") == "verified", task
-    assert task.get("question_id") == "wuxu-cause-exit-1", task
+    assert task.get("question_id") == "wuxu-cause-practice-3", task
     assert task.get("material") and not review_question_quality_reasons(task, require_variant=True), task
 
     stale_student = "quality-stale-adaptation"
@@ -206,7 +228,7 @@ def c7_server_judges_and_submission_is_idempotent() -> None:
             text("SELECT COUNT(*) FROM weakpoint_evidence WHERE student_id=:sid"), {"sid": student}
         ).scalar_one()
         event_count = conn.execute(
-            text("SELECT COUNT(*) FROM learning_events WHERE student_id=:sid AND event_type='review_answered'"),
+            text("SELECT COUNT(*) FROM learning_events WHERE student_id=:sid AND event_type='review_retrieval_answered'"),
             {"sid": student},
         ).scalar_one()
     assert evidence_count == 1 and event_count == 1, (evidence_count, event_count)

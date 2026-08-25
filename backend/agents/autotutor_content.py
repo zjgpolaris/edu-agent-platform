@@ -153,6 +153,30 @@ class AssessmentSelection(BaseModel):
     reason_codes: list[str] = Field(default_factory=list)
 
 
+def assessment_fingerprint(item: AssessmentItem | dict[str, Any]) -> str:
+    """Return a stable semantic identity shared by AutoTutor and review."""
+    data = item.model_dump() if isinstance(item, AssessmentItem) else dict(item)
+    options = data.get("options") or []
+    normalized_options: list[dict[str, Any]] = []
+    for option in options:
+        option_data = option.model_dump() if isinstance(option, AssessmentOption) else dict(option)
+        normalized_options.append({
+            "option_id": option_data.get("option_id"),
+            "text": _compact(option_data.get("text")),
+            "is_correct": bool(option_data.get("is_correct")),
+        })
+    canonical = {
+        "objective_id": data.get("objective_id"),
+        "stem": _compact(data.get("review_prompt") or data.get("stem") or data.get("question")),
+        "options": normalized_options,
+        "cognitive_action": data.get("cognitive_action"),
+    }
+    digest = hashlib.sha256(
+        json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"sha256:{digest}"
+
+
 class ContentGateSettings(BaseModel):
     mode: Literal["off", "shadow", "enforce"] = "off"
     basis_points: int = 0

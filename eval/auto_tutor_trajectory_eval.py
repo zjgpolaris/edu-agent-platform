@@ -157,7 +157,7 @@ def case_correct_answer_no_spurious_replan() -> tuple[bool, str, dict]:
 
 
 def case_closure_writes_memory_and_review() -> tuple[bool, str, dict]:
-    """闭环命中：课后写 memory + 掌握证据累积（掌握度模型：单次答对记 evidence，未必立即移除）。"""
+    """闭环命中：课后写 memory + 独立证据，并安排保持复测。"""
     sid = "traj-closure"
     _seed(sid, ["辛亥革命历史意义"])
     st = at.start_session(sid, grade="七年级上册", actor_role="student")
@@ -174,17 +174,32 @@ def case_closure_writes_memory_and_review() -> tuple[bool, str, dict]:
     mems = list_memory_entries(sid, memory_type="review_goal")
     if not any(m.source_feature == "auto_tutor" for m in mems):
         return False, "no auto_tutor review_goal memory written", detail
-    # 掌握度模型：全部答对 → 掌握点应累积 correct_streak（>=1），或已达阈值被移除
+    # AutoTutor 的会话内 practice + exit ticket 只形成 retrieval + independent
+    # evidence；薄弱点必须保留到至少 24 小时后的 retention 通过。
     wps = {w["knowledge_tag"]: w.get("correct_streak", 0) for w in get_weakpoints(sid)}
     mastered = {p["source_tag"] or p["knowledge_point"] for p in st["lesson_plan"] if p["status"] == "mastered"}
     detail["remaining_weakpoints"] = wps
     detail["mastered"] = list(mastered)
     if not mastered:
         return False, "no step reached mastered status", detail
+    from db.engine import get_connection
+    from sqlalchemy import text
+    with get_connection() as conn:
+        evidence_types = conn.execute(text("""SELECT evidence_type FROM weakpoint_evidence
+            WHERE student_id=:sid AND source_session_id=:session_id ORDER BY created_at"""),
+            {"sid": sid, "session_id": sess}).scalars().all()
+        states = conn.execute(text("""SELECT knowledge_tag, status, retention_due_at
+            FROM review_mastery_state WHERE student_id=:sid"""), {"sid": sid}).mappings().all()
+    detail["evidence_types"] = list(evidence_types)
+    detail["review_mastery_states"] = [dict(row) for row in states]
+    if len(evidence_types) != 2 or set(evidence_types) != {"retrieval_correct", "independent_correct"}:
+        return False, "AutoTutor did not persist independent evidence pair", detail
     for tag in mastered:
-        # 已移除（达阈值）或仍在但连对计数>=1 都算证据生效
-        if tag in wps and wps[tag] < 1:
-            return False, f"mastered point '{tag}' did not accumulate correct evidence", detail
+        if tag not in wps:
+            return False, f"mastered point '{tag}' was removed before retention", detail
+        state = next((row for row in states if row["knowledge_tag"] == tag), None)
+        if not state or state["status"] != "retention_due" or not state["retention_due_at"]:
+            return False, f"mastered point '{tag}' has no scheduled retention", detail
     return True, "ok", detail
 
 

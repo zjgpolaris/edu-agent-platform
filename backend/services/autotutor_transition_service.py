@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from db.engine import get_connection
 from services.weakpoint_service import apply_weakpoint_evidence_with_connection
+from services.review_mastery_service import add_retention_interval, set_mastery_state_with_connection
 from student_profile import (
     LearningEvent,
     MemoryEntryUpsert,
@@ -31,10 +32,13 @@ class WeakpointEvidenceIntent(BaseModel):
     evidence_key: str = Field(min_length=8, max_length=320)
     student_id: str
     knowledge_tag: str
-    evidence_type: Literal["wrong", "verified_correct"]
+    evidence_type: Literal["wrong", "retrieval_correct", "independent_correct", "retention_correct"]
     source_feature: Literal["auto_tutor"] = "auto_tutor"
     source_session_id: str
     assessment_id: str | None = None
+    evidence_stage: Literal["retrieval", "verification", "retention"] | None = None
+    assessment_fingerprint: str | None = None
+    parent_evidence_key: str | None = None
 
 
 class AutoTutorTransitionEffects(BaseModel):
@@ -116,6 +120,7 @@ def commit_autotutor_transition(
             checkpoint(f"after_learning_event:{intent.effect_key}")
 
         for intent in effects.weakpoint_evidence:
+            occurred_at = now_iso()
             apply_weakpoint_evidence_with_connection(
                 conn,
                 evidence_key=intent.evidence_key,
@@ -125,7 +130,22 @@ def commit_autotutor_transition(
                 source_feature=intent.source_feature,
                 source_session_id=intent.source_session_id,
                 assessment_id=intent.assessment_id,
+                evidence_stage=intent.evidence_stage,
+                assessment_fingerprint=intent.assessment_fingerprint,
+                parent_evidence_key=intent.parent_evidence_key,
+                occurred_at=occurred_at,
             )
+            if intent.evidence_type == "independent_correct" and intent.parent_evidence_key:
+                set_mastery_state_with_connection(
+                    conn,
+                    student_id=intent.student_id,
+                    knowledge_tag=intent.knowledge_tag,
+                    status="retention_due",
+                    retrieval_evidence_key=intent.parent_evidence_key,
+                    verification_evidence_key=intent.evidence_key,
+                    retention_due_at=add_retention_interval(occurred_at),
+                    updated_at=occurred_at,
+                )
             checkpoint(f"after_weakpoint_evidence:{intent.evidence_key}")
 
         if effects.review_memory is not None:

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from security.auth import Actor, assert_student_access, require_auth
 from services.review_service import (
     ReviewConflictError,
+    advance_after_feedback,
     create_today_session,
     get_mastery_overview,
     get_today_session,
@@ -22,6 +23,15 @@ router = APIRouter(tags=["review"])
 class ReviewSubmitRequest(BaseModel):
     task_index: int = Field(ge=0)
     selected_answer: str = Field(pattern="^[A-Da-d]$")
+    expected_revision: int | None = Field(default=None, ge=0)
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=160)
+
+
+class ReviewAdvanceRequest(BaseModel):
+    task_index: int = Field(ge=0)
+    action: str = Field(pattern="^continue_after_feedback$")
+    expected_revision: int = Field(ge=0)
+    idempotency_key: str = Field(min_length=8, max_length=160)
 
 
 class PreferenceUpdateRequest(BaseModel):
@@ -56,11 +66,31 @@ async def review_submit(student_id: str, req: ReviewSubmitRequest, actor: Actor 
             _date.today().isoformat(),
             req.task_index,
             req.selected_answer,
+            req.expected_revision,
+            req.idempotency_key,
         )
     except ReviewConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)}) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail={"code": "invalid_review_transition", "message": str(exc)}) from exc
+
+
+@router.post("/api/students/{student_id}/review/advance")
+async def review_advance(student_id: str, req: ReviewAdvanceRequest, actor: Actor = Depends(require_auth)):
+    assert_student_access(actor, student_id)
+    try:
+        return await run_in_threadpool(
+            advance_after_feedback,
+            student_id,
+            _date.today().isoformat(),
+            req.task_index,
+            req.expected_revision,
+            req.idempotency_key,
+        )
+    except ReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "invalid_review_transition", "message": str(exc)}) from exc
 
 
 @router.get("/api/students/{student_id}/mastery-overview")

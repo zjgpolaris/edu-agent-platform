@@ -31,6 +31,8 @@
           "objective_id": "history:戊戌变法:cause:v1",
           "kind": "practice",
           "stem": "戊戌变法推行一百多天后失败，其失败的主要原因是？",
+          "review_prompt": "戊戌变法失败的主要原因是什么？",
+          "feedback_material": "变法依靠没有实权的光绪帝，脱离广大人民群众；资产阶级维新派力量弱小，顽固派势力强大。",
           "options": [
             {"option_id": "A", "text": "变法触犯顽固派利益，维新派力量弱小，又依赖无实权的皇帝", "is_correct": true, "feedback": "正确。这同时指出了顽固派阻挠和维新派自身力量不足。", "source_ids": ["autotutor:textbook:wuxu:cause:v1"]},
             {"option_id": "B", "text": "变法在社会上起到了思想启蒙作用", "is_correct": false, "misconception_code": "cause_impact_confusion", "feedback": "这是戊戌变法的历史影响，不是它失败的原因。"},
@@ -64,6 +66,8 @@
           "objective_id": "history:戊戌变法:cause:v1",
           "kind": "practice",
           "stem": "从政治力量对比看，戊戌变法为什么难以持续推进？",
+          "review_prompt": "从政治力量对比看，戊戌变法为什么难以持续推进？",
+          "feedback_material": "维新派缺少可靠的政治和军事力量，顽固派掌握实权，双方力量对比悬殊。",
           "options": [
             {"option_id": "A", "text": "维新派缺少可靠力量，又受到掌权顽固派的强烈反击", "is_correct": true, "feedback": "正确。力量基础薄弱与顽固派反击共同导致变法难以持续。", "source_ids": ["autotutor:textbook:wuxu:cause:v1"]},
             {"option_id": "B", "text": "维新派已经掌握全国军队和地方政权", "is_correct": false, "misconception_code": "power_base_reversal", "feedback": "维新派并未掌握可靠军队和广泛地方力量。"},
@@ -123,6 +127,8 @@
           "objective_id": "history:洋务运动:purpose:v1",
           "kind": "practice",
           "stem": "洋务派掀起洋务运动的根本目的是？",
+          "review_prompt": "洋务派学习西方技术、兴办近代企业的根本目的是什么？",
+          "feedback_material": "洋务派主张利用西方先进技术强兵富国，维护清王朝的统治。",
           "options": [
             {"option_id": "A", "text": "维护和巩固清政府的统治", "is_correct": true, "feedback": "正确。利用西方技术、自强求富都是为维护清朝统治服务。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"]},
             {"option_id": "B", "text": "推翻清政府并建立民主共和国", "is_correct": false, "misconception_code": "movement_goal_confusion", "feedback": "这是革命派的政治目标，不是洋务派的目标。"},
@@ -139,6 +145,8 @@
           "objective_id": "history:洋务运动:purpose:v1",
           "kind": "practice",
           "stem": "如何准确理解洋务运动的“自强”“求富”与根本目的之间的关系？",
+          "review_prompt": "如何准确理解洋务运动的“自强”“求富”与根本目的之间的关系？",
+          "feedback_material": "“自强”“求富”是洋务派采用的手段，维护清王朝统治才是其根本目的。",
           "options": [
             {"option_id": "A", "text": "“自强”“求富”是口号和路径，根本目的仍是维护清朝统治", "is_correct": true, "feedback": "正确。你区分了手段、口号和根本目的。", "source_ids": ["autotutor:textbook:westernization:purpose:v1"]},
             {"option_id": "B", "text": "“自强”“求富”证明洋务派要推翻君主制", "is_correct": false, "misconception_code": "means_goal_confusion", "feedback": "洋务派属于清朝统治集团，并不主张推翻君主制。"},
@@ -215,6 +223,8 @@
           "objective_id": "history:赤壁之战:impact:v1",
           "kind": "practice",
           "stem": "赤壁之战产生的最重要历史影响是？",
+          "review_prompt": "赤壁之战产生的最重要历史影响是什么？",
+          "feedback_material": "赤壁之战中曹操战败，孙权、刘备的力量得到巩固，为三国鼎立局面的形成奠定了基础。",
           "options": [
             {"option_id": "A", "text": "为三国鼎立局面的形成奠定基础", "is_correct": true, "feedback": "正确。战后北方统一全国受阻，孙刘势力得到发展。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"]},
             {"option_id": "B", "text": "结束了东汉政权", "is_correct": false, "misconception_code": "result_timeline_confusion", "feedback": "东汉政权直到220年才结束，不能归因于赤壁之战。"},
@@ -231,6 +241,8 @@
           "objective_id": "history:赤壁之战:impact:v1",
           "kind": "practice",
           "stem": "赤壁之战后政治力量格局发生了怎样的变化？",
+          "review_prompt": "赤壁之战后政治力量格局发生了怎样的变化？",
+          "feedback_material": "曹操统一全国的进程受阻，孙权、刘备的势力得到巩固，三方力量趋向均衡。",
           "options": [
             {"option_id": "A", "text": "曹操退回北方，孙权和刘备获得巩固发展的机会", "is_correct": true, "feedback": "正确。这一变化推动了三国鼎立局面的形成。", "source_ids": ["autotutor:textbook:redcliff:impact:v1"]},
             {"option_id": "B", "text": "孙刘联军立即统一全国", "is_correct": false, "misconception_code": "impact_overstatement", "feedback": "孙刘获胜后并未统一全国。"},
@@ -307,6 +319,8 @@
           "objective_id": "history:辛亥革命:significance:v1",
           "kind": "practice",
           "stem": "下列对辛亥革命历史意义的概括最准确的是？",
+          "review_prompt": "下列对辛亥革命历史意义的概括，哪一项最准确？",
+          "feedback_material": "辛亥革命推翻清王朝统治，结束君主专制制度，开创完全意义上的近代民族民主革命，推动思想解放。",
           "options": [
             {"option_id": "A", "text": "推翻清王朝、终结君主专制制度并推动思想解放", "is_correct": true, "feedback": "正确。这一概括同时抓住政治制度变化和思想影响。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"]},
             {"option_id": "B", "text": "彻底改变中国半殖民地半封建社会性质", "is_correct": false, "misconception_code": "significance_overstatement", "feedback": "辛亥革命没有根本改变中国的社会性质。"},
@@ -323,6 +337,8 @@
           "objective_id": "history:辛亥革命:significance:v1",
           "kind": "practice",
           "stem": "“皇帝倒了，民主共和观念逐渐深入人心。”这句话主要说明辛亥革命的什么意义？",
+          "review_prompt": "“皇帝倒了，民主共和观念逐渐深入人心”主要说明辛亥革命的什么意义？",
+          "feedback_material": "辛亥革命结束了君主专制制度，传播了民主共和理念，推动了思想解放。",
           "options": [
             {"option_id": "A", "text": "终结君主专制并推动思想解放", "is_correct": true, "feedback": "正确。材料分别对应制度终结和思想观念变化。", "source_ids": ["autotutor:textbook:xinhai:significance:v1"]},
             {"option_id": "B", "text": "使中国立即成为世界强国", "is_correct": false, "misconception_code": "significance_overstatement", "feedback": "材料没有说明国家立即富强。"},
@@ -399,6 +415,8 @@
           "objective_id": "history:鸦片战争:impact:v1",
           "kind": "practice",
           "stem": "鸦片战争对中国社会产生的最深远影响是？",
+          "review_prompt": "鸦片战争对中国社会产生的最深远影响是什么？",
+          "feedback_material": "鸦片战争改变了中国历史发展的进程，中国开始沦为半殖民地半封建社会。",
           "options": [
             {"option_id": "A", "text": "中国开始沦为半殖民地半封建社会，近代史由此开端", "is_correct": true, "feedback": "正确。这概括了社会性质和历史进程的变化。", "source_ids": ["autotutor:textbook:opium:impact:v1"]},
             {"option_id": "B", "text": "中国立即变成完全殖民地", "is_correct": false, "misconception_code": "social_nature_overstatement", "feedback": "教材表述是开始沦为半殖民地半封建社会，不是完全殖民地。"},
@@ -415,6 +433,8 @@
           "objective_id": "history:鸦片战争:impact:v1",
           "kind": "practice",
           "stem": "《南京条约》等不平等条约签订后，中国领土、关税等主权受到破坏。这说明鸦片战争带来了什么变化？",
+          "review_prompt": "鸦片战争后中国领土、关税等主权遭到破坏，说明中国社会发生了什么变化？",
+          "feedback_material": "战后中国主权遭到破坏，社会性质开始发生变化，中国开始沦为半殖民地半封建社会。",
           "options": [
             {"option_id": "A", "text": "中国社会的半殖民地化程度开始加深", "is_correct": true, "feedback": "正确。主权受损是半殖民地化开始的重要表现。", "source_ids": ["autotutor:textbook:opium:impact:v1"]},
             {"option_id": "B", "text": "中国完全摆脱外国侵略", "is_correct": false, "misconception_code": "historical_reversal", "feedback": "不平等条约使外国侵略权益扩大，而不是被摆脱。"},

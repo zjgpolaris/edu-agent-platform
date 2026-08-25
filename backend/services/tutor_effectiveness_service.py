@@ -23,6 +23,33 @@ from db.engine import get_connection
 from student_profile import now_iso
 
 
+def _review_evidence_metrics(rows: list[Any]) -> dict[str, Any]:
+    counts = {
+        "retrieval": {"attempts": 0, "correct": 0},
+        "verification": {"attempts": 0, "correct": 0},
+        "retention": {"attempts": 0, "correct": 0},
+    }
+    correct_type = {
+        "retrieval": "retrieval_correct",
+        "verification": "independent_correct",
+        "retention": "retention_correct",
+    }
+    for row in rows:
+        stage = str(row.get("evidence_stage") or "")
+        if stage not in counts:
+            continue
+        counts[stage]["attempts"] += 1
+        if row.get("evidence_type") == correct_type[stage]:
+            counts[stage]["correct"] += 1
+    result: dict[str, Any] = {}
+    for stage, stat in counts.items():
+        result[f"review_{stage}_attempts"] = stat["attempts"]
+        result[f"review_{stage}_accuracy"] = (
+            round(stat["correct"] / stat["attempts"] * 100, 1) if stat["attempts"] else 0.0
+        )
+    return result
+
+
 # ── 学生视角 ──────────────────────────────────────────────────────────────────
 
 def get_student_tutor_effectiveness(
@@ -81,6 +108,13 @@ def get_student_tutor_effectiveness(
             weakpoint_tags = {r["knowledge_tag"] for r in wp_rows}
         except Exception:
             weakpoint_tags = set()
+        try:
+            review_rows = conn.execute(text("""SELECT evidence_type, evidence_stage
+                FROM weakpoint_evidence WHERE student_id=:sid
+                AND created_at >= datetime('now', :since)"""),
+                {"sid": student_id, "since": f"-{days} days"}).mappings().all()
+        except Exception:
+            review_rows = []
 
     tag_stats: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "total": 0, "mastered": 0, "exit_tickets": 0, "exit_ticket_mastered": 0,
@@ -179,6 +213,7 @@ def get_student_tutor_effectiveness(
             "false_mastery_count": false_mastery_count,
             "delayed_retention_rate": None,
             "delayed_retention_status": "NOT_RUN",
+            **_review_evidence_metrics(list(review_rows)),
             "legacy_practice_result": {"total": total_steps, "correct": mastered_steps, "accuracy": mastery_rate},
             "tags_worked": len(tag_stats),
             "days_analyzed": days,

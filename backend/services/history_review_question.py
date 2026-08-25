@@ -145,23 +145,52 @@ def build_curated_review_question(
     seed_question: dict[str, Any] | None = None,
     target_difficulty: str | None = None,
     selection_seed: str = "",
+    task_role: str | None = None,
+    excluded_assessment_ids: set[str] | None = None,
+    excluded_fingerprints: set[str] | None = None,
 ) -> dict[str, Any] | None:
     """Convert one curriculum-reviewed assessment into the review contract."""
     entry = _curated_entry(tag)
     if entry is None:
         return None
+    from agents.autotutor_content import assessment_fingerprint
+
     practice = list(entry.practice_items)
     exit_items = list(entry.exit_ticket_items)
-    if is_variant and target_difficulty != "easy":
+    if task_role == "retrieval":
+        candidates = [item for item in practice if item.review_prompt and item.feedback_material]
+        is_variant = True
+    elif task_role == "verification":
+        candidates = practice
+        is_variant = False
+    elif task_role == "retention":
+        candidates = exit_items
+        is_variant = False
+    elif is_variant and target_difficulty != "easy":
         candidates = [*exit_items, *practice]
     else:
         candidates = practice
+    unfiltered_candidates = list(candidates)
     if target_difficulty:
         matched = [item for item in candidates if item.difficulty == target_difficulty]
         if matched:
             candidates = matched
     previous_id = str((seed_question or {}).get("question_id") or "")
-    fresh = [item for item in candidates if item.assessment_id != previous_id]
+    excluded_ids = set(excluded_assessment_ids or ())
+    if previous_id:
+        excluded_ids.add(previous_id)
+    excluded_prints = set(excluded_fingerprints or ())
+    fresh = [
+        item for item in candidates
+        if item.assessment_id not in excluded_ids and assessment_fingerprint(item) not in excluded_prints
+    ]
+    if task_role and not fresh:
+        fresh = [
+            item for item in unfiltered_candidates
+            if item.assessment_id not in excluded_ids and assessment_fingerprint(item) not in excluded_prints
+        ]
+    if task_role and not fresh:
+        return None
     if fresh:
         candidates = fresh
     if not candidates:
@@ -177,10 +206,14 @@ def build_curated_review_question(
 
     source_label = entry.source_refs[0].label if entry.source_refs else entry.lesson
     for item in sorted(candidates, key=candidate_key):
-        if is_variant and item.review_prompt and item.feedback_material:
+        if task_role == "retrieval" or (is_variant and item.review_prompt and item.feedback_material):
             material = item.feedback_material.strip()
             question = item.review_prompt.strip()
             material_timing = "after_answer"
+        elif task_role in {"verification", "retention"}:
+            material = None
+            question = (item.review_prompt or item.stem).strip()
+            material_timing = None
         else:
             material, question = _split_material_question(item.stem)
             material_timing = "before_answer" if material else None
@@ -189,6 +222,8 @@ def build_curated_review_question(
         feedback = {option.option_id: option.feedback for option in item.options}
         result = {
             "question_id": item.assessment_id,
+            "assessment_fingerprint": assessment_fingerprint(item),
+            "task_role": task_role,
             "tag": str(tag or "").strip(),
             "material": material,
             "material_timing": material_timing,
@@ -272,6 +307,7 @@ def public_review_question(task: dict[str, Any], *, reveal_answer: bool = False)
         "cognitive_action", "lesson_label", "source_label", "done", "correct",
         "is_variant", "generation_source", "quality_contract_version", "quality_status",
         "adaptive_message", "pending_generate", "blocked_message",
+        "task_role", "phase", "feedback_acknowledged",
     }
     public = {key: value for key, value in task.items() if key in allowed}
     if task.get("material_timing") == "before_answer":

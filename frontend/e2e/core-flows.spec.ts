@@ -54,6 +54,15 @@ test("学生可从工作台进入今日复习与错题库", async ({ page }) => 
   await expect(page.getByRole("tab", { name: "今日任务" })).toBeVisible();
   await expect(page.getByText("这道题还没出好")).toHaveCount(0);
   await expect(page.locator(".rv-opt")).toHaveCount(4);
+  const firstQuestion = await page.locator(".rv-q").innerText();
+  await expect(page.locator(".rv-material")).toHaveCount(0);
+  await page.locator(".rv-opt").first().click();
+  await page.getByRole("button", { name: "确认答案" }).click();
+  await expect(page.locator(".rv-material")).toBeVisible();
+  await page.getByRole("button", { name: "看完了，做一道验证题" }).click();
+  await expect(page.locator(".rv-q")).not.toHaveText(firstQuestion);
+  await expect(page.locator(".rv-material")).toHaveCount(0);
+  await expect(page.locator(".rv-opt")).toHaveCount(4);
   await page.getByRole("tab", { name: "错题库" }).click();
   await expect(page).toHaveURL(/tab=weakpoints/);
   await expect(page.getByRole("heading", { name: "错因档案馆" })).toBeVisible();

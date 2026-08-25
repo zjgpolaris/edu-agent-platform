@@ -40,12 +40,25 @@ def _ensure_tables_with_connection(conn: Any) -> None:
           source_feature TEXT NOT NULL,
           source_session_id TEXT,
           assessment_id TEXT,
+          evidence_stage TEXT,
+          assessment_fingerprint TEXT,
+          parent_evidence_key TEXT,
+          eligible_at TEXT,
+          occurred_at TEXT,
           created_at TEXT NOT NULL)"""))
     conn.execute(text("""CREATE INDEX IF NOT EXISTS idx_weakpoint_evidence_student_tag_created
           ON weakpoint_evidence(student_id, knowledge_tag, created_at)"""))
     existing = {c["name"] for c in inspect(conn).get_columns("weakpoints")}
     if "correct_streak" not in existing:
         conn.execute(text("ALTER TABLE weakpoints ADD COLUMN correct_streak INTEGER NOT NULL DEFAULT 0"))
+    evidence_columns = {c["name"] for c in inspect(conn).get_columns("weakpoint_evidence")}
+    for name in (
+        "evidence_stage", "assessment_fingerprint", "parent_evidence_key", "eligible_at", "occurred_at",
+    ):
+        if name not in evidence_columns:
+            conn.execute(text(f"ALTER TABLE weakpoint_evidence ADD COLUMN {name} TEXT"))
+    conn.execute(text("""CREATE INDEX IF NOT EXISTS idx_weakpoint_evidence_chain
+          ON weakpoint_evidence(student_id, knowledge_tag, evidence_stage, assessment_fingerprint, occurred_at)"""))
 
 
 def _record_weakpoint_with_connection(conn: Any, student_id: str, knowledge_tag: str, source: str) -> None:
@@ -98,18 +111,29 @@ def apply_weakpoint_evidence_with_connection(
     source_feature: str,
     source_session_id: str | None,
     assessment_id: str | None,
+    evidence_stage: str | None = None,
+    assessment_fingerprint: str | None = None,
+    parent_evidence_key: str | None = None,
+    eligible_at: str | None = None,
+    occurred_at: str | None = None,
+    mastery_eligible: bool = False,
 ) -> dict[str, Any]:
     """Record the evidence fact and update its aggregate at most once."""
     _ensure_tables_with_connection(conn)
-    if evidence_type not in {"wrong", "verified_correct"}:
+    if evidence_type not in {
+        "wrong", "verified_correct", "retrieval_correct", "independent_correct", "retention_correct",
+    }:
         raise ValueError("invalid weakpoint evidence type")
+    timestamp = occurred_at or now_iso()
     inserted = conn.execute(
         text("""INSERT INTO weakpoint_evidence (
             evidence_key, student_id, knowledge_tag, evidence_type, source_feature,
-            source_session_id, assessment_id, created_at
+            source_session_id, assessment_id, evidence_stage, assessment_fingerprint,
+            parent_evidence_key, eligible_at, occurred_at, created_at
         ) VALUES (
             :evidence_key, :student_id, :knowledge_tag, :evidence_type, :source_feature,
-            :source_session_id, :assessment_id, :created_at
+            :source_session_id, :assessment_id, :evidence_stage, :assessment_fingerprint,
+            :parent_evidence_key, :eligible_at, :occurred_at, :created_at
         ) ON CONFLICT(evidence_key) DO NOTHING"""),
         {
             "evidence_key": evidence_key,
@@ -119,7 +143,12 @@ def apply_weakpoint_evidence_with_connection(
             "source_feature": source_feature,
             "source_session_id": source_session_id,
             "assessment_id": assessment_id,
-            "created_at": now_iso(),
+            "evidence_stage": evidence_stage,
+            "assessment_fingerprint": assessment_fingerprint,
+            "parent_evidence_key": parent_evidence_key,
+            "eligible_at": eligible_at,
+            "occurred_at": timestamp,
+            "created_at": timestamp,
         },
     )
     if inserted.rowcount != 1:
@@ -127,8 +156,21 @@ def apply_weakpoint_evidence_with_connection(
     if evidence_type == "wrong":
         _record_weakpoint_with_connection(conn, student_id, knowledge_tag, source_feature)
         return {"applied": True, "action": "weakpoint_recorded"}
-    result = _record_correct_evidence_with_connection(conn, student_id, knowledge_tag)
-    return {"applied": True, "action": "correct_evidence_recorded", **result}
+    if evidence_type == "retention_correct" and mastery_eligible:
+        row = conn.execute(
+            text("SELECT 1 FROM weakpoints WHERE student_id=:sid AND knowledge_tag=:tag"),
+            {"sid": student_id, "tag": knowledge_tag},
+        ).first()
+        if row:
+            conn.execute(
+                text("DELETE FROM weakpoints WHERE student_id=:sid AND knowledge_tag=:tag"),
+                {"sid": student_id, "tag": knowledge_tag},
+            )
+            return {"applied": True, "action": "retention_mastery_recorded", "removed": True}
+        return {"applied": True, "action": "retention_mastery_recorded", "removed": False}
+    # Immediate correct answers are useful evidence, but they cannot establish
+    # retained mastery or increment the legacy consecutive-correct aggregate.
+    return {"applied": True, "action": f"{evidence_type}_recorded", "removed": False}
 
 
 def record_weakpoint(student_id: str, knowledge_tag: str, source: str) -> None:

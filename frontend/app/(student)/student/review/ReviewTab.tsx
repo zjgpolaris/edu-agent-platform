@@ -22,10 +22,15 @@ type Task = {
   blocked_message?: string;
   is_variant?: boolean;
   pending_generate?: boolean;
+  task_role?: "retrieval" | "verification" | "retention";
+  phase?: "answering" | "awaiting_feedback" | "answered";
+  feedback_acknowledged?: boolean;
 };
 type Session = {
   date: string; completed: number; total: number; tasks: Task[];
   blocked_count?: number; blocked_tags?: string[];
+  session_revision: number;
+  scheduled_reviews?: Array<{ knowledge_tag: string; available_at: string; message: string }>;
 };
 
 /** 后端出题失败时会留下无法作答的占位题，前端不能把它当正常题呈现。 */
@@ -164,10 +169,11 @@ export default function ReviewTab() {
       const res = await fetch(`${API}/api/students/${studentId}/review/today`, { headers: authHeaders(token), signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const nextSession = await res.json() as Session;
-      const nextIndex = nextSession.tasks.findIndex(t => !t.done);
+      const feedbackIndex = nextSession.tasks.findIndex(t => t.phase === "awaiting_feedback");
+      const nextIndex = feedbackIndex >= 0 ? feedbackIndex : nextSession.tasks.findIndex(t => !t.done);
       setCurrent(nextIndex >= 0 ? nextIndex : Math.max(0, nextSession.tasks.length - 1));
       setSelected(null);
-      setRevealed(false);
+      setRevealed(feedbackIndex >= 0);
       setCardKey(k => k + 1);
       setSession(nextSession);
     } catch (e) {
@@ -196,12 +202,21 @@ export default function ReviewTab() {
       const res = await fetch(`${API}/api/students/${studentId}/review/submit`, {
         method: "POST",
         headers: { ...authHeaders(token), "Content-Type": "application/json" },
-        body: JSON.stringify({ task_index: task.task_index ?? current, selected_answer: selected.charAt(0) }),
+        body: JSON.stringify({
+          task_index: task.task_index ?? current,
+          selected_answer: selected.charAt(0),
+          expected_revision: session.session_revision,
+          idempotency_key: `review-client-${Date.now()}-${current}`,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSession(prev => prev ? {
-        ...prev, completed: data.completed,
+        ...prev, completed: data.completed, total: data.total, session_revision: data.session_revision,
+        scheduled_reviews: data.available_at ? [
+          ...(prev.scheduled_reviews || []),
+          { knowledge_tag: task.tag, available_at: data.available_at, message: data.mastery?.student_message || "明天再确认一次。" },
+        ] : prev.scheduled_reviews,
         tasks: prev.tasks.map((t, i) => i === current ? { ...t, ...data.task, done: true, correct: data.is_correct } : t),
       } : prev);
       setRevealed(true);
@@ -212,8 +227,53 @@ export default function ReviewTab() {
     }
   }
 
-  function handleNext() {
+  async function handleNext() {
     if (!session) return;
+    const task = session.tasks[current];
+    if (task.task_role === "retrieval" && task.done && !task.feedback_acknowledged) {
+      if (!studentId || !token || submitting) return;
+      setSubmitting(true);
+      setSubmitError("");
+      try {
+        const res = await fetch(`${API}/api/students/${studentId}/review/advance`, {
+          method: "POST",
+          headers: { ...authHeaders(token), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task_index: task.task_index ?? current,
+            action: "continue_after_feedback",
+            expected_revision: session.session_revision,
+            idempotency_key: `review-feedback-${Date.now()}-${current}`,
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.phase === "content_blocked") {
+          setSubmitError(data.content_blocked?.message || "当前没有合适的新验证题。");
+          return;
+        }
+        const nextTask = { ...data.task, task_index: data.task_index } as Task;
+        setSession(prev => prev ? {
+          ...prev,
+          total: prev.total + 1,
+          session_revision: data.session_revision,
+          tasks: [
+            ...prev.tasks.map((item, index) => index === current
+              ? { ...item, feedback_acknowledged: true, phase: "answered" as const }
+              : item),
+            nextTask,
+          ],
+        } : prev);
+        setCurrent(data.task_index);
+        setSelected(null);
+        setRevealed(false);
+        setCardKey(k => k + 1);
+      } catch (e) {
+        setSubmitError(normalizeError(e, "验证题加载失败，请稍后重试"));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     const next = session.tasks.findIndex((t, i) => i > current && !t.done);
     if (next >= 0) { setCurrent(next); setSelected(null); setRevealed(false); setCardKey(k => k + 1); }
   }
@@ -260,6 +320,8 @@ export default function ReviewTab() {
           <div className="rv-empty-s">
             {session?.blocked_count
               ? `有 ${session.blocked_count} 个薄弱点暂时缺少通过内容校验的题目，系统不会据此判断掌握情况。`
+              : session?.scheduled_reviews?.length
+                ? session.scheduled_reviews.map(item => `${item.knowledge_tag}：${item.message}`).join("；")
               : <>完成练习或作业批改后<br />这里会出现个性化复习内容</>}
           </div>
           <div className="rv-empty-actions">
@@ -273,6 +335,9 @@ export default function ReviewTab() {
 
   const allDone = session.completed >= session.total;
   const task    = session.tasks[current];
+  const needsFeedbackAdvance = Boolean(
+    revealed && task?.task_role === "retrieval" && task.done && !task.feedback_acknowledged
+  );
   const correct = session.tasks.filter(t => t.correct === true).length;
   const pct     = Math.round(correct / session.total * 100);
 
@@ -400,10 +465,14 @@ export default function ReviewTab() {
               ) : (
                 <button
                   type="button"
-                  onClick={allDone ? () => setRevealed(false) : handleNext}
+                  onClick={needsFeedbackAdvance ? () => void handleNext() : allDone ? () => setRevealed(false) : () => void handleNext()}
                   className="rv-btn rv-btn-fill"
                 >
-                  {allDone ? "查看结果" : "下一题 →"}
+                  {submitting
+                    ? "加载中…"
+                    : needsFeedbackAdvance
+                      ? "看完了，做一道验证题"
+                      : allDone ? "查看结果" : "下一题 →"}
                 </button>
               )}
             </div>
