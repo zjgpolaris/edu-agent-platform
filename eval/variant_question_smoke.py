@@ -5,7 +5,7 @@
 2. get_or_create_variant 首次生成并落库
 3. get_or_create_variant 当天再次调用命中缓存（不二次生成）
 4. should_use_variant 阈值判断
-5. review_service create_today_session 在 wrong_count>=2 时走变式路径
+5. review_service create_today_session 在 wrong_count>=2 时走审定 retrieval 变式路径
 6. 变式题与"普通题"结构兼容（含 is_variant 字段）
 """
 from __future__ import annotations
@@ -121,7 +121,7 @@ def c4_threshold() -> None:
     assert should_use_variant(VARIANT_THRESHOLD + 5), "wrong_count 超过阈值应触发变式"
 
 
-# ── Case 5: review_service 高 wrong_count 触发变式路径 ───────────────────────────
+# ── Case 5: review_service 高 wrong_count 触发审定 retrieval 变式路径 ───────────
 def c5_review_uses_variant() -> None:
     from services.weakpoint_service import _ensure_table as wp_ensure, record_weakpoint
     from services.review_service import create_today_session
@@ -133,33 +133,43 @@ def c5_review_uses_variant() -> None:
     for _ in range(3):
         record_weakpoint(STUDENT2, TAG, source="assignment")
 
-    variant_calls = {"n": 0}
-    original_calls = {"n": 0}
+    generate_calls: list[dict] = []
 
-    def fake_variant(sid, tag, seed_question=None, *, today=None, target_difficulty="medium"):
-        variant_calls["n"] += 1
-        return {"question_id": "fake-variant", "material": "这是一段用于验证变式题路径的历史材料。",
-                "question": f"关于{tag}的独立判断题", "options": ["A.甲项", "B.乙项", "C.丙项", "D.丁项"], "answer": "A",
-                "explanation": "解析", "difficulty": target_difficulty, "cognitive_action": "apply",
-                "quality_contract_version": 3, "quality_status": "verified", "material_timing": "after_answer",
-                "is_variant": True, "tag": tag, "done": False, "correct": None}
+    def fake_generate(tag, **kwargs):
+        generate_calls.append({"tag": tag, **kwargs})
+        is_variant = bool(kwargs.get("is_variant"))
+        target_difficulty = str(kwargs.get("target_difficulty") or "easy")
+        return {
+            "question_id": "fake-reviewed-retrieval",
+            "assessment_fingerprint": "sha256:fake-reviewed-retrieval",
+            "material": "这是一段用于验证审定 retrieval 变式路径的历史对照材料。" if is_variant else None,
+            "material_timing": "after_answer" if is_variant else None,
+            "question": f"关于{tag}的独立判断题",
+            "options": ["A. 甲项", "B. 乙项", "C. 丙项", "D. 丁项"],
+            "answer": "A",
+            "explanation": "解析",
+            "difficulty": target_difficulty,
+            "cognitive_action": "apply" if is_variant else "recall",
+            "quality_contract_version": 3,
+            "quality_status": "verified",
+            "is_variant": is_variant,
+            "tag": tag,
+            "done": False,
+            "correct": None,
+        }
 
-    def fake_generate(tag, **_kwargs):
-        original_calls["n"] += 1
-        return {"question_id": "fake-normal", "question": f"普通题-{tag}", "options": ["A.甲项", "B.乙项", "C.丙项", "D.丁项"], "answer": "A",
-                "explanation": "解析", "difficulty": "easy", "cognitive_action": "recall",
-                "quality_contract_version": 3, "quality_status": "verified",
-                "is_variant": False, "tag": tag, "done": False, "correct": None}
-
-    with mock.patch("services.review_service.get_or_create_variant", fake_variant), \
-         mock.patch("services.review_service._generate_question", fake_generate):
+    with mock.patch("services.review_service._generate_question", fake_generate):
         session = create_today_session(STUDENT2, TODAY)
 
     assert session["total"] >= 1, "应有至少一道复习题"
-    assert variant_calls["n"] >= 1, f"wrong_count>={3} 应调用变式生成，实际 variant_calls={variant_calls['n']}"
+    assert len(generate_calls) == 1, f"应只选择一次审定题，实际调用={generate_calls}"
+    assert generate_calls[0]["is_variant"] is True, generate_calls[0]
+    assert generate_calls[0]["target_difficulty"] == "medium", generate_calls[0]
+    assert generate_calls[0]["task_role"] == "retrieval", generate_calls[0]
     # 任务列表中应包含变式题
     variant_tasks = [t for t in session["tasks"] if t.get("is_variant")]
     assert len(variant_tasks) >= 1, "session tasks 中应有 is_variant=True 的任务"
+    assert variant_tasks[0].get("task_role") == "retrieval", variant_tasks[0]
 
 
 # ── Case 6: 变式题结构与复习 session 兼容 ──────────────────────────────────────
