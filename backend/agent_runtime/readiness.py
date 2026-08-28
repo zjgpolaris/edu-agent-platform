@@ -6,7 +6,7 @@ from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
 
-RUNTIME_SCHEMA_HEAD = "009"
+RUNTIME_SCHEMA_HEAD = "011"
 RUNTIME_TABLES = {
     "autotutor_sessions",
     "agent_runs",
@@ -14,6 +14,8 @@ RUNTIME_TABLES = {
     "agent_run_artifacts",
     "agent_checkpoints",
     "agent_side_effects",
+    "agent_rollout_observations",
+    "agent_release_evidence",
     "weakpoint_evidence",
 }
 

@@ -24,7 +24,7 @@ from agent_runtime.rollout_gate import build_rollout_readiness, seal_rollout_evi
 from db.engine import get_connection
 from security.audit_log import record_audit_event
 
-SCHEMA_READY = {"status": "ready", "schema_ready": True, "alembic_version": "009"}
+SCHEMA_READY = {"status": "ready", "schema_ready": True, "alembic_version": "011"}
 DEPLOYED_COMMIT = "rollout-smoke-commit"
 
 
@@ -36,7 +36,9 @@ def _evidence(config_version: str, *, runtime_mode: str = "active", baseline_p95
         "runtime_mode": runtime_mode,
         "deployed_commit": DEPLOYED_COMMIT,
         "environment": "staging",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "profiles": {
+            "offline": {"status": "pass", "commit": DEPLOYED_COMMIT},
             "real_llm": {"status": "pass", "commit": DEPLOYED_COMMIT},
             "production_rag": {"status": "pass", "commit": DEPLOYED_COMMIT},
         },
@@ -129,6 +131,7 @@ def _gate(config_version: str, **kwargs) -> dict:
         config_version=config_version,
         runtime_mode="active",
         deployed_commit=DEPLOYED_COMMIT,
+        environment="staging",
         evidence=kwargs.pop("evidence", _evidence(config_version)),
         schema_readiness=SCHEMA_READY,
         minimum_terminal_runs=100,
@@ -162,6 +165,24 @@ def main() -> None:
     safety_run_ids = _insert_slice("safety", terminal_count=100)
     for action in (
         "agent_runtime.duplicate_side_effect_prevented",
+        "tool.idempotent_replay",
+    ):
+        assert record_audit_event(
+            actor_id="smoke",
+            action=action,
+            resource_type="agent_run",
+            resource_id=safety_run_ids[0],
+            success=False,
+            data_scope="runtime",
+        )
+    prevention = _gate("safety")
+    assert prevention["status"] == "pass", prevention
+    assert prevention["duplicate_side_effects"] == 0
+    assert prevention["duplicate_attempts_prevented"] == 1
+    assert prevention["idempotent_replays"] == 1
+
+    for action in (
+        "agent_runtime.duplicate_side_effect_executed",
         "agent_runtime.invalid_transition",
         "agent_runtime.high_risk_without_confirmation",
     ):

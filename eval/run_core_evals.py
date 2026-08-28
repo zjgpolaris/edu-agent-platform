@@ -137,6 +137,7 @@ CORE_SUITES = [
     "agent_runtime_schema_readiness_smoke",
     "agent_runtime_rollout_gate_smoke",
     "agent_runtime_latency_baseline_smoke",
+    "rollout_evidence_supply_chain_smoke",
     "agent_runtime_non_tool_policy_smoke",
     "agent_runtime_learning_assistant_api_smoke",
 ]
@@ -201,6 +202,7 @@ QUICK_SUITES = [
     "agent_runtime_schema_readiness_smoke",
     "agent_runtime_rollout_gate_smoke",
     "agent_runtime_latency_baseline_smoke",
+    "rollout_evidence_supply_chain_smoke",
     "agent_runtime_non_tool_policy_smoke",
     "agent_runtime_learning_assistant_api_smoke",
     # LLM/embed-dependent (skipped gracefully when credentials absent)
@@ -290,6 +292,7 @@ SMOKE_SUITES = [
     "agent_runtime_schema_readiness_smoke",
     "agent_runtime_rollout_gate_smoke",
     "agent_runtime_latency_baseline_smoke",
+    "rollout_evidence_supply_chain_smoke",
     "agent_runtime_learning_assistant_api_smoke",
 ]
 SUITE_FILES = {
@@ -380,6 +383,7 @@ SUITE_FILES = {
     "agent_runtime_schema_readiness_smoke": EVAL_DIR / "agent_runtime_schema_readiness_smoke.py",
     "agent_runtime_rollout_gate_smoke": EVAL_DIR / "agent_runtime_rollout_gate_smoke.py",
     "agent_runtime_latency_baseline_smoke": EVAL_DIR / "agent_runtime_latency_baseline_smoke.py",
+    "rollout_evidence_supply_chain_smoke": EVAL_DIR / "rollout_evidence_supply_chain_smoke.py",
     "agent_runtime_non_tool_policy_smoke": EVAL_DIR / "agent_runtime_non_tool_policy_smoke.py",
     "agent_runtime_learning_assistant_api_smoke": EVAL_DIR / "agent_runtime_learning_assistant_api_smoke.py",
     "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
@@ -809,6 +813,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "agent_runtime_latency_baseline_smoke": {
         "label": "Agent Runtime 延迟基线 Smoke",
+        "category": "observability",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "rollout_evidence_supply_chain_smoke": {
+        "label": "Agent Runtime 发布证据供应链 Smoke",
         "category": "observability",
         "kind": "smoke",
         "priority": "p0",

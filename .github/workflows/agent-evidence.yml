@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '20 18 * * *'
   workflow_dispatch:
+    inputs:
+      release_required:
+        description: Fail closed when credentials or evidence profiles are unavailable
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,14 +47,19 @@ jobs:
         run: |
           if [ -z "$BLIND_EVAL_JSONL" ]; then
             echo "Blind evidence secret is not configured; profile remains NOT_RUN."
+            python3 scripts/write_evidence_status.py --profile blind --status not_run --commit "$GITHUB_SHA" --reason missing_blind_dataset --output /tmp/blind-status.json
             exit 0
           fi
           blind_file="$(mktemp)"
           trap 'rm -f "$blind_file"' EXIT
           printf '%s' "$BLIND_EVAL_JSONL" > "$blind_file"
-          EDU_AGENT_BLIND_EVAL_PATH="$blind_file" python3 eval/run_core_evals.py --profile blind --require-clean-revision
-          cp eval/reports/latest.json /tmp/blind-aggregate.json
-          cp eval/reports/latest.md /tmp/blind-aggregate.md
+          if EDU_AGENT_BLIND_EVAL_PATH="$blind_file" python3 eval/run_core_evals.py --profile blind --require-clean-revision; then
+            cp eval/reports/latest.json /tmp/blind-aggregate.json
+            cp eval/reports/latest.md /tmp/blind-aggregate.md
+            python3 scripts/write_evidence_status.py --profile blind --status pass --commit "$GITHUB_SHA" --report /tmp/blind-aggregate.json --output /tmp/blind-status.json
+          else
+            python3 scripts/write_evidence_status.py --profile blind --status fail --commit "$GITHUB_SHA" --reason profile_failed --output /tmp/blind-status.json
+          fi
 
       - name: Run real LLM profile
         env:
@@ -58,11 +69,22 @@ jobs:
         run: |
           if [ -z "$BAILIAN_API_KEY" ]; then
             echo "Real LLM credential is not configured; profile remains NOT_RUN."
+            python3 scripts/write_evidence_status.py --profile real_llm --status not_run --commit "$GITHUB_SHA" --reason missing_llm_credentials --output /tmp/real-llm-status.json
             exit 0
           fi
-          python3 eval/run_core_evals.py --profile real_llm --require-real-llm --require-clean-revision
-          cp eval/reports/latest.json /tmp/real-llm-aggregate.json
-          cp eval/reports/latest.md /tmp/real-llm-aggregate.md
+          if python3 eval/run_core_evals.py --profile real_llm --require-real-llm --require-clean-revision; then
+            cp eval/reports/latest.json /tmp/real-llm-aggregate.json
+            cp eval/reports/latest.md /tmp/real-llm-aggregate.md
+            python3 scripts/write_evidence_status.py --profile real_llm --status pass --commit "$GITHUB_SHA" --report /tmp/real-llm-aggregate.json --output /tmp/real-llm-status.json
+          else
+            python3 scripts/write_evidence_status.py --profile real_llm --status fail --commit "$GITHUB_SHA" --reason profile_failed --output /tmp/real-llm-status.json
+          fi
+
+      - name: Validate evidence statuses
+        run: |
+          release_flag=""
+          if [ "${{ inputs.release_required || false }}" = "true" ]; then release_flag="--release-required"; fi
+          python3 scripts/validate_evidence_statuses.py $release_flag /tmp/blind-status.json /tmp/real-llm-status.json
 
       - name: Upload aggregate evidence
         if: always()
@@ -74,5 +96,7 @@ jobs:
             /tmp/blind-aggregate.md
             /tmp/real-llm-aggregate.json
             /tmp/real-llm-aggregate.md
-          if-no-files-found: ignore
+            /tmp/blind-status.json
+            /tmp/real-llm-status.json
+          if-no-files-found: error
           retention-days: 14

@@ -34,7 +34,10 @@ def _evidence(config: str, baseline_p95: float) -> dict:
         "config_version": config,
         "runtime_mode": "active",
         "deployed_commit": COMMIT,
+        "environment": "staging",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "profiles": {
+            "offline": {"status": "pass", "commit": COMMIT},
             "real_llm": {"status": "pass", "commit": COMMIT},
             "production_rag": {"status": "pass", "commit": COMMIT},
         },
@@ -100,6 +103,7 @@ def _gate(config: str, baseline_p95: float, evidence: dict | None = None) -> dic
         config_version=config,
         runtime_mode="active",
         deployed_commit=COMMIT,
+        environment="staging",
         minimum_terminal_runs=100,
         evidence=evidence or _evidence(config, baseline_p95),
         schema_readiness=SCHEMA_READY,

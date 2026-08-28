@@ -12,6 +12,7 @@ from sqlalchemy import inspect as sa_inspect, text
 
 from agent_runtime.readiness import runtime_schema_readiness
 from db.engine import get_connection
+from deployment import deployed_commit as current_deployed_commit, deployment_environment
 
 TERMINAL_STATUSES = {"completed", "partial", "failed", "cancelled"}
 TERMINAL_EVENT_TYPES = {"run_completed", "run_failed", "run_cancelled"}
@@ -25,6 +26,7 @@ EXPECTED_FAILURE_REASONS = {
 }
 SAFETY_AUDIT_ACTIONS = {
     "agent_runtime.duplicate_side_effect_prevented",
+    "agent_runtime.duplicate_side_effect_executed",
     "agent_runtime.invalid_transition",
     "agent_runtime.high_risk_without_confirmation",
     "tool.idempotent_replay",
@@ -113,10 +115,11 @@ def _evidence_reasons(
     config_version: str,
     runtime_mode: str,
     deployed_commit: str,
+    environment: str,
     minimum_terminal_runs: int,
 ) -> tuple[list[str], dict[str, Any] | None, dict[str, Any]]:
     reasons: list[str] = []
-    profiles = {"real_llm": "unknown", "production_rag": "unknown"}
+    profiles = {"offline": "unknown", "real_llm": "unknown", "production_rag": "unknown"}
     if evidence is None:
         return ["rollout_evidence_missing"], None, profiles
     if evidence.get("evidence_sha256") != evidence_sha256(evidence):
@@ -126,9 +129,18 @@ def _evidence_reasons(
         ("config_version", config_version),
         ("runtime_mode", runtime_mode),
         ("deployed_commit", deployed_commit),
+        ("environment", environment),
     ):
         if not expected or evidence.get(field) != expected:
             reasons.append(f"evidence_{field}_mismatch")
+    generated_at = _parse_time(evidence.get("generated_at"))
+    now = datetime.now(timezone.utc)
+    if generated_at is None:
+        reasons.append("evidence_generated_at_invalid")
+    elif generated_at < now - timedelta(hours=168):
+        reasons.append("evidence_stale")
+    elif generated_at > now + timedelta(minutes=5):
+        reasons.append("evidence_generated_at_in_future")
     raw_profiles = evidence.get("profiles")
     if not isinstance(raw_profiles, dict):
         raw_profiles = {}
@@ -151,6 +163,8 @@ def _evidence_reasons(
             reasons.append("control_baseline_hash_mismatch")
         if baseline.get("agent_type") != agent_type:
             reasons.append("control_baseline_agent_mismatch")
+        if baseline.get("environment") != environment:
+            reasons.append("control_baseline_environment_mismatch")
         if baseline.get("source") != "server_trace_aggregate":
             reasons.append("control_baseline_source_untrusted")
         if not baseline.get("commit") or not baseline.get("config_version"):
@@ -200,6 +214,7 @@ def _query_rollout_rows(
             WHERE created_at>=:since AND data_scope='runtime'
               AND action IN (
                 'agent_runtime.duplicate_side_effect_prevented',
+                'agent_runtime.duplicate_side_effect_executed',
                 'agent_runtime.invalid_transition',
                 'agent_runtime.high_risk_without_confirmation',
                 'tool.idempotent_replay'
@@ -220,6 +235,7 @@ def build_rollout_readiness(
     config_version: str | None = None,
     runtime_mode: str | None = None,
     deployed_commit: str | None = None,
+    environment: str | None = None,
     evidence_path: str | Path | None = None,
     evidence: dict[str, Any] | None = None,
     schema_readiness: dict[str, Any] | None = None,
@@ -233,7 +249,8 @@ def build_rollout_readiness(
     if runtime_mode is None:
         shadow = os.getenv("EDU_AGENT_RUNTIME_V2_SHADOW_MODE", "true").strip().lower() in {"1", "true", "yes", "on"}
         runtime_mode = "shadow" if shadow else "active"
-    deployed_commit = (deployed_commit or os.getenv("EDU_AGENT_DEPLOYED_COMMIT", "")).strip()[:120]
+    deployed_commit = (deployed_commit or current_deployed_commit()).strip()[:120]
+    environment = (environment or deployment_environment()).strip()[:80]
     evidence_path = evidence_path or os.getenv("EDU_AGENT_RUNTIME_ROLLOUT_EVIDENCE_PATH")
     since_dt = datetime.now(timezone.utc) - timedelta(hours=window_hours)
     since = since_dt.isoformat()
@@ -261,6 +278,7 @@ def build_rollout_readiness(
             "config_version": config_version or None,
             "runtime_mode": runtime_mode,
             "deployed_commit": deployed_commit or None,
+            "environment": environment or None,
             "window_hours": window_hours,
             "minimum_terminal_runs": minimum_terminal_runs,
             "run_count": None,
@@ -309,12 +327,10 @@ def build_rollout_readiness(
         action = str(audit.get("action") or "")
         if action in audit_counts:
             audit_counts[action] += 1
-    duplicate_events = sum(event.get("event_type") == "side_effect_duplicate_prevented" for event in events)
-    duplicate_side_effects = (
-        duplicate_events
-        + audit_counts["agent_runtime.duplicate_side_effect_prevented"]
-        + audit_counts["tool.idempotent_replay"]
-    )
+    duplicate_prevented_events = sum(event.get("event_type") == "side_effect_duplicate_prevented" for event in events)
+    duplicate_attempts_prevented = duplicate_prevented_events + audit_counts["agent_runtime.duplicate_side_effect_prevented"]
+    idempotent_replays = audit_counts["tool.idempotent_replay"]
+    duplicate_side_effects = audit_counts["agent_runtime.duplicate_side_effect_executed"]
     invalid_transitions = audit_counts["agent_runtime.invalid_transition"]
     high_risk_without_confirmation = audit_counts["agent_runtime.high_risk_without_confirmation"]
     event_coverage = _rate(covered_runs, len(runs))
@@ -326,13 +342,27 @@ def build_rollout_readiness(
     if evidence is None:
         evidence, load_reason = _load_evidence(evidence_path)
         if load_reason:
-            unknown_reasons.append(load_reason)
+            try:
+                from agent_runtime.evidence_store import load_release_evidence
+
+                evidence = load_release_evidence(
+                    agent_type=agent_type,
+                    config_version=config_version,
+                    runtime_mode=runtime_mode,
+                    deployed_commit=deployed_commit,
+                    environment=environment,
+                )
+            except Exception:
+                evidence = None
+            if evidence is None:
+                unknown_reasons.append(load_reason)
     evidence_reasons, baseline, profiles = _evidence_reasons(
         evidence,
         agent_type=agent_type,
         config_version=config_version,
         runtime_mode=runtime_mode,
         deployed_commit=deployed_commit,
+        environment=environment,
         minimum_terminal_runs=minimum_terminal_runs,
     )
     unknown_reasons.extend(evidence_reasons)
@@ -389,7 +419,10 @@ def build_rollout_readiness(
     if isinstance(baseline, dict):
         safe_baseline = {
             key: baseline.get(key)
-            for key in ("commit", "config_version", "environment", "sample_count", "p50_ms", "p95_ms", "source", "sha256")
+            for key in (
+                "commit", "config_version", "environment", "sample_count", "p50_ms", "p95_ms",
+                "source", "observed_from", "observed_to", "sha256",
+            )
         }
     return {
         "status": status,
@@ -397,6 +430,7 @@ def build_rollout_readiness(
         "config_version": config_version or None,
         "runtime_mode": runtime_mode,
         "deployed_commit": deployed_commit or None,
+        "environment": environment or None,
         "window_hours": window_hours,
         "minimum_terminal_runs": minimum_terminal_runs,
         "schema_ready": bool(schema.get("schema_ready")),
@@ -408,6 +442,8 @@ def build_rollout_readiness(
         "unexpected_failure_rate": unexpected_failure_rate,
         "unexpected_failures": unexpected_failures,
         "duplicate_side_effects": duplicate_side_effects,
+        "duplicate_attempts_prevented": duplicate_attempts_prevented,
+        "idempotent_replays": idempotent_replays,
         "invalid_transitions": invalid_transitions,
         "high_risk_without_confirmation": high_risk_without_confirmation,
         "run_latency": {

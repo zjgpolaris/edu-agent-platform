@@ -164,6 +164,38 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 健康检查分层：`/api/health` 是 liveness；`/api/ready` 是 shallow readiness，默认不触发外部 LLM/Embedding；`/api/debug/rag/health?deep=true` 与 `production_rag_health_smoke.py` 用于生产 RAG 深度检查。
 传入 `--ready-url` 时，release gate 现在会输出 required / failed / warnings 摘要；若带 `--production`、`--ready-require-rag` 或 `--ready-require-external`，会把 RAG / 外部依赖配置作为 blocking readiness check。
 
+Runtime v2 灰度发布还需显式加入 `--ready-require-runtime`。该检查要求部署 commit/config、Alembic 011 schema 和当前版本 rollout evidence 一致；Runtime 关闭、样本不足或证据未运行都不会显示为通过。生产镜像不内置 Eval 目录，真实 LLM/RAG 聚合报告通过 `scripts/build_rollout_evidence.py` 绑定 control baseline 后写入 `agent_release_evidence`。
+
+```bash
+# 三份报告必须来自同一 clean deployed commit，且生成时间不超过 7 天。
+# control baseline 只读取同环境、同 commit/config 的服务端聚合观测，不读取客户端耗时。
+PYTHONPATH=backend python3 scripts/build_rollout_evidence.py \
+  --agent-type history_character \
+  --config-version v1.40-history-shadow \
+  --runtime-mode shadow \
+  --deployed-commit "$RENDER_GIT_COMMIT" \
+  --environment staging \
+  --baseline-config-version v1.40-history-control \
+  --baseline-commit <control-commit> \
+  --minimum-samples 100 \
+  --offline-report /secure/evidence/offline.json \
+  --real-llm-report /secure/evidence/real-llm.json \
+  --production-rag-report /secure/evidence/production-rag.json \
+  --output /secure/evidence/rollout-evidence.json \
+  --persist
+```
+
+`duplicate_side_effect_prevented` 与 `tool.idempotent_replay` 是幂等保护生效的观测计数，不等同于重复副作用；只有 `duplicate_side_effect_executed` 会触发重复副作用阻断。
+
+本地 Docker Compose 现在默认启动 PostgreSQL 16 + pgvector，并先执行 Alembic migration 再启动后端：
+
+```bash
+docker compose up --build
+
+# 或对已配置的 PostgreSQL 单独执行 migration/readiness 验证
+make verify-postgres
+```
+
 AgentOps 的 production summary 现在会额外聚合最近 trace 中的 RAG 诊断口径，包括 `diagnosis_code` 分布和 `failure_stage` 分布，便于区分问题主要发生在检索阶段还是生成阶段；教材问答与历史人物两条链路都已接入该统计。
 
 ### 随问智能路由与受限计划（v1.29）

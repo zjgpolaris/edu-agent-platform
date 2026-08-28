@@ -10,6 +10,7 @@ from uuid import uuid4
 from typing import Any, Iterator
 
 from utils.cost_estimator import estimate_cost_usd
+from deployment import deployed_commit, runtime_config_version
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,8 @@ def base_metadata(extra: dict[str, Any] | None = None) -> dict[str, Any]:
         "service": "edu-agent-backend",
         "environment": os.getenv("LANGFUSE_ENVIRONMENT", "local"),
         "release": os.getenv("LANGFUSE_RELEASE", "edu-agent-local"),
+        "deployed_commit": deployed_commit() or None,
+        "runtime_config_version": runtime_config_version() or None,
     }
     metadata.update(trace_metadata(extra))
     return metadata

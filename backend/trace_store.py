@@ -13,6 +13,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
+from deployment import deployed_commit, runtime_config_version
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,10 @@ def emit_trace_event(
 
     safe_metadata = dict(metadata or {})
     safe_metadata.setdefault("data_scope", _normalize_data_scope(os.getenv("EDU_AGENT_DATA_SCOPE", "runtime")))
+    if deployed_commit():
+        safe_metadata.setdefault("deployed_commit", deployed_commit())
+    if runtime_config_version():
+        safe_metadata.setdefault("runtime_config_version", runtime_config_version())
     eval_run_id = os.getenv("EDU_AGENT_EVAL_RUN_ID")
     if eval_run_id:
         safe_metadata.setdefault("eval_run_id", eval_run_id[:96])

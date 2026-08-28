@@ -483,3 +483,35 @@ agent_side_effects = Table(
     Index("idx_agent_side_effects_run_step", "run_id", "step_id"),
     Index("idx_agent_side_effects_status_updated", "status", "updated_at"),
 )
+
+agent_rollout_observations = Table(
+    "agent_rollout_observations", metadata,
+    Column("observation_id", Text, primary_key=True),
+    Column("agent_type", Text, nullable=False),
+    Column("config_version", Text, nullable=False),
+    Column("runtime_mode", Text, nullable=False),
+    Column("deployed_commit", Text, nullable=False),
+    Column("environment", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("latency_ms", Integer, nullable=False),
+    Column("trace_id", Text),
+    Column("data_scope", Text, nullable=False, server_default="runtime"),
+    Column("created_at", Text, nullable=False),
+    Index("idx_rollout_observation_slice_created", "agent_type", "config_version", "runtime_mode", "data_scope", "created_at"),
+    Index("idx_rollout_observation_commit_created", "deployed_commit", "created_at"),
+)
+
+agent_release_evidence = Table(
+    "agent_release_evidence", metadata,
+    Column("evidence_id", Text, primary_key=True),
+    Column("agent_type", Text, nullable=False),
+    Column("config_version", Text, nullable=False),
+    Column("runtime_mode", Text, nullable=False),
+    Column("deployed_commit", Text, nullable=False),
+    Column("environment", Text, nullable=False),
+    Column("evidence_sha256", Text, nullable=False),
+    Column("payload_json", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("uq_agent_release_evidence_hash", "evidence_sha256", unique=True),
+    Index("idx_release_evidence_slice_created", "agent_type", "config_version", "runtime_mode", "deployed_commit", "created_at"),
+)

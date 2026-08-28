@@ -147,6 +147,50 @@ jobs:
               });
             }
 
+  postgres-migration:
+    name: PostgreSQL migration and Runtime schema
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: edu_agent
+          POSTGRES_USER: edu_agent
+          POSTGRES_PASSWORD: edu_agent_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edu_agent -d edu_agent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-runtime.txt
+
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-runtime.txt
+
+      - name: Upgrade PostgreSQL schema
+        env:
+          DATABASE_URL: postgresql://edu_agent:edu_agent_ci@127.0.0.1:5432/edu_agent
+        run: alembic -c backend/alembic.ini upgrade head
+
+      - name: Verify PostgreSQL Runtime schema
+        env:
+          DATABASE_URL: postgresql://edu_agent:edu_agent_ci@127.0.0.1:5432/edu_agent
+          PYTHONPATH: backend
+        run: python3 eval/postgres_schema_smoke.py
+
   browser-e2e:
     name: Core browser E2E
     runs-on: ubuntu-latest
@@ -244,6 +288,27 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
+      - name: Generate production RAG evidence
+        env:
+          READY_URL: ${{ inputs.ready_url }}
+          API_BASE: ${{ secrets.API_BASE }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+          SMOKE_USERNAME: ${{ secrets.SMOKE_USERNAME }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          PRODUCTION_SMOKE_STRICT: '1'
+          PYTHONPATH: backend
+        run: |
+          export API_BASE="${API_BASE:-${READY_URL%/api/ready}}"
+          if python3 eval/run_core_evals.py --suite production_rag_health_smoke --profile production_canary --require-clean-revision; then
+            cp eval/reports/latest.json /tmp/production-rag-aggregate.json
+            cp eval/reports/latest.md /tmp/production-rag-aggregate.md
+            python3 scripts/write_evidence_status.py --profile production_rag --status pass --commit "$GITHUB_SHA" --report /tmp/production-rag-aggregate.json --output /tmp/production-rag-status.json
+          else
+            python3 scripts/write_evidence_status.py --profile production_rag --status fail --commit "$GITHUB_SHA" --reason profile_failed --output /tmp/production-rag-status.json
+            exit 1
+          fi
+
       - name: Run production readiness gate
         env:
           READY_URL: ${{ inputs.ready_url }}
@@ -254,4 +319,16 @@ jobs:
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
         run: |
           export API_BASE="${API_BASE:-${READY_URL%/api/ready}}"
-          npm run release:gate:prod -- --skip-frontend --ready-url "$READY_URL"
+          npm run release:gate:prod -- --skip-frontend --ready-url "$READY_URL" --ready-require-runtime
+
+      - name: Upload production evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-rag-evidence
+          path: |
+            /tmp/production-rag-aggregate.json
+            /tmp/production-rag-aggregate.md
+            /tmp/production-rag-status.json
+          if-no-files-found: error
+          retention-days: 14

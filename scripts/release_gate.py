@@ -57,6 +57,11 @@ PY_COMPILE_TARGETS = [
     "eval/agent_ops_scope_smoke.py",
     "eval/agent_runtime_rollout_gate_smoke.py",
     "eval/agent_runtime_latency_baseline_smoke.py",
+    "eval/rollout_evidence_supply_chain_smoke.py",
+    "eval/postgres_schema_smoke.py",
+    "scripts/build_rollout_evidence.py",
+    "scripts/write_evidence_status.py",
+    "scripts/validate_evidence_statuses.py",
     "eval/learning_assistant_rollout_smoke.py",
     "eval/learning_assistant_dataset_schema.py",
     "eval/learning_assistant_blind_eval.py",
@@ -114,6 +119,7 @@ FAST_SUITES = [
     "agent_runtime_product_routes_smoke",
     "agent_runtime_rollout_gate_smoke",
     "agent_runtime_latency_baseline_smoke",
+    "rollout_evidence_supply_chain_smoke",
 ]
 
 
@@ -184,12 +190,19 @@ def _ready_summary(payload: dict[str, object]) -> str:
     )
 
 
-def run_ready_check(url: str, *, require_rag: bool = False, require_external: bool = False) -> None:
+def run_ready_check(
+    url: str,
+    *,
+    require_rag: bool = False,
+    require_external: bool = False,
+    require_runtime: bool = False,
+) -> None:
     url = _with_query(
         url,
         {
             "require_rag": "true" if require_rag else "false",
             "require_external": "true" if require_external else "false",
+            "require_runtime": "true" if require_runtime else "false",
         },
     )
     print(f"$ GET {url}", flush=True)
@@ -209,6 +222,7 @@ def main() -> None:
     parser.add_argument("--ready-url", help="Optional deployed /api/ready URL to check after local gates, e.g. https://host/api/ready.")
     parser.add_argument("--ready-require-rag", action="store_true", help="When checking --ready-url, require RAG to pass as a blocking readiness check.")
     parser.add_argument("--ready-require-external", action="store_true", help="When checking --ready-url, require external dependency configuration to pass as a blocking readiness check.")
+    parser.add_argument("--ready-require-runtime", action="store_true", help="When checking --ready-url, require deployment provenance, Runtime schema and rollout evidence.")
     parser.add_argument("--skip-frontend", action="store_true", help="Skip frontend build (use only when already verified separately).")
     args = parser.parse_args()
 
@@ -223,6 +237,7 @@ def main() -> None:
             args.ready_url,
             require_rag=args.ready_require_rag or args.production,
             require_external=args.ready_require_external or args.production,
+            require_runtime=args.ready_require_runtime,
         )
 
     profile = "fast" if args.fast else "full"
@@ -230,8 +245,9 @@ def main() -> None:
     ready = "+ ready" if args.ready_url else ""
     ready_scope = " ready_scope=rag" if args.ready_url and (args.ready_require_rag or args.production) else (" ready_scope=core" if args.ready_url else "")
     ready_external = " ready_external=required" if args.ready_url and (args.ready_require_external or args.production) else (" ready_external=optional" if args.ready_url else "")
+    ready_runtime = " ready_runtime=required" if args.ready_url and args.ready_require_runtime else (" ready_runtime=optional" if args.ready_url else "")
     frontend = "frontend skipped" if args.skip_frontend else "frontend built"
-    print(f"release_gate=ok profile={profile}{prod}{ready}{ready_scope}{ready_external} {frontend}", flush=True)
+    print(f"release_gate=ok profile={profile}{prod}{ready}{ready_scope}{ready_external}{ready_runtime} {frontend}", flush=True)
 
 
 if __name__ == "__main__":

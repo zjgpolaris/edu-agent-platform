@@ -1,7 +1,7 @@
 PYTHONPATH := backend
 PYTHON := python3
 
-.PHONY: dev-setup dev verify-runtime verify-release verify verify-core verify-core-full release-gate release-gate-fast release-gate-prod eval eval-quick eval-rag eval-smoke eval-json index index-incremental
+.PHONY: dev-setup dev verify-runtime verify-postgres verify-release verify verify-core verify-core-full release-gate release-gate-fast release-gate-prod eval eval-quick eval-rag eval-smoke eval-json index index-incremental
 
 dev-setup:
 	$(PYTHON) -m pip install --constraint constraints-runtime.txt --requirement backend/requirements-runtime.txt --requirement eval/requirements-eval.txt
@@ -15,10 +15,15 @@ verify-runtime:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/run_core_evals.py --no-report \
 		--suite agent_runtime_rollout_gate_smoke \
 		--suite agent_runtime_latency_baseline_smoke \
+		--suite rollout_evidence_supply_chain_smoke \
 		--suite agent_ops_smoke \
 		--suite agent_ops_scope_smoke \
 		--suite history_character_runtime_smoke \
 		--suite agent_runtime_product_routes_smoke
+
+verify-postgres:
+	alembic -c backend/alembic.ini upgrade head
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/postgres_schema_smoke.py
 
 verify-release:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/verify_release_workspace.py

@@ -157,7 +157,9 @@ def main() -> None:
 
         active_scope = os.getenv("EDU_AGENT_DATA_SCOPE", "runtime")
         runtime_ops = build_agent_ops_summary(limit=100, scope=active_scope, minimum_runtime_events=0)["runtime_v2"]
-        assert runtime_ops["duplicate_side_effect_prevented_total"] == 1
+        assert runtime_ops["duplicate_side_effect_prevented_total"] == 0
+        assert runtime_ops["idempotent_replay_total"] == 1
+        assert runtime_ops["duplicate_side_effect_executed_total"] == 0
         assert runtime_ops["side_effects_by_status"] == {"committed": 1, "started": 1, "unknown": 1}
         assert mark_stale_started_side_effects_unknown(updated_before="9999-01-01T00:00:00+00:00") == 1
         assert get_side_effect(in_progress.run_id, "write-held")["status"] == "unknown"

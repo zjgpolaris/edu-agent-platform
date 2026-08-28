@@ -1,4 +1,4 @@
-"""SQLite upgrade/downgrade coverage through Agent Runtime migration 009."""
+"""SQLite upgrade/downgrade coverage through Agent Runtime migration 011."""
 from __future__ import annotations
 
 import os
@@ -17,6 +17,8 @@ RUNTIME_TABLES = {
     "agent_run_artifacts",
     "agent_checkpoints",
     "agent_side_effects",
+    "agent_rollout_observations",
+    "agent_release_evidence",
     "weakpoint_evidence",
 }
 LEGACY_AUTOTUTOR_COLUMNS = {
@@ -83,6 +85,10 @@ def _assert_v2(db_path: Path) -> None:
         assert "effect_key" in learning_columns
         assert "uq_learning_events_effect_key" in learning_indexes
         assert "idx_weakpoint_evidence_student_tag_created" in evidence_indexes
+        rollout_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(agent_rollout_observations)")}
+        release_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(agent_release_evidence)")}
+        assert "idx_rollout_observation_slice_created" in rollout_indexes
+        assert "uq_agent_release_evidence_hash" in release_indexes
         for suffix in ("a", "b"):
             conn.execute("""INSERT INTO learning_events (
                 id, student_id, feature, event_type, data_scope, metadata_json, created_at, effect_key

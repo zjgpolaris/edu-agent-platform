@@ -2,6 +2,7 @@
 import json
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,7 @@ from tracing import current_trace_id, trace_context
 from trace_store import get_trace_store
 from llm_config import LLM_PROVIDER, MODEL_FALLBACK, MODEL_FAST, MODEL_QUALITY, llm_fast
 from rag.knowledge_base import check_rag_health
+from deployment import deployed_commit as current_deployed_commit, deployment_environment, runtime_config_version as current_runtime_config_version
 from ._shared import trace_meta
 
 router = APIRouter(tags=["debug"])
@@ -44,12 +46,29 @@ async def api_health():
 
 
 @router.get("/api/ready")
-async def api_ready(collection: str = "history", require_rag: bool = False, require_external: bool = False):
+async def api_ready(
+    collection: str = "history",
+    require_rag: bool = False,
+    require_external: bool = False,
+    require_runtime: bool = False,
+):
     """发布前 readiness 聚合：浅检查 DB/LLM 配置/RAG 索引/eval 摘要。"""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", collection):
         raise HTTPException(status_code=400, detail="Invalid collection")
 
     checks: dict = {}
+
+    deployed_commit = current_deployed_commit()
+    runtime_config_version = current_runtime_config_version()
+    rollout_agent_type = os.getenv("EDU_AGENT_RUNTIME_ROLLOUT_AGENT_TYPE", "history_character").strip()[:80]
+    runtime_enabled = os.getenv("EDU_AGENT_RUNTIME_V2_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+    runtime_mode = "shadow" if os.getenv("EDU_AGENT_RUNTIME_V2_SHADOW_MODE", "true").strip().lower() in {"1", "true", "yes", "on"} else "active"
+    checks["deployment"] = {
+        "ok": bool(deployed_commit and runtime_config_version),
+        "deployed_commit": deployed_commit or None,
+        "runtime_config_version": runtime_config_version or None,
+        "environment": deployment_environment(),
+    }
 
     try:
         from sqlalchemy import text as sa_text
@@ -90,11 +109,98 @@ async def api_ready(collection: str = "history", require_rag: bool = False, requ
     try:
         with eval_path.open("r", encoding="utf-8") as fh:
             latest = json.load(fh)
-        checks["latest_eval"] = {"ok": bool(latest.get("ok")), "generated_at": latest.get("generated_at"), "summary": latest.get("summary"), "failed_suites": latest.get("failed_suites", [])}
+        report_commit = str((latest.get("source_revision") or {}).get("commit_sha") or "")
+        generated_at = latest.get("generated_at")
+        age_hours = None
+        if isinstance(generated_at, str):
+            try:
+                generated = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+                if generated.tzinfo is None:
+                    generated = generated.replace(tzinfo=timezone.utc)
+                age_hours = round((datetime.now(timezone.utc) - generated).total_seconds() / 3600, 2)
+            except ValueError:
+                pass
+        revision_matches = bool(deployed_commit and report_commit == deployed_commit)
+        fresh = age_hours is not None and 0 <= age_hours <= 168
+        checks["latest_eval"] = {
+            "ok": bool(latest.get("ok")) and revision_matches and fresh,
+            "generated_at": generated_at,
+            "age_hours": age_hours,
+            "report_commit": report_commit or None,
+            "revision_matches": revision_matches,
+            "fresh": fresh,
+            "summary": latest.get("summary"),
+            "failed_suites": latest.get("failed_suites", []),
+            "source": "eval_report",
+        }
     except FileNotFoundError:
         checks["latest_eval"] = {"ok": False, "missing": True, "reason": "eval report not found"}
     except Exception as exc:
         checks["latest_eval"] = {"ok": False, "error_type": exc.__class__.__name__, "reason": str(exc)[:300]}
+
+    try:
+        from agent_runtime.evidence_store import load_release_evidence
+        from agent_runtime.readiness import runtime_schema_readiness
+        from agent_runtime.rollout_gate import evidence_sha256
+
+        schema = runtime_schema_readiness()
+        checks["runtime_schema"] = {"ok": bool(schema.get("schema_ready")), **schema}
+        evidence = load_release_evidence(
+            agent_type=rollout_agent_type or None,
+            config_version=runtime_config_version or None,
+            runtime_mode=runtime_mode,
+            deployed_commit=deployed_commit or None,
+            environment=deployment_environment(),
+        ) if runtime_enabled else None
+        profiles = evidence.get("profiles") if isinstance(evidence, dict) and isinstance(evidence.get("profiles"), dict) else {}
+        evidence_generated_at = None
+        evidence_fresh = False
+        if isinstance(evidence, dict) and isinstance(evidence.get("generated_at"), str):
+            try:
+                evidence_generated_at = datetime.fromisoformat(evidence["generated_at"].replace("Z", "+00:00"))
+                if evidence_generated_at.tzinfo is None:
+                    evidence_generated_at = evidence_generated_at.replace(tzinfo=timezone.utc)
+                evidence_age_hours = (datetime.now(timezone.utc) - evidence_generated_at).total_seconds() / 3600
+                evidence_fresh = -0.1 <= evidence_age_hours <= 168
+            except ValueError:
+                evidence_generated_at = None
+        evidence_ok = bool(
+            isinstance(evidence, dict)
+            and evidence.get("evidence_sha256") == evidence_sha256(evidence)
+            and evidence.get("environment") == deployment_environment()
+            and evidence_fresh
+            and (profiles.get("offline") or {}).get("status") == "pass"
+            and (profiles.get("real_llm") or {}).get("status") == "pass"
+            and (profiles.get("production_rag") or {}).get("status") == "pass"
+        )
+        checks["rollout_evidence"] = {
+            "ok": evidence_ok,
+            "status": "pass" if evidence_ok else ("missing" if runtime_enabled else "disabled"),
+            "runtime_enabled": runtime_enabled,
+            "runtime_mode": runtime_mode,
+            "agent_type": rollout_agent_type or None,
+            "evidence_sha256": evidence.get("evidence_sha256") if isinstance(evidence, dict) else None,
+            "generated_at": evidence.get("generated_at") if isinstance(evidence, dict) else None,
+            "fresh": evidence_fresh,
+            "profiles": profiles,
+        }
+        if not checks["latest_eval"].get("ok") and evidence_ok:
+            checks["latest_eval"] = {
+                "ok": True,
+                "source": "rollout_evidence",
+                "report_commit": deployed_commit,
+                "revision_matches": True,
+                "fresh": True,
+                "profiles": profiles,
+            }
+    except Exception as exc:
+        checks["runtime_schema"] = {"ok": False, "error_type": exc.__class__.__name__}
+        checks["rollout_evidence"] = {
+            "ok": False,
+            "status": "unavailable" if runtime_enabled else "disabled",
+            "runtime_enabled": runtime_enabled,
+            "error_type": exc.__class__.__name__,
+        }
 
     rag_config = (checks.get("rag") or {}).get("config") if isinstance(checks.get("rag"), dict) else {}
     embedding_config = rag_config.get("embedding") if isinstance(rag_config, dict) else {}
@@ -111,6 +217,8 @@ async def api_ready(collection: str = "history", require_rag: bool = False, requ
     }
 
     required = ["database", "llm_config"] + (["rag"] if require_rag else []) + (["external_dependencies"] if require_external else [])
+    if require_runtime:
+        required.extend(["deployment", "runtime_schema", "rollout_evidence"])
     ok = all(bool(checks.get(name, {}).get("ok")) for name in required)
     failed_required_checks = [name for name in required if not bool(checks.get(name, {}).get("ok"))]
     warnings = [name for name, payload in checks.items() if name not in required and not payload.get("ok")]
@@ -120,6 +228,7 @@ async def api_ready(collection: str = "history", require_rag: bool = False, requ
         "service": "edu-agent-backend",
         "mode": "readiness-shallow",
         "require_rag": require_rag,
+        "require_runtime": require_runtime,
         "required_checks": required,
         "failed_required_checks": failed_required_checks,
         "warning_checks": warnings,

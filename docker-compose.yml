@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: edu_agent
+      POSTGRES_USER: edu_agent
+      POSTGRES_PASSWORD: edu_agent_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - edu_agent_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edu_agent -d edu_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     ports:
@@ -8,6 +24,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://edu_agent:edu_agent_local@postgres:5432/edu_agent
+      - PYTHONPATH=/app
+    command: ["alembic", "-c", "alembic.ini", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   backend:
     build:
@@ -20,12 +48,17 @@ services:
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://edu_agent:edu_agent_local@postgres:5432/edu_agent
+      - EDU_AGENT_DEPLOYED_COMMIT=${EDU_AGENT_DEPLOYED_COMMIT:-local-compose}
+      - EDU_AGENT_ENVIRONMENT=${EDU_AGENT_ENVIRONMENT:-local}
     volumes:
       - ./.chroma:/app/.chroma
       - ${EMBED_MODEL_PATH:-/dev/null}:${EMBED_MODEL_PATH:-/dev/null}:ro
     depends_on:
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 30s
@@ -45,3 +78,6 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  edu_agent_postgres:

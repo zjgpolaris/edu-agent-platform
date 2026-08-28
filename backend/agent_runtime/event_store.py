@@ -39,20 +39,34 @@ class StaleRevisionError(RuntimeError):
 
 
 def ensure_runtime_tables() -> None:
-    """Bootstrap local SQLite only; Alembic 007/008 own deployed database DDL."""
-    from db.schema import agent_checkpoints, agent_run_artifacts, agent_run_events, agent_runs, agent_side_effects
+    """Bootstrap local SQLite only; Alembic 007-011 own deployed database DDL."""
+    from db.schema import (
+        agent_checkpoints,
+        agent_release_evidence,
+        agent_rollout_observations,
+        agent_run_artifacts,
+        agent_run_events,
+        agent_runs,
+        agent_side_effects,
+    )
 
     with get_connection() as conn:
         if conn.dialect.name != "sqlite":
             from sqlalchemy import inspect as sa_inspect
 
             existing = set(sa_inspect(conn).get_table_names())
-            required = {"agent_runs", "agent_run_events", "agent_run_artifacts", "agent_checkpoints", "agent_side_effects"}
+            required = {
+                "agent_runs", "agent_run_events", "agent_run_artifacts", "agent_checkpoints",
+                "agent_side_effects", "agent_rollout_observations", "agent_release_evidence",
+            }
             missing = sorted(required - existing)
             if missing:
                 raise RuntimeError(f"Agent Runtime v2 schema is not migrated: {', '.join(missing)}")
             return
-        for table in (agent_runs, agent_run_events, agent_run_artifacts, agent_checkpoints, agent_side_effects):
+        for table in (
+            agent_runs, agent_run_events, agent_run_artifacts, agent_checkpoints,
+            agent_side_effects, agent_rollout_observations, agent_release_evidence,
+        ):
             table.create(bind=conn, checkfirst=True)
 
 

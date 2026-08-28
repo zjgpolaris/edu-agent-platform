@@ -10,10 +10,11 @@ from scripts.release_gate import _ready_summary, _with_query
 
 
 def main() -> None:
-    url = _with_query("https://example.com/api/ready?foo=1", {"require_rag": "true", "require_external": "true"})
+    url = _with_query("https://example.com/api/ready?foo=1", {"require_rag": "true", "require_external": "true", "require_runtime": "true"})
     assert "require_rag=true" in url
     assert "require_external=true" in url
     assert "foo=1" in url
+    assert "require_runtime=true" in url
 
     summary = _ready_summary(
         {

@@ -18,7 +18,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
 
         with get_connection() as conn:
             tables = set(sa_inspect(conn).get_table_names())
-            required = {"agent_runs", "agent_run_events", "agent_checkpoints", "agent_side_effects"}
+            required = {"agent_runs", "agent_run_events", "agent_checkpoints", "agent_side_effects", "agent_rollout_observations", "agent_release_evidence"}
             if not required.issubset(tables):
                 return {"status": "unknown", "reason": "runtime_v2_schema_unavailable", "run_count": None}
             runs = [dict(row) for row in conn.execute(text("""SELECT r.* FROM agent_runs r
@@ -47,6 +47,17 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
                     "data_scope": data_scope,
                 }).mappings().all()
             runtime_audits = []
+            rollout_observation_rows = conn.execute(text("""SELECT agent_type, config_version, runtime_mode, status, COUNT(*) AS count
+                FROM agent_rollout_observations
+                WHERE created_at>=:since AND data_scope=:data_scope
+                GROUP BY agent_type, config_version, runtime_mode, status
+                ORDER BY agent_type, config_version, runtime_mode, status"""), {
+                    "since": since,
+                    "data_scope": data_scope,
+                }).mappings().all()
+            release_evidence_count = int(conn.execute(text(
+                "SELECT COUNT(*) FROM agent_release_evidence WHERE created_at>=:since"
+            ), {"since": since}).scalar_one())
             if "audit_events" in tables:
                 runtime_audits = conn.execute(text("""SELECT action, COUNT(*) AS count
                     FROM audit_events WHERE created_at>=:since AND data_scope=:data_scope
@@ -68,10 +79,14 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
             "waiting_run_count": None,
             "recovery_interrupted_total": None,
             "duplicate_side_effect_prevented_total": None,
+            "idempotent_replay_total": None,
+            "duplicate_side_effect_executed_total": None,
             "side_effects_by_status": {},
             "invalid_transition_total": None,
             "legacy_v2_disagreement_total": None,
             "rollout_gates": [],
+            "rollout_observations": [dict(row) for row in rollout_observation_rows],
+            "release_evidence_count": release_evidence_count,
         }
     status_counts = Counter(str(run.get("status") or "unknown") for run in runs)
     agent_counts = Counter(str(run.get("agent_type") or "unknown") for run in runs)
@@ -102,10 +117,9 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
     resumable = [run for run in runs if run.get("durability_mode") == "resumable"]
     audit_counts = {str(row["action"]): int(row["count"] or 0) for row in runtime_audits}
     recovery_interrupted = 0
-    duplicate_prevented = (
-        audit_counts.get("agent_runtime.duplicate_side_effect_prevented", 0)
-        + audit_counts.get("tool.idempotent_replay", 0)
-    )
+    duplicate_prevented = audit_counts.get("agent_runtime.duplicate_side_effect_prevented", 0)
+    idempotent_replays = audit_counts.get("tool.idempotent_replay", 0)
+    duplicate_executed = audit_counts.get("agent_runtime.duplicate_side_effect_executed", 0)
     side_effect_counts = {str(row["status"]): int(row["count"] or 0) for row in side_effect_rows}
     legacy_v2_disagreement = 0
     for event in runtime_event_details:
@@ -176,11 +190,15 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
         "waiting_run_count": status_counts.get("waiting_input", 0) + status_counts.get("waiting_confirmation", 0),
         "recovery_interrupted_total": recovery_interrupted,
         "duplicate_side_effect_prevented_total": duplicate_prevented,
+        "idempotent_replay_total": idempotent_replays,
+        "duplicate_side_effect_executed_total": duplicate_executed,
         "side_effects_by_status": side_effect_counts,
         "invalid_transition_total": audit_counts.get("agent_runtime.invalid_transition", 0),
         "legacy_v2_disagreement_total": legacy_v2_disagreement,
         "by_event_type": {str(row["event_type"]): int(row["count"] or 0) for row in event_types},
         "rollout_gates": rollout_gates,
+        "rollout_observations": [dict(row) for row in rollout_observation_rows],
+        "release_evidence_count": release_evidence_count,
     }
 
 
