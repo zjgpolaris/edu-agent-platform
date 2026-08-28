@@ -24,6 +24,7 @@ PY_COMPILE_TARGETS = [
     "backend/api/main.py",
     "backend/db/schema.py",
     "backend/agent_ops.py",
+    "backend/agent_runtime/rollout_gate.py",
     "backend/student_profile.py",
     "backend/security/audit_log.py",
     "backend/agents/learning_assistant.py",
@@ -54,6 +55,8 @@ PY_COMPILE_TARGETS = [
     "eval/history_retrieval_quality_eval.py",
     "eval/eval_run_evidence_smoke.py",
     "eval/agent_ops_scope_smoke.py",
+    "eval/agent_runtime_rollout_gate_smoke.py",
+    "eval/agent_runtime_latency_baseline_smoke.py",
     "eval/learning_assistant_rollout_smoke.py",
     "eval/learning_assistant_dataset_schema.py",
     "eval/learning_assistant_blind_eval.py",
@@ -109,6 +112,8 @@ FAST_SUITES = [
     "agent_runtime_security_smoke",
     "agent_runtime_confirmation_smoke",
     "agent_runtime_product_routes_smoke",
+    "agent_runtime_rollout_gate_smoke",
+    "agent_runtime_latency_baseline_smoke",
 ]
 
 

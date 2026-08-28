@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -98,14 +99,28 @@ def main() -> None:
         executions.append("executed")
         graph_state.update(verified=True, verification_status="verified", fact_card={"key_facts": ["事实"]}, memory_updated=True)
         yield {"event": "final", "data": {"verified": True}}
+        yield {"event": "fact_card", "data": {"card": {"key_facts": ["事实"]}}}
 
     character.stream_character_response = fake_stream
     try:
-        graph_result = character.build_character_graph(object()).invoke(state)
+        async def collect_graph_events():
+            return [
+                item
+                async for item in character.stream_character_graph_events(
+                    state,
+                    object(),
+                    run_id="run_history_character_test",
+                    trace_id="trace_history_character_test",
+                )
+            ]
+
+        graph_events = asyncio.run(collect_graph_events())
     finally:
         character.stream_character_response = original_stream
     assert executions == ["executed"]
-    assert graph_result["verified"] is True
+    assert [item["event"] for item in graph_events] == ["final", "fact_card", "graph_state"], graph_events
+    assert graph_events[-1]["data"]["verified"] is True
+    assert graph_events[-1]["data"]["memory_updated"] is True
 
     teacher = Actor(actor_id="teacher-a", role="teacher")
     assert _history_session_key(teacher, "same-session", "student-a") != _history_session_key(

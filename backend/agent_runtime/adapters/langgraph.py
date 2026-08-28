@@ -14,17 +14,43 @@ class LangGraphAdapter:
         graph: Any,
         *,
         input_mapper: Callable[[AgentContext, AgentRunState], dict[str, Any]] | None = None,
+        custom_event_mapper: Callable[[Any, AgentContext, int], RuntimeEvent | None] | None = None,
     ) -> None:
         self.graph = graph
         self.input_mapper = input_mapper or (lambda _context, state: dict(state.context_refs.get("graph_input") or {}))
+        self.custom_event_mapper = custom_event_mapper
+
+    def _map_custom_event(self, payload: Any, context: AgentContext, sequence: int) -> RuntimeEvent | None:
+        if self.custom_event_mapper is not None:
+            return self.custom_event_mapper(payload, context, sequence)
+        return RuntimeEvent(
+            run_id=context.run_id,
+            trace_id=context.trace_id,
+            sequence=sequence,
+            event="product_event",
+            data={"payload": payload},
+        )
 
     async def stream(self, context: AgentContext, state: AgentRunState):
         graph_input = self.input_mapper(context, state)
         config = {"configurable": {"thread_id": context.run_id, "run_id": context.run_id}}
         sequence = 0
         if hasattr(self.graph, "astream"):
-            iterator = self.graph.astream(graph_input, config=config, stream_mode="updates")
-            async for update in iterator:
+            stream_mode: str | list[str] = (
+                ["custom", "updates"] if self.custom_event_mapper is not None else "updates"
+            )
+            iterator = self.graph.astream(graph_input, config=config, stream_mode=stream_mode)
+            async for chunk in iterator:
+                mode = "updates"
+                update = chunk
+                if self.custom_event_mapper is not None and isinstance(chunk, tuple) and len(chunk) == 2:
+                    mode, update = chunk
+                if mode == "custom":
+                    sequence += 1
+                    custom = self._map_custom_event(update, context, sequence)
+                    if custom is not None:
+                        yield custom
+                    continue
                 for node_name, payload in (update.items() if isinstance(update, dict) else [("graph", update)]):
                     sequence += 1
                     if isinstance(payload, dict) and payload.get("__interrupt__"):

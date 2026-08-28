@@ -214,7 +214,7 @@ class RuntimeEvent(BaseModel):
 
     @property
     def persistable(self) -> bool:
-        return self.event not in {"generation_delta", "heartbeat"}
+        return self.event not in {"generation_delta", "product_event", "heartbeat"}
 
 
 class ResolvedContext(BaseModel):

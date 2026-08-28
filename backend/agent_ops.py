@@ -11,7 +11,7 @@ from student_profile import count_learning_events, list_learning_events
 from trace_store import get_trace_store
 
 
-def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
+def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int = 24) -> dict[str, Any]:
     try:
         from sqlalchemy import inspect as sa_inspect, text
         from db.engine import get_connection
@@ -71,6 +71,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
             "side_effects_by_status": {},
             "invalid_transition_total": None,
             "legacy_v2_disagreement_total": None,
+            "rollout_gates": [],
         }
     status_counts = Counter(str(run.get("status") or "unknown") for run in runs)
     agent_counts = Counter(str(run.get("agent_type") or "unknown") for run in runs)
@@ -126,6 +127,33 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
             if recorded_mode == runtime_mode
         )
         event_coverage_by_runtime_mode[runtime_mode] = _rate(covered, mode_run_count)
+    rollout_gates: list[dict[str, Any]] = []
+    if data_scope == "runtime":
+        try:
+            from agent_runtime.rollout_gate import build_rollout_readiness
+
+            minimum_terminal_runs = max(1, int(os.getenv("EDU_AGENT_RUNTIME_ROLLOUT_MIN_TERMINAL_RUNS", "100")))
+            combinations = sorted({
+                (
+                    str(run.get("agent_type") or "unknown"),
+                    str(run.get("config_version") or "unknown"),
+                    runtime_mode_by_run.get(str(run["run_id"]), "unknown"),
+                )
+                for run in runs
+                if runtime_mode_by_run.get(str(run["run_id"])) in {"active", "shadow", "control"}
+            })
+            rollout_gates = [
+                build_rollout_readiness(
+                    agent_type=agent_type,
+                    config_version=config_version,
+                    runtime_mode=runtime_mode,
+                    window_hours=window_hours,
+                    minimum_terminal_runs=minimum_terminal_runs,
+                )
+                for agent_type, config_version, runtime_mode in combinations
+            ]
+        except Exception as exc:
+            rollout_gates = [{"status": "unknown", "reasons": ["rollout_gate_build_failed"], "error_type": exc.__class__.__name__}]
     return {
         "status": "ok",
         "run_count": len(runs),
@@ -152,6 +180,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str) -> dict[str, Any]:
         "invalid_transition_total": audit_counts.get("agent_runtime.invalid_transition", 0),
         "legacy_v2_disagreement_total": legacy_v2_disagreement,
         "by_event_type": {str(row["event_type"]): int(row["count"] or 0) for row in event_types},
+        "rollout_gates": rollout_gates,
     }
 
 
@@ -629,7 +658,7 @@ def build_agent_ops_summary(
     total_tool_calls = sum(tool_counts.values())
     total_tool_failures = sum(tool_failure_counts.values())
     production = _build_production_summary(trace_limit=20, data_scope=active_scope)
-    runtime_v2 = _build_runtime_v2_summary(since=since, data_scope=active_scope)
+    runtime_v2 = _build_runtime_v2_summary(since=since, data_scope=active_scope, window_hours=configured_window)
     readiness = _readiness_status(
         coverage_rate=coverage_rate,
         audit_failure=audit_failure,

@@ -68,7 +68,7 @@ class AgentRuntimeEngine:
         step_results = dict(state.step_results)
         try:
             async for event in adapter.stream(context, state):
-                if event.event == "generation_delta":
+                if not event.persistable:
                     yield event
                     continue
                 result_payload = event.data.get("step_result")

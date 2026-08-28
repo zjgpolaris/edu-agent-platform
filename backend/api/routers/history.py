@@ -209,7 +209,7 @@ async def character_recommend(req: CharacterRecommendRequest, actor: Actor = Dep
 
 @router.post("/api/history/character/chat")
 async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_auth)):
-    from agents.history_character import stream_character_response, detect_mode
+    from agents.history_character import detect_mode, stream_character_graph_events
     from rag.knowledge_base import get_retriever
     from session_store import load_messages, save_messages
 
@@ -245,12 +245,25 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
             if replay is not None:
                 return replay
             try:
-                events = await run_in_threadpool(lambda: list(stream_character_response(state, retriever)))
+                execution_run_id = runtime.run_id if runtime else f"ephemeral_{uuid4().hex}"
+                execution_trace_id = current_trace_id() or f"trace_{uuid4().hex}"
+                events = [
+                    item
+                    async for item in stream_character_graph_events(
+                        state,
+                        retriever,
+                        run_id=execution_run_id,
+                        trace_id=execution_trace_id,
+                        actor_id=actor.actor_id,
+                        actor_role=actor.role,
+                    )
+                ]
                 final = next((item["data"] for item in events if item["event"] == "final"), None)
                 if final is None:
                     raise HTTPException(status_code=502, detail="历史人物回答未产生终态")
                 fact_card = next((item["data"].get("card") for item in events if item["event"] == "fact_card"), None)
-                final = {**final, "fact_card": fact_card, "memory_updated": bool(state.get("memory_updated"))}
+                graph_state = next((item["data"] for item in events if item["event"] == "graph_state"), {})
+                final = {**final, "fact_card": fact_card, "memory_updated": bool(graph_state.get("memory_updated"))}
                 if runtime:
                     verified = bool(final.get("verified"))
                     final = runtime.finish(
@@ -299,8 +312,18 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
                 final_response = None
                 final_data = None
                 fact_card = None
+                graph_state = {}
                 yield sse_frame("status", {"phase": "retrieving", "message": "正在检索广东初中历史史料"})
-                for item in stream_character_response(state, retriever):
+                execution_run_id = runtime.run_id if runtime else f"ephemeral_{uuid4().hex}"
+                execution_trace_id = trace_id or f"trace_{uuid4().hex}"
+                async for item in stream_character_graph_events(
+                    state,
+                    retriever,
+                    run_id=execution_run_id,
+                    trace_id=execution_trace_id,
+                    actor_id=actor.actor_id,
+                    actor_role=actor.role,
+                ):
                     event, data = item["event"], item["data"]
                     if event == "sources":
                         yield sse_frame("sources", data)
@@ -318,11 +341,12 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
                         yield sse_frame("status", {"phase": "done", "message": "已完成"})
                         if trace_id:
                             yield sse_frame("trace", {"trace_id": trace_id})
-                    await asyncio.sleep(0)
+                    elif event == "graph_state":
+                        graph_state = data
                 if runtime and final_data is not None:
                     verified = bool(final_data.get("verified"))
                     terminal = runtime.finish(
-                        {**final_data, "fact_card": fact_card, "memory_updated": bool(state.get("memory_updated"))},
+                        {**final_data, "fact_card": fact_card, "memory_updated": bool(graph_state.get("memory_updated"))},
                         status="completed" if verified else "partial",
                         verification_status="verified" if verified else "failed",
                         reason_codes=["history_character_verified" if verified else str(final_data.get("verification_reason") or "history_character_verification_failed")],
@@ -330,7 +354,7 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
                     )
                     yield sse_frame("runtime_terminal", terminal)
                 if final_response:
-                    record_event_if_student(req.student_id, session_id=req.session_id, feature="history_character", event_type="character_chat", grade=req.grade, topic=req.character, success=bool(state.get("verified")), metadata={"character": req.character, "mode": mode, "verified": bool(state.get("verified"))})
+                    record_event_if_student(req.student_id, session_id=req.session_id, feature="history_character", event_type="character_chat", grade=req.grade, topic=req.character, success=bool(graph_state.get("verified")), metadata={"character": req.character, "mode": mode, "verified": bool(graph_state.get("verified"))})
                 if session_key and final_response:
                     history2 = load_messages(session_key)
                     history2.append({"role": "user", "content": req.message})

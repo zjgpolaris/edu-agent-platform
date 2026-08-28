@@ -135,6 +135,8 @@ CORE_SUITES = [
     "agent_runtime_autotutor_resume_smoke",
     "agent_runtime_essay_resume_smoke",
     "agent_runtime_schema_readiness_smoke",
+    "agent_runtime_rollout_gate_smoke",
+    "agent_runtime_latency_baseline_smoke",
     "agent_runtime_non_tool_policy_smoke",
     "agent_runtime_learning_assistant_api_smoke",
 ]
@@ -197,6 +199,8 @@ QUICK_SUITES = [
     "agent_runtime_autotutor_resume_smoke",
     "agent_runtime_essay_resume_smoke",
     "agent_runtime_schema_readiness_smoke",
+    "agent_runtime_rollout_gate_smoke",
+    "agent_runtime_latency_baseline_smoke",
     "agent_runtime_non_tool_policy_smoke",
     "agent_runtime_learning_assistant_api_smoke",
     # LLM/embed-dependent (skipped gracefully when credentials absent)
@@ -284,6 +288,8 @@ SMOKE_SUITES = [
     "agent_runtime_autotutor_resume_smoke",
     "agent_runtime_essay_resume_smoke",
     "agent_runtime_schema_readiness_smoke",
+    "agent_runtime_rollout_gate_smoke",
+    "agent_runtime_latency_baseline_smoke",
     "agent_runtime_learning_assistant_api_smoke",
 ]
 SUITE_FILES = {
@@ -372,6 +378,8 @@ SUITE_FILES = {
     "agent_runtime_autotutor_resume_smoke": EVAL_DIR / "agent_runtime_autotutor_resume_smoke.py",
     "agent_runtime_essay_resume_smoke": EVAL_DIR / "agent_runtime_essay_resume_smoke.py",
     "agent_runtime_schema_readiness_smoke": EVAL_DIR / "agent_runtime_schema_readiness_smoke.py",
+    "agent_runtime_rollout_gate_smoke": EVAL_DIR / "agent_runtime_rollout_gate_smoke.py",
+    "agent_runtime_latency_baseline_smoke": EVAL_DIR / "agent_runtime_latency_baseline_smoke.py",
     "agent_runtime_non_tool_policy_smoke": EVAL_DIR / "agent_runtime_non_tool_policy_smoke.py",
     "agent_runtime_learning_assistant_api_smoke": EVAL_DIR / "agent_runtime_learning_assistant_api_smoke.py",
     "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
@@ -789,6 +797,18 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "readiness_smoke": {
         "label": "Readiness / Eval 路由 Smoke",
+        "category": "observability",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "agent_runtime_rollout_gate_smoke": {
+        "label": "Agent Runtime 灰度门禁 Smoke",
+        "category": "observability",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "agent_runtime_latency_baseline_smoke": {
+        "label": "Agent Runtime 延迟基线 Smoke",
         "category": "observability",
         "kind": "smoke",
         "priority": "p0",

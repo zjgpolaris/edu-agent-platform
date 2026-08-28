@@ -79,7 +79,7 @@ edu-agent-platform/
 │   ├── lib/                   # 工具库
 │   └── public/                # 静态资源
 │
-├── docs/                      # 开发文档
+├── docs/                      # 开发文档（含 Runtime/LangGraph ADR 与 rollout evidence Spec）
 ├── eval/                      # 测试脚本（含 mcp_server_smoke.py）
 ├── knowledge_base/            # 知识库（history/corpus.json、geo_events.json 等静态内容源）
 ├── scripts/                   # 脚本工具（含 build_pgvector_index.py 离线构建 RAG 向量索引、seed_pilot_demo.py 试点主路径数据）
@@ -105,6 +105,7 @@ backend/
 │   ├── models.py              # Context / Plan / State / Event / Completion 合同
 │   ├── lifecycle.py           # 产品 Agent 统一计划准入与状态写入边界
 │   ├── event_store.py         # run revision CAS 与 append-only milestone
+│   ├── rollout_gate.py        # per-agent/config/mode 灰度门禁、延迟基线与证据 hash
 │   ├── artifact_store.py      # owner-protected 输入/交付物
 │   ├── checkpoint_store.py    # resumable 业务边界 checkpoint
 │   ├── side_effect_store.py   # write/session_create 持久化幂等与不确定态账本
@@ -113,7 +114,7 @@ backend/
 │   └── recovery_worker.py     # opt-in 后台自动恢复循环
 │
 ├── agents/                    # AI 代理
-│   ├── history_character.py       # 历史人物对话代理
+│   ├── history_character.py       # 历史人物单一 compiled graph；custom/update stream 经 LangGraphAdapter 适配
 │   ├── history_games.py           # 历史游戏代理
 │   ├── character_recommender.py   # 人物推荐
 │   ├── character_catalog.py       # 人物目录
@@ -322,7 +323,7 @@ frontend/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/history/character/recommend` | 人物推荐 |
-| POST | `/api/history/character/chat` | 人物对话 |
+| POST | `/api/history/character/chat` | 人物对话；stream/non-stream 共同消费同一 compiled LangGraph，经 `LangGraphAdapter` 转换 custom/update stream |
 
 ### 历史游戏
 
@@ -490,9 +491,12 @@ frontend/
 
 ### Agent Runtime v2
 
+Runtime v2 定位为框架无关的控制与治理平面：拥有身份/owner、Policy/Tool、Run/Event/Artifact、外部副作用幂等、Evidence/Completion、灰度与运维合同；LangGraph 拥有图调度、分支循环、图内部状态、interrupt/resume 和图级 checkpoint。职责边界见 [`docs/202608280000-agent-runtime-langgraph-boundary-adr.md`](docs/202608280000-agent-runtime-langgraph-boundary-adr.md)，下一阶段依赖收口、per-agent rollout gate、staging shadow 和 production canary 方案见 [`docs/202608281554-agent-runtime-rollout-evidence-v139-spec.md`](docs/202608281554-agent-runtime-rollout-evidence-v139-spec.md)。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/agent-runs/{run_id}` | owner/admin 查询公共 Run 状态；不返回原始作文或内部 metadata |
+| GET | `/api/admin/agent-runtime/rollout-readiness` | 管理员按当前 config/mode 查询 per-agent 灰度门禁；只返回聚合指标与版本证据 |
 | GET | `/api/agent-runs/{run_id}/events?after=N` | 按持久化 sequence 补发 milestone，返回最新 cursor |
 | POST | `/api/agent-runs/{run_id}/resume` | 使用 `expected_revision` + `correlation_key` 恢复受控产品节点 |
 | POST | `/api/agent-runs/{run_id}/confirm` | 确认绑定 run/step/revision 的高风险步骤 |
@@ -775,7 +779,7 @@ AutoTutor 的兼容业务状态表。v1.33 起由 Alembic 007 与 `db/schema.py`
 
 - 支持历史人物角色扮演
 - RAG 检索历史史料
-- 流式响应
+- 流式与非流式响应消费同一 compiled LangGraph；业务 `sources/delta/final/fact_card` 通过 custom stream 输出，终态通过 graph update 输出
 - 事实卡片生成
 - 质量验证
 

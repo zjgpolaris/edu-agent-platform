@@ -14,7 +14,14 @@ if str(BACKEND) not in sys.path:
 from agent_runtime.adapters.function import FunctionAdapter  # noqa: E402
 from agent_runtime.adapters.langgraph import LangGraphAdapter  # noqa: E402
 from agent_runtime.adapters.sequential import SequentialPlanAdapter  # noqa: E402
-from agent_runtime.models import AgentContext, AgentPlan, AgentRunState, AgentStep, StepResult  # noqa: E402
+from agent_runtime.models import (  # noqa: E402
+    AgentContext,
+    AgentPlan,
+    AgentRunState,
+    AgentStep,
+    RuntimeEvent,
+    StepResult,
+)
 
 
 class EmptyInput(BaseModel):
@@ -97,6 +104,13 @@ def main() -> None:
         context_refs={"graph_input": {"value": 3}},
     )
     assert_completed(asyncio.run(collect(LangGraphAdapter(FakeGraph()), graph_state, context)))
+    assert RuntimeEvent(
+        run_id=context.run_id,
+        trace_id=context.trace_id,
+        sequence=1,
+        event="product_event",
+        data={"event": "delta", "data": {"content": "token"}},
+    ).persistable is False
     print("agent_runtime_adapter_smoke=PASS")
 
 

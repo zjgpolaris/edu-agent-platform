@@ -1,0 +1,3 @@
+# Offline/quality evaluation dependencies. Keep these out of the production
+# runtime image unless that image also executes evaluation profiles.
+ragas>=0.2.0

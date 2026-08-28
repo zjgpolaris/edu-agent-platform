@@ -28,8 +28,14 @@ from api.main import app  # noqa: E402
 from api.routers.history import _debate_runtime_outcome  # noqa: E402
 
 
+character_executions: list[str] = []
+
+
 def fake_character_stream(state, _retriever):
+    character_executions.append(str(state.get("session_id") or "unknown"))
     state["memory_updated"] = True
+    state["verified"] = True
+    state["verification_status"] = "verified"
     yield {"event": "sources", "data": {"sources": [{"source_id": "history:test"}]}}
     yield {"event": "final", "data": {
         "response": "【回答】有据回答\n【史料依据】[history:test]\n【学习提示】继续核验",
@@ -86,7 +92,10 @@ def main() -> None:
             first_data = first.json()
             run = get_run(first_data["run_id"])
             assert run["status"] == "completed"
-            first_event_count = len(list_run_events(run["run_id"]))
+            assert character_executions == ["character-route"], character_executions
+            first_events = list_run_events(run["run_id"])
+            assert all(event.event != "product_event" for event in first_events), first_events
+            first_event_count = len(first_events)
             replay = client.post("/api/history/character/chat", json=character_payload)
             assert replay.status_code == 200, replay.text
             assert replay.json()["run_id"] == run["run_id"]
@@ -100,6 +109,22 @@ def main() -> None:
             assert run["run_id"] in streamed_replay.text
             assert "idempotent_replay" in streamed_replay.text
             assert len(list_run_events(run["run_id"])) == first_event_count
+            assert character_executions == ["character-route"], character_executions
+
+            fresh_stream = client.post(
+                "/api/history/character/chat",
+                json={
+                    **character_payload,
+                    "session_id": "character-route-stream",
+                    "idempotency_key": "character-route-stream-0001",
+                    "stream": True,
+                },
+            )
+            assert fresh_stream.status_code == 200, fresh_stream.text
+            assert "event: sources" in fresh_stream.text
+            assert "event: final" in fresh_stream.text
+            assert "event: runtime_terminal" in fresh_stream.text
+            assert character_executions == ["character-route", "character-route-stream"], character_executions
 
             debate_payload = {"topic": "测试辩题", "idempotency_key": "debate-route-0001"}
             debate_response = client.post("/api/history/debate/start", json=debate_payload)

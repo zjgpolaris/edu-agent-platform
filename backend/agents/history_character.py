@@ -1,6 +1,6 @@
 """历史人物对话 Agent — Role-playing + Agentic RAG + Reflection 防幻觉"""
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, Annotated, Any, Iterator
+from typing import TypedDict, Annotated, Any, AsyncIterator, Iterator
 from llm_config import llm_fast as llm, llm_quality as llm_opus
 import hashlib
 import operator
@@ -799,11 +799,22 @@ def _apply_character_memory(state: CharacterState) -> bool:
 
 
 def build_character_graph(rag_retriever) -> StateGraph:
-    """Compatibility graph delegating to the single stream/non-stream flow."""
+    """Compiled graph delegating to the single character business flow.
+
+    Product events are emitted through LangGraph's custom stream. The graph
+    update remains the authoritative final state for both API modes.
+    """
     def execute(state: CharacterState) -> CharacterState:
+        try:
+            from langgraph.config import get_stream_writer
+
+            writer = get_stream_writer()
+        except (ImportError, RuntimeError):
+            writer = None
         working: CharacterState = dict(state)
-        for _ in stream_character_response(working, rag_retriever):
-            pass
+        for item in stream_character_response(working, rag_retriever):
+            if writer is not None:
+                writer({"__eduagent_product_event__": item})
         # ``messages`` uses an additive reducer; returning the original list
         # would duplicate the conversation when LangGraph merges this update.
         return {key: value for key, value in working.items() if key != "messages"}
@@ -813,3 +824,100 @@ def build_character_graph(rag_retriever) -> StateGraph:
     g.set_entry_point("character_runtime")
     g.add_edge("character_runtime", END)
     return g.compile()
+
+
+async def stream_character_graph_events(
+    state: CharacterState,
+    rag_retriever: Any,
+    *,
+    run_id: str,
+    trace_id: str,
+    actor_id: str | None = None,
+    actor_role: str = "anonymous",
+) -> AsyncIterator[dict[str, Any]]:
+    """Run the compiled graph through the Runtime adapter once.
+
+    ``product_event`` items are transient and must not be persisted by the
+    generic Runtime event store. ``graph_state`` is an internal terminal item
+    used by product adapters to finalize artifacts and completion semantics.
+    """
+    from agent_runtime.adapters.langgraph import LangGraphAdapter
+    from agent_runtime.models import (
+        AgentBudget,
+        AgentContext,
+        AgentPlan,
+        AgentRunState,
+        AgentStep,
+        RuntimeEvent,
+    )
+
+    plan = AgentPlan(
+        plan_id=f"plan_{run_id}",
+        objective="历史人物有据回答",
+        strategy="subgraph",
+        steps=[AgentStep(
+            step_id="character_runtime",
+            kind="subgraph",
+            operation="history_character.answer",
+            side_effect="external_call",
+            risk_level="low",
+            timeout_seconds=120,
+        )],
+        generated_by="template",
+        planner_version="history-character-graph-v1",
+    )
+    context = AgentContext(
+        run_id=run_id,
+        agent_type="history_character",
+        actor_id=actor_id,
+        actor_role=(
+            actor_role
+            if actor_role in {"anonymous", "student", "teacher", "admin"}
+            else "anonymous"
+        ),
+        student_id=state.get("student_id"),
+        session_id=state.get("session_id"),
+        trace_id=trace_id,
+        durability_mode="observable",
+        config_version="history-character-graph-v1",
+    )
+    runtime_state = AgentRunState(
+        run_id=run_id,
+        durability_mode="observable",
+        status="planned",
+        objective=plan.objective,
+        plan=plan,
+        budget=AgentBudget(max_steps=1, max_tool_calls=1, max_llm_calls=4, max_wall_time_ms=120_000),
+    )
+
+    def map_product_event(payload: Any, event_context: AgentContext, sequence: int) -> RuntimeEvent | None:
+        if not isinstance(payload, dict):
+            return None
+        item = payload.get("__eduagent_product_event__")
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("event"), str)
+            or not isinstance(item.get("data"), dict)
+        ):
+            return None
+        return RuntimeEvent(
+            run_id=event_context.run_id,
+            trace_id=event_context.trace_id,
+            sequence=sequence,
+            event="product_event",
+            data={"event": item["event"], "data": item["data"]},
+        )
+
+    adapter = LangGraphAdapter(
+        build_character_graph(rag_retriever),
+        input_mapper=lambda _context, _runtime_state: dict(state),
+        custom_event_mapper=map_product_event,
+    )
+    async for event in adapter.stream(context, runtime_state):
+        if event.event == "product_event":
+            yield {"event": event.data["event"], "data": event.data["data"]}
+        elif event.event == "step_completed":
+            result = event.data.get("step_result") or {}
+            output = result.get("output") if isinstance(result, dict) else None
+            if isinstance(output, dict):
+                yield {"event": "graph_state", "data": output}

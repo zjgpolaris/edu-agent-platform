@@ -1,7 +1,28 @@
 PYTHONPATH := backend
 PYTHON := python3
 
-.PHONY: verify verify-core verify-core-full release-gate release-gate-fast release-gate-prod eval eval-quick eval-rag eval-smoke eval-json index index-incremental
+.PHONY: dev-setup dev verify-runtime verify-release verify verify-core verify-core-full release-gate release-gate-fast release-gate-prod eval eval-quick eval-rag eval-smoke eval-json index index-incremental
+
+dev-setup:
+	$(PYTHON) -m pip install --constraint constraints-runtime.txt --requirement backend/requirements-runtime.txt --requirement eval/requirements-eval.txt
+	npm ci --prefix frontend
+	$(PYTHON) scripts/verify_environment.py
+
+dev:
+	PYTHON_BIN=$(PYTHON) npm run dev
+
+verify-runtime:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/run_core_evals.py --no-report \
+		--suite agent_runtime_rollout_gate_smoke \
+		--suite agent_runtime_latency_baseline_smoke \
+		--suite agent_ops_smoke \
+		--suite agent_ops_scope_smoke \
+		--suite history_character_runtime_smoke \
+		--suite agent_runtime_product_routes_smoke
+
+verify-release:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/verify_release_workspace.py
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/release_gate.py --production
 
 verify: verify-core
 

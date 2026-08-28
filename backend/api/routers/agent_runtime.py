@@ -206,3 +206,21 @@ async def get_agent_runtime_readiness(actor: Actor = Depends(require_auth)):
     from agent_runtime.readiness import runtime_schema_readiness
 
     return runtime_schema_readiness()
+
+
+@router.get("/api/admin/agent-runtime/rollout-readiness")
+async def get_agent_runtime_rollout_readiness(
+    agent_type: str = Query(min_length=1, max_length=80),
+    window_hours: int = Query(default=24, ge=1, le=24 * 31),
+    minimum_terminal_runs: int = Query(default=100, ge=1, le=100_000),
+    actor: Actor = Depends(require_auth),
+):
+    if auth_required() and actor.role != "admin":
+        raise HTTPException(status_code=403, detail="仅管理员可检查 Agent Runtime rollout readiness。")
+    from agent_runtime.rollout_gate import build_rollout_readiness
+
+    return build_rollout_readiness(
+        agent_type=agent_type,
+        window_hours=window_hours,
+        minimum_terminal_runs=minimum_terminal_runs,
+    )
