@@ -8,8 +8,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Production images only need runtime dependencies. requirements.txt is the
+# development/CI compatibility entry point and also includes ../eval, which is
+# intentionally excluded from the Docker build context.
+COPY backend/requirements-runtime.txt .
+RUN pip install --no-cache-dir -r requirements-runtime.txt
 
 COPY backend/ .
 
