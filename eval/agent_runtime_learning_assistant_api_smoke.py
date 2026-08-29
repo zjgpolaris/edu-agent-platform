@@ -16,6 +16,7 @@ os.environ.pop("DATABASE_URL", None)
 os.environ["EDU_AGENT_AUTH_REQUIRED"] = "true"
 os.environ["JWT_SECRET"] = "runtime-learning-api-secret-at-least-32-bytes"
 os.environ["EDU_AGENT_RUNTIME_V2_ENABLED"] = "true"
+os.environ["EDU_AGENT_RUNTIME_V2_CONFIG_VERSION"] = "learning-assistant-api-test"
 os.environ["EDU_AGENT_RUNTIME_V2_PERCENT_BPS"] = "10000"
 os.environ["EDU_AGENT_RUNTIME_V2_ARTIFACT_ENABLED"] = "true"
 os.environ["EDU_AGENT_RUNTIME_V2_LEARNING_ASSISTANT_BPS"] = "10000"

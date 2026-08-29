@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import math
 import os
-from datetime import datetime, timezone
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -14,6 +17,9 @@ from deployment import deployed_commit, deployment_environment, runtime_config_v
 VALID_MODES = {"control", "shadow", "active"}
 VALID_SCOPES = {"runtime", "eval", "demo"}
 BASELINE_STATUSES = {"completed", "partial", "failed"}
+OBSERVATION_FAILURE_ACTION = "agent_runtime.rollout_observation_write_failed"
+_failure_audit_lock = threading.Lock()
+_last_failure_audit: dict[str, float] = {}
 
 
 def _now() -> str:
@@ -90,8 +96,72 @@ def record_rollout_observation(
 def try_record_rollout_observation(**kwargs: Any) -> str | None:
     try:
         return record_rollout_observation(**kwargs)
-    except Exception:
+    except Exception as exc:
+        reason = (
+            "schema_unavailable" if isinstance(exc, LookupError)
+            else "provenance_invalid" if isinstance(exc, ValueError)
+            else "database_error"
+        )
+        now = time.monotonic()
+        should_audit = False
+        with _failure_audit_lock:
+            if now - _last_failure_audit.get(reason, 0.0) >= 60:
+                _last_failure_audit[reason] = now
+                should_audit = True
+        if should_audit:
+            try:
+                from security.audit_log import record_audit_event
+
+                record_audit_event(
+                    actor_id=None,
+                    action=OBSERVATION_FAILURE_ACTION,
+                    resource_type="agent_rollout_observation",
+                    resource_id=str(kwargs.get("agent_type") or "unknown")[:80],
+                    success=False,
+                    data_scope=str(kwargs.get("data_scope") or os.getenv("EDU_AGENT_DATA_SCOPE", "runtime")),
+                    metadata={
+                        "reason_code": reason,
+                        "error_type": exc.__class__.__name__,
+                        "agent_type": str(kwargs.get("agent_type") or "unknown")[:80],
+                        "runtime_mode": str(kwargs.get("runtime_mode") or "unknown")[:20],
+                    },
+                )
+            except Exception:
+                pass
         return None
+
+
+def observation_write_health(*, window_minutes: int = 15) -> dict[str, Any]:
+    since = (datetime.now(timezone.utc) - timedelta(minutes=max(1, min(window_minutes, 24 * 60)))).isoformat()
+    try:
+        with get_connection() as conn:
+            tables = set(sa_inspect(conn).get_table_names())
+            if "agent_rollout_observations" not in tables or "audit_events" not in tables:
+                return {"status": "unavailable", "ok": False, "failure_count": None, "reason": "schema_unavailable"}
+            rows = conn.execute(text("""SELECT metadata_json, COUNT(*) AS count FROM audit_events
+                WHERE action=:action AND data_scope='runtime' AND created_at>=:since
+                GROUP BY metadata_json"""), {
+                    "action": OBSERVATION_FAILURE_ACTION,
+                    "since": since,
+                }).mappings().all()
+        by_reason: dict[str, int] = {}
+        for row in rows:
+            try:
+                metadata = json.loads(row["metadata_json"] or "{}")
+            except (TypeError, ValueError):
+                metadata = {}
+            reason = str(metadata.get("reason_code") or "unknown")
+            by_reason[reason] = by_reason.get(reason, 0) + int(row["count"] or 0)
+        total = sum(by_reason.values())
+        return {
+            "status": "ok" if total == 0 else "degraded",
+            "ok": total == 0,
+            "window_minutes": window_minutes,
+            "failure_count": total,
+            "by_reason": by_reason,
+        }
+    except Exception as exc:
+        return {"status": "unavailable", "ok": False, "failure_count": None, "error_type": exc.__class__.__name__}
 
 
 def aggregate_control_baseline(

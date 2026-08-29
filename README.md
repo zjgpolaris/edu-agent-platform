@@ -112,10 +112,10 @@ PYTHONPATH=backend python3 scripts/seed_demo_student.py
 ## 本地开发
 
 ```bash
-# 1. 克隆并安装依赖
+# 1. 克隆并安装依赖（后端使用项目级 .venv）
 git clone <repo>
 cd edu-agent-platform
-pip install -r backend/requirements.txt
+npm run setup:backend
 npm install --prefix frontend
 
 # 2. 复制并填写环境变量
@@ -125,6 +125,8 @@ cp .env.example .env.local
 # 3. 启动（后端 :8000 + 前端 :3000）
 npm run dev
 ```
+
+`npm run dev` 会优先使用 `.venv/bin/python`，并在启动前检查后端依赖；依赖缺失时不会再先显示“services started”或启动后立即连带关闭前端。也可以用 `PYTHON_BIN=/path/to/python npm run dev` 显式选择已有环境。
 
 ### 重建 RAG 向量索引
 
@@ -165,6 +167,31 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 传入 `--ready-url` 时，release gate 现在会输出 required / failed / warnings 摘要；若带 `--production`、`--ready-require-rag` 或 `--ready-require-external`，会把 RAG / 外部依赖配置作为 blocking readiness check。
 
 Runtime v2 灰度发布还需显式加入 `--ready-require-runtime`。该检查要求部署 commit/config、Alembic 011 schema 和当前版本 rollout evidence 一致；Runtime 关闭、样本不足或证据未运行都不会显示为通过。生产镜像不内置 Eval 目录，真实 LLM/RAG 聚合报告通过 `scripts/build_rollout_evidence.py` 绑定 control baseline 后写入 `agent_release_evidence`。
+
+v1.41 的生产启动入口会先在 PostgreSQL advisory lock 下执行 Alembic `upgrade head`，确认 revision `011` 与 Runtime schema 完整后才启动 API。Render 必须配置 `DIRECT_URL`（Supabase direct/session connection）；普通 `DATABASE_URL` 继续供业务请求使用，transaction pooler 不承担 migration/advisory lock。迁移失败会输出结构化失败摘要并以非零状态退出；不要通过跳过迁移来恢复服务，应先检查数据库快照、连接和 migration 日志。本地或 CI 可分别验证：
+
+```bash
+# SQLite：成功迁移、重复执行 no-op、失败时拒绝启动
+PYTHONPATH=backend python3 eval/backend_startup_migration_smoke.py
+PYTHONPATH=backend python3 eval/backend_startup_migration_failure_smoke.py
+
+# 只对一次性 PostgreSQL 演练库执行；该库必须停留在 revision 003
+DATABASE_URL=postgresql://... PYTHONPATH=backend \
+  python3 eval/postgres_upgrade_rehearsal.py
+DATABASE_URL=postgresql://... PYTHONPATH=backend \
+  python3 eval/postgres_migration_lock_smoke.py
+```
+
+Runtime 开启时必须显式提供 `EDU_AGENT_RUNTIME_V2_CONFIG_VERSION`；空值和旧的 `v1.33-control` 默认值均 fail-closed。Run 由服务端写入 `deployed_commit` 与 `environment`，per-agent gate 只统计 provenance 完整且与当前部署一致的样本，coverage 不足 100% 时状态保持 `unknown`。
+
+生产 evidence 使用 GitHub Actions 的手动工作流 **Runtime Rollout Evidence**，由受保护的 `production` environment 审批后执行。它会校验线上 commit、运行 offline/real-LLM/production-RAG 三类 profile、持久化 hash-bound aggregate evidence，再要求 strict readiness 和 per-agent gate PASS。control 与 shadow 的状态语义如下：
+
+- `pass`：证据、provenance、样本和安全/一致性/延迟阈值全部满足；
+- `warn`：证据完整，但非阻断阈值进入观察区；
+- `unknown`：schema、证据、provenance、baseline 或样本不足，不得放量；
+- `fail`：出现重复副作用、非法状态迁移、高风险违规或质量阈值越线，必须停止。
+
+本地 deterministic/CI 通过仅代表 **Development Complete**。生产 revision `011`、control ≥100、shadow ≥100、gate PASS 以及后续 48 小时稳定观察完成前，Operational 状态仍为 `NOT_RUN/unknown`。
 
 ```bash
 # 三份报告必须来自同一 clean deployed commit，且生成时间不超过 7 天。

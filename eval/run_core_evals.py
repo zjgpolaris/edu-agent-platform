@@ -65,6 +65,8 @@ OPTIONAL_SKIP_SUITES = {
 
 CORE_SUITES = [
     "eval_run_evidence_smoke",
+    "backend_startup_migration_smoke",
+    "backend_startup_migration_failure_smoke",
     "answer_groundedness_eval",
     "history_query_eval",
     "history_retrieval_contract_smoke",
@@ -138,11 +140,14 @@ CORE_SUITES = [
     "agent_runtime_rollout_gate_smoke",
     "agent_runtime_latency_baseline_smoke",
     "rollout_evidence_supply_chain_smoke",
+    "runtime_evidence_workflow_smoke",
     "agent_runtime_non_tool_policy_smoke",
     "agent_runtime_learning_assistant_api_smoke",
 ]
 QUICK_SUITES = [
     "eval_run_evidence_smoke",
+    "backend_startup_migration_smoke",
+    "backend_startup_migration_failure_smoke",
     "answer_groundedness_eval",
     "history_query_eval",
     "history_retrieval_contract_smoke",
@@ -203,6 +208,7 @@ QUICK_SUITES = [
     "agent_runtime_rollout_gate_smoke",
     "agent_runtime_latency_baseline_smoke",
     "rollout_evidence_supply_chain_smoke",
+    "runtime_evidence_workflow_smoke",
     "agent_runtime_non_tool_policy_smoke",
     "agent_runtime_learning_assistant_api_smoke",
     # LLM/embed-dependent (skipped gracefully when credentials absent)
@@ -216,6 +222,8 @@ QUICK_SUITES = [
 ]
 SMOKE_SUITES = [
     "eval_run_evidence_smoke",
+    "backend_startup_migration_smoke",
+    "backend_startup_migration_failure_smoke",
     "answer_groundedness_eval",
     "history_query_eval",
     "history_retrieval_contract_smoke",
@@ -293,10 +301,13 @@ SMOKE_SUITES = [
     "agent_runtime_rollout_gate_smoke",
     "agent_runtime_latency_baseline_smoke",
     "rollout_evidence_supply_chain_smoke",
+    "runtime_evidence_workflow_smoke",
     "agent_runtime_learning_assistant_api_smoke",
 ]
 SUITE_FILES = {
     "eval_run_evidence_smoke": EVAL_DIR / "eval_run_evidence_smoke.py",
+    "backend_startup_migration_smoke": EVAL_DIR / "backend_startup_migration_smoke.py",
+    "backend_startup_migration_failure_smoke": EVAL_DIR / "backend_startup_migration_failure_smoke.py",
     "answer_groundedness_eval": EVAL_DIR / "answer_groundedness_eval.py",
     "history_query_eval": EVAL_DIR / "history_query_eval.py",
     "history_retrieval_contract_smoke": EVAL_DIR / "history_retrieval_contract_smoke.py",
@@ -384,6 +395,7 @@ SUITE_FILES = {
     "agent_runtime_rollout_gate_smoke": EVAL_DIR / "agent_runtime_rollout_gate_smoke.py",
     "agent_runtime_latency_baseline_smoke": EVAL_DIR / "agent_runtime_latency_baseline_smoke.py",
     "rollout_evidence_supply_chain_smoke": EVAL_DIR / "rollout_evidence_supply_chain_smoke.py",
+    "runtime_evidence_workflow_smoke": EVAL_DIR / "runtime_evidence_workflow_smoke.py",
     "agent_runtime_non_tool_policy_smoke": EVAL_DIR / "agent_runtime_non_tool_policy_smoke.py",
     "agent_runtime_learning_assistant_api_smoke": EVAL_DIR / "agent_runtime_learning_assistant_api_smoke.py",
     "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
@@ -805,6 +817,18 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
         "kind": "smoke",
         "priority": "p0",
     },
+    "backend_startup_migration_smoke": {
+        "label": "Backend 启动迁移 Smoke",
+        "category": "ops",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "backend_startup_migration_failure_smoke": {
+        "label": "Backend 迁移失败拒绝启动 Smoke",
+        "category": "ops",
+        "kind": "smoke",
+        "priority": "p0",
+    },
     "agent_runtime_rollout_gate_smoke": {
         "label": "Agent Runtime 灰度门禁 Smoke",
         "category": "observability",
@@ -819,6 +843,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "rollout_evidence_supply_chain_smoke": {
         "label": "Agent Runtime 发布证据供应链 Smoke",
+        "category": "observability",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "runtime_evidence_workflow_smoke": {
+        "label": "Runtime 发布证据工作流 Smoke",
         "category": "observability",
         "kind": "smoke",
         "priority": "p0",

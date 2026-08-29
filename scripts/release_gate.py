@@ -44,6 +44,8 @@ PY_COMPILE_TARGETS = [
     "scripts/validate_history_corpus.py",
     "scripts/build_pgvector_index.py",
     "eval/run_core_evals.py",
+    "eval/backend_startup_migration_smoke.py",
+    "eval/backend_startup_migration_failure_smoke.py",
     "eval/intent_accuracy_eval.py",
     "eval/trajectory_eval.py",
     "eval/answer_groundedness_eval.py",
@@ -59,9 +61,15 @@ PY_COMPILE_TARGETS = [
     "eval/agent_runtime_latency_baseline_smoke.py",
     "eval/rollout_evidence_supply_chain_smoke.py",
     "eval/postgres_schema_smoke.py",
+    "eval/postgres_upgrade_rehearsal.py",
+    "eval/postgres_migration_lock_smoke.py",
+    "backend/start_backend.py",
     "scripts/build_rollout_evidence.py",
     "scripts/write_evidence_status.py",
     "scripts/validate_evidence_statuses.py",
+    "scripts/verify_deployed_commit.py",
+    "scripts/validate_rollout_gate.py",
+    "eval/runtime_evidence_workflow_smoke.py",
     "eval/learning_assistant_rollout_smoke.py",
     "eval/learning_assistant_dataset_schema.py",
     "eval/learning_assistant_blind_eval.py",
@@ -82,6 +90,8 @@ PY_COMPILE_TARGETS.extend(
 )
 
 FAST_SUITES = [
+    "backend_startup_migration_smoke",
+    "backend_startup_migration_failure_smoke",
     "answer_groundedness_eval",
     "history_query_eval",
     "history_retrieval_contract_smoke",
@@ -120,6 +130,7 @@ FAST_SUITES = [
     "agent_runtime_rollout_gate_smoke",
     "agent_runtime_latency_baseline_smoke",
     "rollout_evidence_supply_chain_smoke",
+    "runtime_evidence_workflow_smoke",
 ]
 
 

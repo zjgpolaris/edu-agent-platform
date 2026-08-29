@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -12,6 +13,8 @@ if str(BACKEND) not in sys.path:
 
 os.environ["EDU_AGENT_DB_PATH"] = str(Path(tempfile.gettempdir()) / "edu-agent-agent-ops-smoke.sqlite3")
 os.environ["EDU_AGENT_DATA_SCOPE"] = "runtime"
+os.environ["EDU_AGENT_DEPLOYED_COMMIT"] = "agent-ops-smoke-commit"
+os.environ["EDU_AGENT_ENVIRONMENT"] = "test"
 try:
     Path(os.environ["EDU_AGENT_DB_PATH"]).unlink()
 except FileNotFoundError:
@@ -23,6 +26,8 @@ from student_profile import LearningEvent, try_record_learning_event
 from trace_store import create_trace_id, emit_trace_event, trace_context
 from agent_runtime.event_store import append_run_event, create_run
 from agent_runtime.models import AgentContext
+from db.engine import get_connection
+from sqlalchemy import text
 
 
 def main() -> None:
@@ -225,6 +230,22 @@ def main() -> None:
     assert (runtime_v2.get("event_coverage_by_runtime_mode") or {}).get("active") == 1.0
     assert runtime_v2.get("invalid_transition_total") == 0
     assert runtime_v2.get("duplicate_side_effect_prevented_total") == 0
+    assert runtime_v2.get("run_provenance_coverage") == 1.0
+    assert runtime_v2.get("missing_run_provenance_total") == 0
+    assert runtime_v2.get("mismatched_current_provenance_total") == 0
+    with get_connection() as conn:
+        conn.execute(text("UPDATE agent_runs SET context_refs_json=:refs WHERE run_id=:run_id"), {
+            "run_id": runtime_context.run_id,
+            "refs": json.dumps({
+                "runtime_mode": "active",
+                "data_scope": "runtime",
+                "deployed_commit": "previous-deployment",
+                "environment": "test",
+            }),
+        })
+    mismatched_runtime = (build_agent_ops_summary(limit=100).get("runtime_v2") or {})
+    assert mismatched_runtime.get("run_provenance_coverage") == 0.0
+    assert mismatched_runtime.get("mismatched_current_provenance_total") == 1
     print("agent_ops_smoke=PASS")
 
 

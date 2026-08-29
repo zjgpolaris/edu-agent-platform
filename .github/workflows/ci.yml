@@ -180,10 +180,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements-runtime.txt
 
-      - name: Upgrade PostgreSQL schema
+      - name: Prepare PostgreSQL revision 003
         env:
           DATABASE_URL: postgresql://edu_agent:edu_agent_ci@127.0.0.1:5432/edu_agent
-        run: alembic -c backend/alembic.ini upgrade head
+        run: alembic -c backend/alembic.ini upgrade 003
+
+      - name: Rehearse production-shaped 003 to head upgrade
+        env:
+          DATABASE_URL: postgresql://edu_agent:edu_agent_ci@127.0.0.1:5432/edu_agent
+          PYTHONPATH: backend
+        run: python3 eval/postgres_upgrade_rehearsal.py
+
+      - name: Verify concurrent startup migration lock
+        env:
+          DATABASE_URL: postgresql://edu_agent:edu_agent_ci@127.0.0.1:5432/edu_agent
+          PYTHONPATH: backend
+        run: python3 eval/postgres_migration_lock_smoke.py
 
       - name: Verify PostgreSQL Runtime schema
         env:

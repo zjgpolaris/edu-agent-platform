@@ -21,6 +21,7 @@ from agent_runtime.models import (
 from agent_runtime.sse import sanitize_public_payload
 from agent_runtime.transitions import InvalidTransitionError, validate_transition
 from db.engine import get_connection
+from deployment import deployed_commit, deployment_environment
 
 TERMINAL_STATUSES = {"completed", "partial", "failed", "cancelled"}
 
@@ -212,6 +213,8 @@ def create_run(
             "data_scope": context.data_scope,
             "runtime_mode": runtime_mode,
             "rollout_bucket": context.rollout_bucket,
+            "deployed_commit": deployed_commit(),
+            "environment": deployment_environment(),
         },
         created_at=now,
         updated_at=now,

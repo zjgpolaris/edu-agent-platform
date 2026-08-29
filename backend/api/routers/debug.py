@@ -13,7 +13,12 @@ from tracing import current_trace_id, trace_context
 from trace_store import get_trace_store
 from llm_config import LLM_PROVIDER, MODEL_FALLBACK, MODEL_FAST, MODEL_QUALITY, llm_fast
 from rag.knowledge_base import check_rag_health
-from deployment import deployed_commit as current_deployed_commit, deployment_environment, runtime_config_version as current_runtime_config_version
+from deployment import (
+    deployed_commit as current_deployed_commit,
+    deployment_environment,
+    runtime_config_version as current_runtime_config_version,
+    runtime_configuration_errors,
+)
 from ._shared import trace_meta
 
 router = APIRouter(tags=["debug"])
@@ -64,10 +69,11 @@ async def api_ready(
     runtime_enabled = os.getenv("EDU_AGENT_RUNTIME_V2_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
     runtime_mode = "shadow" if os.getenv("EDU_AGENT_RUNTIME_V2_SHADOW_MODE", "true").strip().lower() in {"1", "true", "yes", "on"} else "active"
     checks["deployment"] = {
-        "ok": bool(deployed_commit and runtime_config_version),
+        "ok": bool(deployed_commit and runtime_config_version) and not runtime_configuration_errors(enabled=runtime_enabled),
         "deployed_commit": deployed_commit or None,
         "runtime_config_version": runtime_config_version or None,
         "environment": deployment_environment(),
+        "runtime_configuration_errors": runtime_configuration_errors(enabled=runtime_enabled),
     }
 
     try:
@@ -145,6 +151,10 @@ async def api_ready(
 
         schema = runtime_schema_readiness()
         checks["runtime_schema"] = {"ok": bool(schema.get("schema_ready")), **schema}
+        from agent_runtime.rollout_observations import observation_write_health
+
+        observation_health = observation_write_health()
+        checks["rollout_observations"] = observation_health
         evidence = load_release_evidence(
             agent_type=rollout_agent_type or None,
             config_version=runtime_config_version or None,
@@ -201,6 +211,11 @@ async def api_ready(
             "runtime_enabled": runtime_enabled,
             "error_type": exc.__class__.__name__,
         }
+        checks["rollout_observations"] = {
+            "ok": False,
+            "status": "unavailable",
+            "error_type": exc.__class__.__name__,
+        }
 
     rag_config = (checks.get("rag") or {}).get("config") if isinstance(checks.get("rag"), dict) else {}
     embedding_config = rag_config.get("embedding") if isinstance(rag_config, dict) else {}
@@ -218,7 +233,7 @@ async def api_ready(
 
     required = ["database", "llm_config"] + (["rag"] if require_rag else []) + (["external_dependencies"] if require_external else [])
     if require_runtime:
-        required.extend(["deployment", "runtime_schema", "rollout_evidence"])
+        required.extend(["deployment", "runtime_schema", "rollout_evidence", "rollout_observations"])
     ok = all(bool(checks.get(name, {}).get("ok")) for name in required)
     failed_required_checks = [name for name in required if not bool(checks.get(name, {}).get("ok"))]
     warnings = [name for name, payload in checks.items() if name not in required and not payload.get("ok")]

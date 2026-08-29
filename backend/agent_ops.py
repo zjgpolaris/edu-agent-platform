@@ -66,6 +66,15 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
     except Exception as exc:
         return {"status": "unknown", "reason": "runtime_v2_query_failed", "error_type": exc.__class__.__name__, "run_count": None}
 
+    try:
+        from agent_runtime.rollout_observations import observation_write_health
+
+        rollout_observation_health = observation_write_health(window_minutes=15)
+    except Exception as exc:
+        rollout_observation_health = {"status": "unavailable", "ok": False, "error_type": exc.__class__.__name__}
+    audit_counts = {str(row["action"]): int(row["count"] or 0) for row in runtime_audits}
+    observation_write_failures = audit_counts.get("agent_runtime.rollout_observation_write_failed", 0)
+
     if not runs:
         return {
             "status": "unknown",
@@ -81,6 +90,11 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
             "duplicate_side_effect_prevented_total": None,
             "idempotent_replay_total": None,
             "duplicate_side_effect_executed_total": None,
+            "rollout_observation_write_failure_total": observation_write_failures,
+            "rollout_observation_health": rollout_observation_health,
+            "run_provenance_coverage": None,
+            "missing_run_provenance_total": 0,
+            "mismatched_current_provenance_total": 0,
             "side_effects_by_status": {},
             "invalid_transition_total": None,
             "legacy_v2_disagreement_total": None,
@@ -95,7 +109,15 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
     revision_counts = Counter(str(run.get("revision") if run.get("revision") is not None else "unknown") for run in runs)
     step_counts = Counter(str(run.get("current_step_id") or "none") for run in runs)
     runtime_mode_counts: Counter[str] = Counter()
+    deployed_commit_counts: Counter[str] = Counter()
+    environment_counts: Counter[str] = Counter()
     runtime_mode_by_run: dict[str, str] = {}
+    missing_run_provenance = 0
+    mismatched_current_provenance = 0
+    from deployment import deployed_commit as current_deployed_commit, deployment_environment
+
+    expected_commit = current_deployed_commit()
+    expected_environment = deployment_environment()
     completion_reasons: Counter[str] = Counter()
     for run in runs:
         try:
@@ -107,6 +129,14 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
         except Exception:
             context_refs = {}
         runtime_mode = str(context_refs.get("runtime_mode") or "unknown")
+        run_commit = str(context_refs.get("deployed_commit") or "")
+        run_environment = str(context_refs.get("environment") or "")
+        if not run_commit or not run_environment:
+            missing_run_provenance += 1
+        elif (expected_commit and run_commit != expected_commit) or run_environment != expected_environment:
+            mismatched_current_provenance += 1
+        deployed_commit_counts[run_commit or "missing"] += 1
+        environment_counts[run_environment or "missing"] += 1
         runtime_mode_counts[runtime_mode] += 1
         runtime_mode_by_run[str(run["run_id"])] = runtime_mode
         completion_reasons.update(str(code) for code in completion.get("reason_codes") or [])
@@ -115,7 +145,6 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
     terminal = [run for run in runs if run.get("status") in {"completed", "partial", "failed", "cancelled"}]
     inconsistent_terminal = sum(1 for run in terminal if not run.get("completion_json") or not run.get("finished_at"))
     resumable = [run for run in runs if run.get("durability_mode") == "resumable"]
-    audit_counts = {str(row["action"]): int(row["count"] or 0) for row in runtime_audits}
     recovery_interrupted = 0
     duplicate_prevented = audit_counts.get("agent_runtime.duplicate_side_effect_prevented", 0)
     idempotent_replays = audit_counts.get("tool.idempotent_replay", 0)
@@ -192,6 +221,16 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
         "duplicate_side_effect_prevented_total": duplicate_prevented,
         "idempotent_replay_total": idempotent_replays,
         "duplicate_side_effect_executed_total": duplicate_executed,
+        "rollout_observation_write_failure_total": observation_write_failures,
+        "rollout_observation_health": rollout_observation_health,
+        "run_provenance_coverage": _rate(
+            len(runs) - missing_run_provenance - mismatched_current_provenance,
+            len(runs),
+        ),
+        "missing_run_provenance_total": missing_run_provenance,
+        "mismatched_current_provenance_total": mismatched_current_provenance,
+        "by_deployed_commit": dict(deployed_commit_counts),
+        "by_environment": dict(environment_counts),
         "side_effects_by_status": side_effect_counts,
         "invalid_transition_total": audit_counts.get("agent_runtime.invalid_transition", 0),
         "legacy_v2_disagreement_total": legacy_v2_disagreement,

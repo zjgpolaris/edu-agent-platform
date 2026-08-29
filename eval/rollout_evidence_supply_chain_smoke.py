@@ -18,7 +18,12 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from agent_runtime.evidence_store import load_release_evidence, save_release_evidence
-from agent_runtime.rollout_observations import aggregate_control_baseline, record_rollout_observation
+from agent_runtime.rollout_observations import (
+    aggregate_control_baseline,
+    observation_write_health,
+    record_rollout_observation,
+    try_record_rollout_observation,
+)
 from db.engine import engine
 from db.schema import metadata
 from scripts.build_rollout_evidence import build_evidence, offline_profile, production_rag_profile, real_llm_profile
@@ -82,6 +87,7 @@ def main() -> None:
             status="completed",
             latency_ms=900 + index,
             trace_id=f"trace_{index}",
+            data_scope="runtime",
         )
     record_rollout_observation(
         agent_type="history_character",
@@ -92,6 +98,7 @@ def main() -> None:
         status="idempotent_replay",
         latency_ms=1,
         trace_id="trace_replay",
+        data_scope="runtime",
     )
     baseline = aggregate_control_baseline(
         agent_type="history_character",
@@ -139,6 +146,18 @@ def main() -> None:
     )
     assert loaded == evidence
     assert save_release_evidence(evidence) == evidence
+    assert observation_write_health()["status"] == "ok"
+    assert try_record_rollout_observation(
+        agent_type="history_character",
+        runtime_mode="invalid",
+        status="failed",
+        latency_ms=1,
+        trace_id="trace_invalid",
+        data_scope="runtime",
+    ) is None
+    degraded = observation_write_health()
+    assert degraded["status"] == "degraded", degraded
+    assert degraded["by_reason"]["provenance_invalid"] == 1
     print("rollout_evidence_supply_chain_smoke=PASS")
 
 

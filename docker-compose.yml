@@ -32,7 +32,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://edu_agent:edu_agent_local@postgres:5432/edu_agent
       - PYTHONPATH=/app
-    command: ["alembic", "-c", "alembic.ini", "upgrade", "head"]
+    command: ["python", "start_backend.py", "--migrate-only"]
     depends_on:
       postgres:
         condition: service_healthy

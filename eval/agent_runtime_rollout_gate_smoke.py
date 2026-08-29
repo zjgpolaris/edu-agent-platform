@@ -75,7 +75,13 @@ def _insert_slice(
             finished = created + timedelta(milliseconds=duration_ms) if terminal else None
             status = "completed" if terminal else "received"
             completion = {"status": "completed", "reason_codes": ["completion_criteria_satisfied"]} if terminal else None
-            refs = {"runtime_mode": "active", "data_scope": data_scope, "rollout_bucket": index}
+            refs = {
+                "runtime_mode": "active",
+                "data_scope": data_scope,
+                "rollout_bucket": index,
+                "deployed_commit": DEPLOYED_COMMIT,
+                "environment": "staging",
+            }
             conn.execute(text("""INSERT INTO agent_runs (
                 run_id, agent_type, actor_id, student_id, session_id, parent_run_id,
                 durability_mode, status, revision, current_step_id, objective,
@@ -206,6 +212,35 @@ def main() -> None:
     assert passed["event_coverage"] == 1.0
     assert passed["terminal_consistency"] == 1.0
     assert passed["p95_regression"] == 0.0
+    assert passed["run_provenance_coverage"] == 1.0
+    assert passed["observation_write_failures"] == 0
+
+    with get_connection() as conn:
+        row = conn.execute(text("SELECT run_id FROM agent_runs WHERE config_version='pass' LIMIT 1")).mappings().one()
+        conn.execute(text("UPDATE agent_runs SET context_refs_json=:refs WHERE run_id=:run_id"), {
+            "run_id": row["run_id"],
+            "refs": json.dumps({"runtime_mode": "active", "data_scope": "runtime"}),
+        })
+    incomplete_provenance = _gate("pass")
+    assert incomplete_provenance["status"] == "unknown", incomplete_provenance
+    assert "run_provenance_incomplete" in incomplete_provenance["reasons"]
+    assert incomplete_provenance["excluded_missing_provenance_runs"] == 1
+
+    _insert_slice("provenance-mismatch", terminal_count=100)
+    with get_connection() as conn:
+        row = conn.execute(text(
+            "SELECT run_id, context_refs_json FROM agent_runs WHERE config_version='provenance-mismatch' LIMIT 1"
+        )).mappings().one()
+        refs = json.loads(row["context_refs_json"])
+        refs["deployed_commit"] = "another-deployment"
+        conn.execute(text("UPDATE agent_runs SET context_refs_json=:refs WHERE run_id=:run_id"), {
+            "run_id": row["run_id"],
+            "refs": json.dumps(refs),
+        })
+    mismatched_provenance = _gate("provenance-mismatch")
+    assert mismatched_provenance["status"] == "unknown", mismatched_provenance
+    assert mismatched_provenance["run_provenance_coverage"] == 0.99
+    assert mismatched_provenance["excluded_mismatched_provenance_runs"] == 1
 
     _insert_slice("eval-only", terminal_count=100, data_scope="eval")
     isolated = _gate("eval-only")
@@ -224,6 +259,7 @@ def main() -> None:
     os.environ["EDU_AGENT_RUNTIME_V2_CONFIG_VERSION"] = "pass"
     os.environ["EDU_AGENT_RUNTIME_V2_SHADOW_MODE"] = "false"
     os.environ["EDU_AGENT_DEPLOYED_COMMIT"] = DEPLOYED_COMMIT
+    os.environ["EDU_AGENT_ENVIRONMENT"] = "staging"
     os.environ["EDU_AGENT_RUNTIME_ROLLOUT_EVIDENCE_PATH"] = str(evidence_path)
     from fastapi.testclient import TestClient
     from api.main import app
@@ -238,6 +274,20 @@ def main() -> None:
     assert api_payload["config_version"] == "pass"
     assert "objective" not in api_payload
     assert "completion_json" not in api_payload
+
+    from agent_runtime.rollout_observations import try_record_rollout_observation
+
+    assert try_record_rollout_observation(
+        agent_type="history_character",
+        runtime_mode="invalid",
+        status="failed",
+        latency_ms=1,
+        trace_id="trace-invalid-observation",
+    ) is None
+    unhealthy_observations = _gate("provenance-mismatch")
+    assert unhealthy_observations["status"] == "unknown", unhealthy_observations
+    assert "rollout_observation_write_failures_detected" in unhealthy_observations["reasons"]
+    assert unhealthy_observations["observation_write_failures"] == 1
     evidence_path.unlink(missing_ok=True)
 
     print("agent_runtime_rollout_gate_smoke=PASS")

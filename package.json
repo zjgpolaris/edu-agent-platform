@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "bash scripts/dev.sh",
-    "dev:backend": "set -a; [ -f .env.local ] && . ./.env.local; set +a; PYTHONPATH=backend python3 -m uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload",
+    "setup:backend": "bash scripts/setup_backend.sh",
+    "dev:backend": "bash scripts/dev_backend.sh",
     "dev:frontend": "npm run dev --prefix frontend",
     "test": "PYTHONPATH=backend python3 eval/run_core_evals.py --smoke",
     "test:unit": "npm run test:unit --prefix frontend",

@@ -20,6 +20,7 @@ os.environ.pop("DATABASE_URL", None)
 from agent_runtime.capability_registry import build_default_registry  # noqa: E402
 from agent_runtime.completion import CompletionEvaluator  # noqa: E402
 from agent_runtime.context import RuntimeV2Settings  # noqa: E402
+from deployment import runtime_configuration_errors  # noqa: E402
 from agent_runtime.event_store import StaleRevisionError, append_run_event, create_run, get_run, list_run_events  # noqa: E402
 from agent_runtime.models import (  # noqa: E402
     AgentBudget,
@@ -39,6 +40,7 @@ from tools.registry import run_tool  # noqa: E402
 def main() -> None:
     rollout_env = {
         "EDU_AGENT_RUNTIME_V2_ENABLED": "true",
+        "EDU_AGENT_RUNTIME_V2_CONFIG_VERSION": "contract-test",
         "EDU_AGENT_RUNTIME_V2_PERCENT_BPS": "10000",
         "EDU_AGENT_RUNTIME_V2_LEARNING_ASSISTANT_BPS": "10000",
         "EDU_AGENT_RUNTIME_V2_PERSIST_EVENTS": "true",
@@ -49,10 +51,18 @@ def main() -> None:
         settings = RuntimeV2Settings.from_env()
         assert settings.rollout_decision("learning_assistant", "student-a")[0] is True
         assert settings.observable_ready is True
+        with patch.dict(os.environ, {"EDU_AGENT_RUNTIME_V2_CONFIG_VERSION": "v1.33-control"}, clear=False):
+            assert settings.rollout_decision("learning_assistant", "student-a")[0] is True
     with patch.dict(os.environ, {**rollout_env, "EDU_AGENT_RUNTIME_V2_PERSIST_EVENTS": "false"}, clear=False):
         assert RuntimeV2Settings.from_env().rollout_decision("learning_assistant", "student-a")[0] is False
     with patch.dict(os.environ, {**rollout_env, "EDU_AGENT_RUNTIME_V2_KILL_SWITCH": "true"}, clear=False):
         assert RuntimeV2Settings.from_env().rollout_decision("learning_assistant", "student-a")[0] is False
+    with patch.dict(os.environ, {**rollout_env, "EDU_AGENT_RUNTIME_V2_CONFIG_VERSION": ""}, clear=False):
+        assert RuntimeV2Settings.from_env().rollout_decision("learning_assistant", "student-a")[0] is False
+        assert runtime_configuration_errors(enabled=True) == ["runtime_config_version_missing"]
+    with patch.dict(os.environ, {**rollout_env, "EDU_AGENT_RUNTIME_V2_CONFIG_VERSION": "v1.33-control"}, clear=False):
+        assert RuntimeV2Settings.from_env().rollout_decision("learning_assistant", "student-a")[0] is False
+        assert runtime_configuration_errors(enabled=True) == ["runtime_config_version_legacy_default"]
 
     try:
         AgentStep(

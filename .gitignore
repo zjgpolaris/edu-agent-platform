@@ -1,5 +1,6 @@
 .env.local
 .env
+.venv/
 .data/
 node_modules
 .next

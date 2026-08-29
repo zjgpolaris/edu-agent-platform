@@ -76,7 +76,12 @@ def _insert(config: str, durations: list[int], *, invalid_timestamp: bool = Fals
                 :trace_id, :scope, NULL, 2, NULL, :created_at, :finished_at, :finished_at
             )"""), {
                 "run_id": run_id,
-                "refs": json.dumps({"runtime_mode": "active", "data_scope": "runtime"}),
+                "refs": json.dumps({
+                    "runtime_mode": "active",
+                    "data_scope": "runtime",
+                    "deployed_commit": COMMIT,
+                    "environment": "staging",
+                }),
                 "completion": json.dumps({"status": "completed", "reason_codes": ["completion_criteria_satisfied"]}),
                 "config": config,
                 "trace_id": f"trace_{config}_{index}",

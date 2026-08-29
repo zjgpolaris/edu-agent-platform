@@ -14,6 +14,7 @@ _temp_dir = tempfile.TemporaryDirectory(prefix="edu-agent-runtime-product-routes
 os.environ["EDU_AGENT_DB_PATH"] = str(Path(_temp_dir.name) / "runtime.sqlite3")
 os.environ.pop("DATABASE_URL", None)
 os.environ["EDU_AGENT_RUNTIME_V2_ENABLED"] = "true"
+os.environ["EDU_AGENT_RUNTIME_V2_CONFIG_VERSION"] = "product-routes-test"
 os.environ["EDU_AGENT_RUNTIME_V2_PERCENT_BPS"] = "10000"
 os.environ["EDU_AGENT_RUNTIME_V2_ARTIFACT_ENABLED"] = "true"
 os.environ["EDU_AGENT_RUNTIME_V2_HISTORY_CHARACTER_BPS"] = "10000"

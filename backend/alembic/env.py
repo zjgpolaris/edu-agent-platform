@@ -29,6 +29,14 @@ def run_migrations_online() -> None:
 
     connectable = create_engine(MIGRATION_DATABASE_URL)
     with connectable.connect() as connection:
+        if connection.dialect.name == "postgresql":
+            try:
+                lock_timeout_ms = max(1_000, min(int(os.getenv("EDU_AGENT_MIGRATION_DDL_LOCK_TIMEOUT_MS", "15000")), 300_000))
+                statement_timeout_ms = max(1_000, min(int(os.getenv("EDU_AGENT_MIGRATION_STATEMENT_TIMEOUT_MS", "120000")), 900_000))
+            except (TypeError, ValueError):
+                lock_timeout_ms, statement_timeout_ms = 15_000, 120_000
+            connection.exec_driver_sql(f"SET lock_timeout = {lock_timeout_ms}")
+            connection.exec_driver_sql(f"SET statement_timeout = {statement_timeout_ms}")
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

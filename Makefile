@@ -1,7 +1,7 @@
 PYTHONPATH := backend
 PYTHON := python3
 
-.PHONY: dev-setup dev verify-runtime verify-postgres verify-release verify verify-core verify-core-full release-gate release-gate-fast release-gate-prod eval eval-quick eval-rag eval-smoke eval-json index index-incremental
+.PHONY: dev-setup dev verify-runtime verify-postgres verify-postgres-rehearsal verify-release verify verify-core verify-core-full release-gate release-gate-fast release-gate-prod eval eval-quick eval-rag eval-smoke eval-json index index-incremental
 
 dev-setup:
 	$(PYTHON) -m pip install --constraint constraints-runtime.txt --requirement backend/requirements-runtime.txt --requirement eval/requirements-eval.txt
@@ -22,8 +22,13 @@ verify-runtime:
 		--suite agent_runtime_product_routes_smoke
 
 verify-postgres:
-	alembic -c backend/alembic.ini upgrade head
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) backend/start_backend.py --migrate-only
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/postgres_schema_smoke.py
+
+# Requires a disposable PostgreSQL database currently at revision 003.
+verify-postgres-rehearsal:
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/postgres_upgrade_rehearsal.py
+	PYTHONPATH=$(PYTHONPATH) $(PYTHON) eval/postgres_migration_lock_smoke.py
 
 verify-release:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) scripts/verify_release_workspace.py

@@ -70,13 +70,18 @@ async def ready_endpoint_shape() -> None:
     assert isinstance(payload.get("required_checks"), list), payload
     assert isinstance(payload.get("failed_required_checks"), list), payload
     assert isinstance(payload.get("warning_checks"), list), payload
-    for name in ("database", "llm_config", "rag", "latest_eval"):
+    for name in ("database", "llm_config", "rag", "latest_eval", "rollout_observations"):
         assert name in payload["checks"], payload
     assert "external_dependencies" in payload["checks"], payload
     assert payload["checks"]["llm_config"]["mode"] == "shallow", payload
     assert payload["checks"]["rag"].get("deep") is False, payload
     assert payload["checks"]["latest_eval"].get("missing") is not True, payload
     assert payload["checks"]["external_dependencies"]["mode"] == "config-only", payload
+
+    with patch.object(debug_router, "check_rag_health", fake_rag_health):
+        strict = await api_ready(require_runtime=True)
+    assert "rollout_observations" in strict["required_checks"], strict
+    assert strict["ok"] is False, strict
 
 
 def eval_routes_registered_once() -> None:

@@ -181,8 +181,10 @@ def _query_rollout_rows(
     agent_type: str,
     config_version: str,
     runtime_mode: str,
+    deployed_commit: str,
+    environment: str,
     since: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, int | float | None]]:
     with get_connection() as conn:
         tables = set(sa_inspect(conn).get_table_names())
         required = {"agent_runs", "agent_run_events", "agent_side_effects", "audit_events"}
@@ -195,10 +197,23 @@ def _query_rollout_rows(
                 "config_version": config_version,
                 "since": since,
             }).mappings().all()]
-        runs = []
+        candidate_runs = []
         for run in raw_runs:
             refs = _json_object(run.get("context_refs_json"))
             if refs.get("data_scope", "runtime") == "runtime" and refs.get("runtime_mode") == runtime_mode:
+                candidate_runs.append(run)
+        missing_provenance = 0
+        mismatched_provenance = 0
+        runs = []
+        for run in candidate_runs:
+            refs = _json_object(run.get("context_refs_json"))
+            run_commit = str(refs.get("deployed_commit") or "")
+            run_environment = str(refs.get("environment") or "")
+            if not run_commit or not run_environment:
+                missing_provenance += 1
+            elif run_commit != deployed_commit or run_environment != environment:
+                mismatched_provenance += 1
+            else:
                 runs.append(run)
         run_ids = {str(run["run_id"]) for run in runs}
         event_rows = [dict(row) for row in conn.execute(text("""SELECT e.* FROM agent_run_events e
@@ -224,7 +239,16 @@ def _query_rollout_rows(
         metadata = _json_object(audit.get("metadata_json"))
         if str(audit.get("resource_id") or "") in run_ids or str(metadata.get("run_id") or "") in run_ids:
             matched_audits.append(audit)
-    return runs, event_rows, matched_audits
+    valid_provenance = len(runs)
+    provenance_total = len(candidate_runs)
+    provenance_coverage = round(valid_provenance / provenance_total, 4) if provenance_total else None
+    return runs, event_rows, matched_audits, {
+        "candidate_runs": provenance_total,
+        "valid_runs": valid_provenance,
+        "missing_runs": missing_provenance,
+        "mismatched_runs": mismatched_provenance,
+        "coverage": provenance_coverage,
+    }
 
 
 def build_rollout_readiness(
@@ -263,12 +287,24 @@ def build_rollout_readiness(
         unknown_reasons.append("deployed_commit_missing")
     if not schema.get("schema_ready"):
         unknown_reasons.append("runtime_schema_not_ready")
+    try:
+        from agent_runtime.rollout_observations import observation_write_health
+
+        observation_health = observation_write_health(window_minutes=15)
+    except Exception as exc:
+        observation_health = {"status": "unavailable", "ok": False, "error_type": exc.__class__.__name__}
+    if observation_health.get("status") == "unavailable":
+        unknown_reasons.append("rollout_observation_health_unavailable")
+    elif int(observation_health.get("failure_count") or 0) > 0:
+        unknown_reasons.append("rollout_observation_write_failures_detected")
 
     try:
-        runs, events, audits = _query_rollout_rows(
+        runs, events, audits, provenance = _query_rollout_rows(
             agent_type=agent_type,
             config_version=config_version,
             runtime_mode=runtime_mode,
+            deployed_commit=deployed_commit,
+            environment=environment,
             since=since,
         )
     except Exception as exc:
@@ -283,8 +319,13 @@ def build_rollout_readiness(
             "minimum_terminal_runs": minimum_terminal_runs,
             "run_count": None,
             "terminal_runs": None,
+            "run_provenance_coverage": None,
+            "observation_write_failures": observation_health.get("failure_count"),
             "reasons": [str(exc) if isinstance(exc, LookupError) else "rollout_query_failed"],
         }
+
+    if provenance["candidate_runs"] and provenance["coverage"] != 1.0:
+        unknown_reasons.append("run_provenance_incomplete")
 
     events_by_run: dict[str, list[dict[str, Any]]] = {}
     for event in events:
@@ -436,6 +477,10 @@ def build_rollout_readiness(
         "schema_ready": bool(schema.get("schema_ready")),
         "run_count": len(runs),
         "terminal_runs": len(terminal_runs),
+        "run_provenance_coverage": provenance["coverage"],
+        "provenance_candidate_runs": provenance["candidate_runs"],
+        "excluded_missing_provenance_runs": provenance["missing_runs"],
+        "excluded_mismatched_provenance_runs": provenance["mismatched_runs"],
         "partial_runs": partial_runs,
         "event_coverage": event_coverage,
         "terminal_consistency": terminal_consistency,
@@ -455,6 +500,8 @@ def build_rollout_readiness(
         "control_baseline": safe_baseline,
         "p95_regression": p95_regression,
         "profiles": profiles,
+        "observation_write_failures": observation_health.get("failure_count"),
+        "rollout_observation_health": observation_health,
         "completion_reason_codes": completion_reasons,
         "reasons": reasons,
     }

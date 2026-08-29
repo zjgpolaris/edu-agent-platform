@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from agent_runtime.models import ActorRole, AgentContext, DataScope, DurabilityMode, default_data_scope
+from deployment import runtime_config_version, runtime_configuration_errors
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _AGENT_BPS_ENV = {
@@ -56,7 +57,7 @@ class RuntimeV2Settings:
             enabled=_enabled("EDU_AGENT_RUNTIME_V2_ENABLED"),
             shadow_mode=_enabled("EDU_AGENT_RUNTIME_V2_SHADOW_MODE", True),
             global_bps=_bps("EDU_AGENT_RUNTIME_V2_PERCENT_BPS"),
-            config_version=os.getenv("EDU_AGENT_RUNTIME_V2_CONFIG_VERSION", "v1.33-control")[:120],
+            config_version=runtime_config_version(),
             kill_switch=_enabled("EDU_AGENT_RUNTIME_V2_KILL_SWITCH"),
             persist_events=_enabled("EDU_AGENT_RUNTIME_V2_PERSIST_EVENTS", True),
             artifact_enabled=_enabled("EDU_AGENT_RUNTIME_V2_ARTIFACT_ENABLED"),
@@ -68,7 +69,10 @@ class RuntimeV2Settings:
 
     def rollout_decision(self, agent_type: str, subject: str) -> tuple[bool, int]:
         bucket = stable_rollout_bucket(agent_type, subject)
-        if self.kill_switch or not self.enabled or not self.persist_events:
+        if self.kill_switch or not self.enabled or not self.persist_events or runtime_configuration_errors(
+            enabled=self.enabled,
+            config_version=self.config_version,
+        ):
             return False, bucket
         agent_bps = _bps(_AGENT_BPS_ENV[agent_type], self.global_bps) if agent_type in _AGENT_BPS_ENV else self.global_bps
         return bucket < min(agent_bps, self.global_bps), bucket
@@ -79,7 +83,10 @@ class RuntimeV2Settings:
 
     @property
     def observable_ready(self) -> bool:
-        return self.persist_events and self.artifact_enabled
+        return self.persist_events and self.artifact_enabled and bool(self.config_version) and not runtime_configuration_errors(
+            enabled=self.enabled,
+            config_version=self.config_version,
+        )
 
 
 def create_agent_context(
