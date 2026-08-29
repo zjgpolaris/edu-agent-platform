@@ -44,6 +44,7 @@ PY_COMPILE_TARGETS = [
     "scripts/validate_history_corpus.py",
     "scripts/build_pgvector_index.py",
     "eval/run_core_evals.py",
+    "eval/alembic_transaction_boundary_smoke.py",
     "eval/backend_startup_migration_smoke.py",
     "eval/backend_startup_migration_failure_smoke.py",
     "eval/intent_accuracy_eval.py",
@@ -90,6 +91,7 @@ PY_COMPILE_TARGETS.extend(
 )
 
 FAST_SUITES = [
+    "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
     "backend_startup_migration_failure_smoke",
     "answer_groundedness_eval",

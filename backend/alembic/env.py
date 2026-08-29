@@ -37,6 +37,11 @@ def run_migrations_online() -> None:
                 lock_timeout_ms, statement_timeout_ms = 15_000, 120_000
             connection.exec_driver_sql(f"SET lock_timeout = {lock_timeout_ms}")
             connection.exec_driver_sql(f"SET statement_timeout = {statement_timeout_ms}")
+            # SQLAlchemy 2.x autobegins a transaction for the SET statements.
+            # End that configuration transaction so Alembic owns the migration
+            # transaction and commits revision/DDL changes instead of rolling
+            # them back when this connection closes.
+            connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()

@@ -65,6 +65,7 @@ OPTIONAL_SKIP_SUITES = {
 
 CORE_SUITES = [
     "eval_run_evidence_smoke",
+    "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
     "backend_startup_migration_failure_smoke",
     "answer_groundedness_eval",
@@ -146,6 +147,7 @@ CORE_SUITES = [
 ]
 QUICK_SUITES = [
     "eval_run_evidence_smoke",
+    "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
     "backend_startup_migration_failure_smoke",
     "answer_groundedness_eval",
@@ -222,6 +224,7 @@ QUICK_SUITES = [
 ]
 SMOKE_SUITES = [
     "eval_run_evidence_smoke",
+    "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
     "backend_startup_migration_failure_smoke",
     "answer_groundedness_eval",
@@ -306,6 +309,7 @@ SMOKE_SUITES = [
 ]
 SUITE_FILES = {
     "eval_run_evidence_smoke": EVAL_DIR / "eval_run_evidence_smoke.py",
+    "alembic_transaction_boundary_smoke": EVAL_DIR / "alembic_transaction_boundary_smoke.py",
     "backend_startup_migration_smoke": EVAL_DIR / "backend_startup_migration_smoke.py",
     "backend_startup_migration_failure_smoke": EVAL_DIR / "backend_startup_migration_failure_smoke.py",
     "answer_groundedness_eval": EVAL_DIR / "answer_groundedness_eval.py",
@@ -819,6 +823,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     },
     "backend_startup_migration_smoke": {
         "label": "Backend 启动迁移 Smoke",
+        "category": "ops",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "alembic_transaction_boundary_smoke": {
+        "label": "Alembic 迁移事务边界 Smoke",
         "category": "ops",
         "kind": "smoke",
         "priority": "p0",
