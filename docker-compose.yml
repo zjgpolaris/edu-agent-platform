@@ -48,6 +48,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - PORT=8000
       - DATABASE_URL=postgresql://edu_agent:edu_agent_local@postgres:5432/edu_agent
       - EDU_AGENT_DEPLOYED_COMMIT=${EDU_AGENT_DEPLOYED_COMMIT:-local-compose}
       - EDU_AGENT_ENVIRONMENT=${EDU_AGENT_ENVIRONMENT:-local}

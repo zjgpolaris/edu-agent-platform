@@ -138,7 +138,10 @@ test("随问高风险确认在同一个 Runtime Run 内完成", async ({ page })
   await page.getByRole("button", { name: "确认执行", exact: true }).click();
 
   await expect(page.getByText("需要你的确认", { exact: true })).toHaveCount(0, { timeout: 45_000 });
-  await expect(page.locator(".learning-message.assistant").last()).toContainText("高风险工具已确认并执行完成", { timeout: 45_000 });
+  const completedAnswer = page.locator(".learning-message.assistant").last();
+  await expect(completedAnswer).toContainText("已完成高风险工具确认演示", { timeout: 45_000 });
+  await expect(completedAnswer).toContainText("只删除了 demo 范围内的学习记忆");
+  await expect(completedAnswer).toContainText("没有影响真实学生画像");
 });
 
 test("学情薄弱点进入新随问会话并围绕指定知识点讲解", async ({ page }) => {

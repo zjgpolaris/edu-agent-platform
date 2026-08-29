@@ -7,9 +7,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.release_gate import _ready_summary, _with_query
+from eval.run_core_evals import DEDICATED_INTEGRATION_SUITES, SMOKE_SUITES, SUITE_FILES
 
 
 def main() -> None:
+    for suite in DEDICATED_INTEGRATION_SUITES:
+        assert suite in SUITE_FILES, f"dedicated suite must remain directly runnable: {suite}"
+        assert suite not in SMOKE_SUITES, f"dedicated suite leaked into generic smoke: {suite}"
+
     url = _with_query("https://example.com/api/ready?foo=1", {"require_rag": "true", "require_external": "true", "require_runtime": "true"})
     assert "require_rag=true" in url
     assert "require_external=true" in url

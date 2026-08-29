@@ -47,6 +47,9 @@ services:
       # 线上前端域名（Vercel 自定义域名时回填；*.vercel.app 已由后端正则放行）
       - key: FRONTEND_ORIGIN
         sync: false
+      # 生产认证签名密钥，必须在 Render 面板设置为随机高强度值。
+      - key: JWT_SECRET
+        sync: false
       # Supabase / Postgres 连接串
       - key: DATABASE_URL
         sync: false

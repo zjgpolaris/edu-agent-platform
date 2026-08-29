@@ -63,6 +63,14 @@ OPTIONAL_SKIP_SUITES = {
     "history_character_eval",
 }
 
+# These suites validate infrastructure that the generic offline release gate
+# does not provision. They remain discoverable through --suite and are run by
+# dedicated CI jobs with their required services.
+DEDICATED_INTEGRATION_SUITES = {
+    "postgres_migration_lock_smoke",
+    "postgres_schema_smoke",
+}
+
 CORE_SUITES = [
     "eval_run_evidence_smoke",
     "alembic_transaction_boundary_smoke",
@@ -426,8 +434,9 @@ for _p in sorted(EVAL_DIR.glob("*_smoke.py")) + sorted(EVAL_DIR.glob("*_eval.py"
     _key = _p.stem
     if _key not in SUITE_FILES:
         SUITE_FILES[_key] = _p
-        # 新发现的 suite 默认追加到 SMOKE_SUITES（不进 CORE_SUITES/QUICK_SUITES，保持稳定）
-        if _key not in SMOKE_SUITES:
+        # 新发现的 suite 默认追加到 SMOKE_SUITES（不进 CORE_SUITES/QUICK_SUITES，保持稳定）。
+        # 需要专用基础设施的集成套件只由对应 CI job 显式运行。
+        if _key not in SMOKE_SUITES and _key not in DEDICATED_INTEGRATION_SUITES:
             SMOKE_SUITES.append(_key)
 
 SUITE_METADATA: dict[str, dict[str, str]] = {
