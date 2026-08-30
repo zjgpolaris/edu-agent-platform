@@ -14,6 +14,7 @@ from trace_store import get_trace_store
 from llm_config import LLM_PROVIDER, MODEL_FALLBACK, MODEL_FAST, MODEL_QUALITY, llm_fast
 from rag.knowledge_base import check_rag_health
 from deployment import (
+    auth_configuration_status,
     deployed_commit as current_deployed_commit,
     deployment_environment,
     runtime_config_version as current_runtime_config_version,
@@ -62,6 +63,8 @@ async def api_ready(
         raise HTTPException(status_code=400, detail="Invalid collection")
 
     checks: dict = {}
+
+    checks["auth_configuration"] = auth_configuration_status()
 
     deployed_commit = current_deployed_commit()
     runtime_config_version = current_runtime_config_version()
@@ -231,7 +234,7 @@ async def api_ready(
         },
     }
 
-    required = ["database", "llm_config"] + (["rag"] if require_rag else []) + (["external_dependencies"] if require_external else [])
+    required = (["auth_configuration"] if deployment_environment() == "production" else []) + ["database", "llm_config"] + (["rag"] if require_rag else []) + (["external_dependencies"] if require_external else [])
     if require_runtime:
         required.extend(["deployment", "runtime_schema", "rollout_evidence", "rollout_observations"])
     ok = all(bool(checks.get(name, {}).get("ok")) for name in required)

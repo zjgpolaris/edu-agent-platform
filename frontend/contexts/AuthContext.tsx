@@ -18,7 +18,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
 
-  useEffect(() => { setUser(loadAuth()); setReady(true); }, []);
+  useEffect(() => {
+    setUser(loadAuth());
+    setReady(true);
+
+    const originalFetch = window.fetch.bind(window);
+    const authenticatedFetch: typeof window.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      if (response.status === 401 && loadAuth()) {
+        clearAuth();
+        setUser(null);
+        if (window.location.pathname !== "/") window.location.assign("/");
+      }
+      return response;
+    };
+    window.fetch = authenticatedFetch;
+    return () => {
+      if (window.fetch === authenticatedFetch) window.fetch = originalFetch;
+    };
+  }, []);
 
   async function login(username: string, password: string) {
     const res = await fetch(`${API}/api/auth/login`, {

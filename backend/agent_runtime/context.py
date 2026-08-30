@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
+from typing import Any
 from uuid import uuid4
 
 from agent_runtime.models import ActorRole, AgentContext, DataScope, DurabilityMode, default_data_scope
@@ -16,6 +17,30 @@ _AGENT_BPS_ENV = {
     "essay_grader": "EDU_AGENT_RUNTIME_V2_ESSAY_GRADER_BPS",
     "debate": "EDU_AGENT_RUNTIME_V2_DEBATE_BPS",
 }
+
+
+def rollout_eligibility(actor: Any, data_scope: str) -> tuple[bool, str]:
+    """Classify rollout trust from server-owned actor context only."""
+    scope = data_scope if data_scope in {"runtime", "eval", "demo"} else "runtime"
+    if scope == "eval":
+        return False, "eval_scope"
+    if scope == "demo":
+        return False, "demo_scope"
+    status = str(getattr(actor, "account_status", "anonymous") or "anonymous")
+    cohort = str(getattr(actor, "traffic_cohort", "anonymous") or "anonymous")
+    if status != "active" or not getattr(actor, "actor_id", None):
+        return False, "anonymous_actor"
+    from deployment import deployment_environment
+
+    if deployment_environment() != "production" and os.getenv("EDU_AGENT_AUTH_REQUIRED", "false").strip().lower() not in _TRUE_VALUES:
+        return True, "local_development_actor"
+    if cohort == "verified":
+        return True, "verified_runtime_actor"
+    if cohort == "demo":
+        return False, "demo_actor"
+    if cohort == "operator":
+        return False, "operator_actor"
+    return False, "unverified_actor"
 
 
 def _enabled(name: str, default: bool = False) -> bool:
@@ -69,12 +94,16 @@ class RuntimeV2Settings:
             read_fanout_enabled=_enabled("EDU_AGENT_RUNTIME_V2_READ_FANOUT_ENABLED"),
         )
 
-    def rollout_decision(self, agent_type: str, subject: str) -> tuple[bool, int]:
+    def rollout_decision(self, agent_type: str, subject: str, *, rollout_eligible: bool | None = None) -> tuple[bool, int]:
         bucket = stable_rollout_bucket(agent_type, subject)
+        if rollout_eligible is None:
+            from deployment import deployment_environment
+
+            rollout_eligible = deployment_environment() != "production"
         if self.kill_switch or not self.enabled or not self.persist_events or (not self.shadow_mode and not self.active_enabled) or runtime_configuration_errors(
             enabled=self.enabled,
             config_version=self.config_version,
-        ):
+        ) or not rollout_eligible:
             return False, bucket
         agent_bps = _bps(_AGENT_BPS_ENV[agent_type], self.global_bps) if agent_type in _AGENT_BPS_ENV else self.global_bps
         return bucket < min(agent_bps, self.global_bps), bucket
@@ -104,10 +133,12 @@ def create_agent_context(
     source_session_id: str | None = None,
     data_scope: DataScope | None = None,
     settings: RuntimeV2Settings | None = None,
+    traffic_cohort: str = "unverified",
+    rollout_eligible: bool = False,
 ) -> AgentContext:
     settings = settings or RuntimeV2Settings.from_env()
     subject = actor_id or student_id or session_id or uuid4().hex
-    _, bucket = settings.rollout_decision(agent_type, subject)
+    _, bucket = settings.rollout_decision(agent_type, subject, rollout_eligible=rollout_eligible)
     if durability_mode == "resumable" and not settings.resumable_ready:
         raise RuntimeError("resumable runtime requires artifact, checkpoint and resumable readiness")
     return AgentContext(
@@ -124,4 +155,6 @@ def create_agent_context(
         durability_mode=durability_mode,
         config_version=settings.config_version,
         rollout_bucket=bucket,
+        traffic_cohort=traffic_cohort,
+        rollout_eligible=rollout_eligible,
     )

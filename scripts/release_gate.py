@@ -71,9 +71,12 @@ PY_COMPILE_TARGETS = [
     "scripts/verify_deployed_commit.py",
     "scripts/validate_rollout_gate.py",
     "scripts/validate_runtime_rollout_config.py",
+    "scripts/bootstrap_admin.py",
+    "scripts/set_rollout_cohort.py",
     "eval/runtime_evidence_workflow_smoke.py",
     "eval/agent_runtime_rollout_status_smoke.py",
     "eval/runtime_rollout_config_smoke.py",
+    "eval/production_auth_trusted_rollout_smoke.py",
     "eval/learning_assistant_rollout_smoke.py",
     "eval/learning_assistant_dataset_schema.py",
     "eval/learning_assistant_blind_eval.py",
@@ -89,6 +92,7 @@ PY_COMPILE_TARGETS.extend(
     [
         "backend/alembic/versions/007_agent_runtime_v2.py",
         "backend/alembic/versions/008_agent_side_effect_ledger.py",
+        "backend/alembic/versions/012_auth_trusted_rollout.py",
         "backend/api/routers/agent_runtime.py",
     ]
 )
@@ -136,6 +140,8 @@ FAST_SUITES = [
     "agent_runtime_latency_baseline_smoke",
     "rollout_evidence_supply_chain_smoke",
     "runtime_evidence_workflow_smoke",
+    "agent_runtime_migration_smoke",
+    "production_auth_trusted_rollout_smoke",
 ]
 
 

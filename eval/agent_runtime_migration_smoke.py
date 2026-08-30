@@ -1,4 +1,4 @@
-"""SQLite upgrade/downgrade coverage through Agent Runtime migration 011."""
+"""SQLite upgrade/downgrade coverage through trusted rollout migration 012."""
 from __future__ import annotations
 
 import os
@@ -86,8 +86,13 @@ def _assert_v2(db_path: Path) -> None:
         assert "uq_learning_events_effect_key" in learning_indexes
         assert "idx_weakpoint_evidence_student_tag_created" in evidence_indexes
         rollout_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(agent_rollout_observations)")}
+        rollout_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(agent_rollout_observations)")}
+        account_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(accounts)")}
         release_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(agent_release_evidence)")}
         assert "idx_rollout_observation_slice_created" in rollout_indexes
+        assert "idx_rollout_observation_eligibility" in rollout_indexes
+        assert {"traffic_cohort", "rollout_eligible", "eligibility_reason"} <= rollout_columns
+        assert {"account_status", "traffic_cohort", "updated_at"} <= account_columns
         assert "uq_agent_release_evidence_hash" in release_indexes
         for suffix in ("a", "b"):
             conn.execute("""INSERT INTO learning_events (
@@ -143,6 +148,37 @@ def main() -> None:
         _assert_v2(fresh_db)
         _migrate(fresh_db, "downgrade", "006")
         _assert_downgraded(fresh_db)
+
+        revision_011_db = temp_root / "revision-011.sqlite3"
+        _migrate(revision_011_db, "upgrade", "011")
+        with sqlite3.connect(revision_011_db) as conn:
+            conn.execute(
+                """INSERT INTO accounts (
+                    actor_id, username, password_hash, role, display_name, created_at
+                ) VALUES ('legacy-account', 'legacy-account', 'hash', 'student', NULL, 'created')"""
+            )
+            conn.execute(
+                """INSERT INTO agent_rollout_observations (
+                    observation_id, agent_type, config_version, runtime_mode,
+                    deployed_commit, environment, status, latency_ms, trace_id,
+                    data_scope, created_at
+                ) VALUES (
+                    'legacy-observation', 'history_character', 'legacy', 'control',
+                    'commit', 'production', 'completed', 10, NULL, 'runtime', 'created'
+                )"""
+            )
+        _migrate(revision_011_db, "upgrade", "head")
+        _assert_v2(revision_011_db)
+        with sqlite3.connect(revision_011_db) as conn:
+            account = conn.execute(
+                "SELECT account_status, traffic_cohort, updated_at FROM accounts WHERE actor_id='legacy-account'"
+            ).fetchone()
+            observation = conn.execute(
+                """SELECT traffic_cohort, rollout_eligible, eligibility_reason
+                FROM agent_rollout_observations WHERE observation_id='legacy-observation'"""
+            ).fetchone()
+        assert account[:2] == ("active", "unverified") and account[2] and account[2] != "created", account
+        assert observation == ("legacy_untrusted", 0, "legacy_untrusted"), observation
 
         legacy_db = temp_root / "legacy.sqlite3"
         _migrate(legacy_db, "upgrade", "006")

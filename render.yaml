@@ -26,6 +26,8 @@ services:
         value: "true"
       - key: EDU_AGENT_ENVIRONMENT
         value: production
+      - key: EDU_AGENT_AUTH_REQUIRED
+        value: "true"
       - key: EDU_AGENT_RUNTIME_V2_CONFIG_VERSION
         value: v1.41-history-control
       - key: EDU_AGENT_RUNTIME_ROLLOUT_AGENT_TYPE

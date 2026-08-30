@@ -29,6 +29,8 @@ os.environ["EDU_AGENT_RUNTIME_V2_HISTORY_CHARACTER_BPS"] = "0"
 from agent_runtime.event_store import ensure_runtime_tables
 from agent_runtime.rollout_observations import control_observation_progress, record_rollout_observation
 from agent_runtime.rollout_status import build_rollout_status
+from security.accounts import create_account
+from security.auth import create_token
 
 
 def _shadow_env() -> dict[str, str]:
@@ -76,6 +78,7 @@ def _gate(*, terminal_runs: int, status: str = "unknown", reasons: list[str] | N
 
 def main() -> None:
     ensure_runtime_tables()
+    create_account("rollout-admin", "rollout-admin", "rollout-admin-password", "admin", traffic_cohort="operator")
     for index, scope in enumerate(("runtime", "runtime", "runtime", "eval")):
         record_rollout_observation(
             agent_type="history_character",
@@ -98,7 +101,7 @@ def main() -> None:
     assert progress["terminal_samples"] == 3
     assert progress["baseline_ready"] is True
 
-    with patch("agent_runtime.rollout_status.runtime_schema_readiness", return_value={"status": "ready", "schema_ready": True, "alembic_version": "011"}), \
+    with patch("agent_runtime.rollout_status.runtime_schema_readiness", return_value={"status": "ready", "schema_ready": True, "alembic_version": "012"}), \
          patch("agent_runtime.rollout_status.observation_write_health", return_value={"status": "ok", "ok": True, "failure_count": 0, "by_reason": {}}):
         control_status = build_rollout_status(agent_type="history_character", minimum_samples=3)
     assert control_status["phase"] == "control_ready", control_status
@@ -107,7 +110,7 @@ def main() -> None:
 
     control_ready = dict(progress)
     health = {"status": "ok", "ok": True, "failure_count": 0, "by_reason": {}}
-    schema = {"status": "ready", "schema_ready": True, "alembic_version": "011"}
+    schema = {"status": "ready", "schema_ready": True, "alembic_version": "012"}
     with patch.dict(os.environ, _shadow_env(), clear=True), \
          patch("agent_runtime.rollout_status.control_observation_progress", return_value=control_ready), \
          patch("agent_runtime.rollout_status.observation_write_health", return_value=health), \
@@ -140,7 +143,7 @@ def main() -> None:
     from fastapi.testclient import TestClient
     from api.main import app
 
-    with patch("agent_runtime.rollout_status.runtime_schema_readiness", return_value={"status": "ready", "schema_ready": True, "alembic_version": "011"}), \
+    with patch("agent_runtime.rollout_status.runtime_schema_readiness", return_value={"status": "ready", "schema_ready": True, "alembic_version": "012"}), \
          patch("agent_runtime.rollout_status.observation_write_health", return_value={"status": "ok", "ok": True, "failure_count": 0, "by_reason": {}}):
         response = TestClient(app).get(
             "/api/admin/agent-runtime/rollout-status",
@@ -148,10 +151,19 @@ def main() -> None:
         )
         assert response.status_code == 200, response.text
         assert response.json()["phase"] == "control_ready"
-    with patch.dict(os.environ, {**os.environ, "EDU_AGENT_ENVIRONMENT": "production"}, clear=True):
+    production_env = {
+        **os.environ,
+        "EDU_AGENT_ENVIRONMENT": "production",
+        "EDU_AGENT_AUTH_REQUIRED": "true",
+        "EDU_AGENT_AUTH_DB_AUTHORITY": "true",
+        "JWT_SECRET": "rollout-status-production-secret-3d1a5a8c",
+    }
+    with patch.dict(os.environ, production_env, clear=True):
+        admin_headers = {"Authorization": f"Bearer {create_token('rollout-admin', 'admin')}"}
         response = TestClient(app).get(
             "/api/admin/agent-runtime/rollout-status",
             params={"agent_type": "history_character", "minimum_samples": 99},
+            headers=admin_headers,
         )
         assert response.status_code == 400, response.text
 

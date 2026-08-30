@@ -36,19 +36,13 @@ export function parseSseFrame<TData = Record<string, unknown>>(frame: string): S
   let id: string | undefined;
   let event = "message";
   const dataLines: string[] = [];
-
   for (const line of frame.split("\n")) {
-    const trimmedLine = line.endsWith("\r") ? line.slice(0, -1) : line;
-    if (!trimmedLine || trimmedLine.startsWith(":")) continue;
-    if (trimmedLine.startsWith("event:")) {
-      event = trimmedLine.slice(6).trim() || "message";
-    } else if (trimmedLine.startsWith("id:")) {
-      id = trimmedLine.slice(3).trim() || undefined;
-    } else if (trimmedLine.startsWith("data:")) {
-      dataLines.push(trimmedLine.slice(5).trimStart());
-    }
+    const clean = line.endsWith("\r") ? line.slice(0, -1) : line;
+    if (!clean || clean.startsWith(":")) continue;
+    if (clean.startsWith("event:")) event = clean.slice(6).trim() || "message";
+    else if (clean.startsWith("id:")) id = clean.slice(3).trim() || undefined;
+    else if (clean.startsWith("data:")) dataLines.push(clean.slice(5).trimStart());
   }
-
   if (!dataLines.length) return null;
   return { id, event, data: JSON.parse(dataLines.join("\n")) as TData };
 }
@@ -57,34 +51,26 @@ export async function readSseStream<TData = Record<string, unknown>>(
   response: Response,
   onEvent: (event: SseEvent<TData>) => void | Promise<void>,
 ) {
-  if (!response.body) {
-    throw new Error("浏览器没有收到流式响应，请稍后重试。");
-  }
-
+  if (!response.body) throw new Error("浏览器没有收到流式响应，请稍后重试。");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-
-  async function drainFrames(frames: string[]) {
+  async function drain(frames: string[]) {
     for (const frame of frames) {
-      const streamEvent = parseSseFrame<TData>(frame.trim());
-      if (streamEvent) await onEvent(streamEvent);
+      const event = parseSseFrame<TData>(frame.trim());
+      if (event) await onEvent(event);
     }
   }
-
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const frames = buffer.split(/\r?\n\r?\n/);
     buffer = frames.pop() || "";
-    await drainFrames(frames);
+    await drain(frames);
   }
-
   buffer += decoder.decode();
-  if (buffer.trim()) {
-    await drainFrames([buffer]);
-  }
+  if (buffer.trim()) await drain([buffer]);
 }
 
 export async function postJsonSse<TData = Record<string, unknown>>(
@@ -94,31 +80,34 @@ export async function postJsonSse<TData = Record<string, unknown>>(
 ) {
   const { headers, token, includeClientSession, signal, fallbackMessage = "流式生成失败，请稍后重试。", onEvent } = options;
   const requestHeaders = new Headers(headers);
-  if (!requestHeaders.has("Content-Type")) {
-    requestHeaders.set("Content-Type", "application/json");
-  }
-  if (token) {
-    for (const [key, value] of Object.entries(authHeaders(token))) {
-      requestHeaders.set(key, value);
-    }
-  }
-  if (includeClientSession) {
-    for (const [key, value] of Object.entries(clientSessionHeaders())) {
-      requestHeaders.set(key, value);
-    }
-  }
-
+  if (!requestHeaders.has("Content-Type")) requestHeaders.set("Content-Type", "application/json");
+  if (token) Object.entries(authHeaders(token)).forEach(([key, value]) => requestHeaders.set(key, value));
+  if (includeClientSession) Object.entries(clientSessionHeaders()).forEach(([key, value]) => requestHeaders.set(key, value));
   const response = await fetch(apiUrl(path), {
     method: "POST",
     headers: requestHeaders,
     body: JSON.stringify(body),
     signal,
   });
-
   if (!response.ok) {
     const payload = await parseErrorPayload(response);
     throw new ApiError(getErrorMessage(payload, fallbackMessage), response.status, payload, response);
   }
-
   await readSseStream(response, onEvent);
+}
+
+export async function fetchSSE(
+  url: string,
+  options: {
+    token?: string;
+    signal?: AbortSignal;
+    onMessage: (data: string) => void;
+  },
+): Promise<void> {
+  const response = await fetch(url, {
+    headers: options.token ? { Authorization: `Bearer ${options.token}` } : undefined,
+    signal: options.signal,
+  });
+  if (!response.ok) throw new Error(`SSE request failed (${response.status})`);
+  await readSseStream(response, event => options.onMessage(JSON.stringify(event.data)));
 }

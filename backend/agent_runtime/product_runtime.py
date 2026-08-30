@@ -42,12 +42,14 @@ class ObservableProductRun:
         objective: str,
         plan: AgentPlan,
         idempotency_key: str | None = None,
+        traffic_cohort: str = "unverified",
+        rollout_eligible: bool = False,
     ) -> "ObservableProductRun | None":
         settings = RuntimeV2Settings.from_env()
         if not settings.observable_ready:
             return None
         subject = str(actor_id or student_id or session_id or trace_id)
-        active, bucket = settings.rollout_decision(agent_type, subject)
+        active, bucket = settings.rollout_decision(agent_type, subject, rollout_eligible=rollout_eligible)
         if not active:
             return None
         role = actor_role if actor_role in {"anonymous", "student", "teacher", "admin"} else "anonymous"
@@ -63,6 +65,8 @@ class ObservableProductRun:
             durability_mode="observable",
             config_version=settings.config_version,
             rollout_bucket=bucket,
+            traffic_cohort=traffic_cohort,
+            rollout_eligible=rollout_eligible,
         )
         policy_caller = {
             "history_character": "history_ui",

@@ -213,6 +213,8 @@ def create_run(
             "data_scope": context.data_scope,
             "runtime_mode": runtime_mode,
             "rollout_bucket": context.rollout_bucket,
+            "traffic_cohort": context.traffic_cohort,
+            "rollout_eligible": context.rollout_eligible,
             "deployed_commit": deployed_commit(),
             "environment": deployment_environment(),
         },

@@ -6,7 +6,7 @@ from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
 
-RUNTIME_SCHEMA_HEAD = "011"
+RUNTIME_SCHEMA_HEAD = "012"
 RUNTIME_TABLES = {
     "autotutor_sessions",
     "agent_runs",
@@ -37,6 +37,16 @@ def runtime_schema_readiness() -> dict[str, Any]:
                 for column in ("inflight_request_hash", "last_request_hash"):
                     if column not in session_columns:
                         missing_columns.append(f"autotutor_sessions.{column}")
+            if "accounts" in tables:
+                account_columns = {column["name"] for column in sa_inspect(conn).get_columns("accounts")}
+                for column in ("account_status", "traffic_cohort", "updated_at"):
+                    if column not in account_columns:
+                        missing_columns.append(f"accounts.{column}")
+            if "agent_rollout_observations" in tables:
+                observation_columns = {column["name"] for column in sa_inspect(conn).get_columns("agent_rollout_observations")}
+                for column in ("traffic_cohort", "rollout_eligible", "eligibility_reason"):
+                    if column not in observation_columns:
+                        missing_columns.append(f"agent_rollout_observations.{column}")
             alembic_version = None
             if "alembic_version" in tables:
                 alembic_version = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar()

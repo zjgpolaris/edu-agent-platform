@@ -10,7 +10,7 @@ from agent_runtime.readiness import runtime_schema_readiness
 from agent_runtime.rollout_config import validate_runtime_rollout_config
 from agent_runtime.rollout_gate import build_rollout_readiness
 from agent_runtime.rollout_observations import control_observation_progress, observation_write_health
-from deployment import deployed_commit, deployment_environment, runtime_configuration_errors, runtime_config_version
+from deployment import auth_configuration_status, deployed_commit, deployment_environment, runtime_configuration_errors, runtime_config_version
 
 
 SUPPORTED_ROLLOUT_AGENTS = {"history_character"}
@@ -64,6 +64,13 @@ def build_rollout_status(
     config = runtime_config_version()
     runtime_mode = "shadow" if settings.shadow_mode else "active"
     schema = runtime_schema_readiness()
+    auth_status = auth_configuration_status()
+    try:
+        from security.accounts import trusted_rollout_cohort_status
+
+        cohort_status = trusted_rollout_cohort_status()
+    except Exception as exc:
+        cohort_status = {"ready": False, "verified_actor_count": 0, "error_type": exc.__class__.__name__}
     observation_health = observation_write_health(window_minutes=15)
     deployment_errors = runtime_configuration_errors(enabled=settings.enabled, config_version=config)
 
@@ -91,6 +98,9 @@ def build_rollout_status(
             "baseline_ready": False,
             "p50_ms": None,
             "p95_ms": None,
+            "observed_total": 0,
+            "excluded_samples": 0,
+            "excluded_by_reason": {},
             "error_type": exc.__class__.__name__,
         }
 
@@ -133,6 +143,8 @@ def build_rollout_status(
     hard_gate_reasons = [reason for reason in gate_reasons if reason in HARD_GATE_REASONS]
 
     blockers: list[str] = []
+    auth_errors = [str(item) for item in auth_status.get("errors") or []]
+    blockers.extend(auth_errors)
     if not schema.get("schema_ready"):
         blockers.append("runtime_schema_not_ready")
     blockers.extend(deployment_errors)
@@ -141,6 +153,8 @@ def build_rollout_status(
     elif int(observation_health.get("failure_count") or 0) > 0:
         blockers.append("rollout_observation_write_failures_detected")
     blockers.extend(config_validation.errors)
+    if environment == "production" and not cohort_status.get("ready"):
+        blockers.append("trusted_cohort_missing")
 
     terminal_runs = int(gate.get("terminal_runs") or 0)
     if hard_gate_reasons:
@@ -148,6 +162,18 @@ def build_rollout_status(
         status = "blocked"
         blockers.extend(hard_gate_reasons)
         next_action = "stop_rollout"
+    elif auth_errors:
+        phase = "deployment_blocked"
+        status = "blocked"
+        next_action = "fix_auth_configuration"
+    elif not schema.get("schema_ready"):
+        phase = "deployment_blocked"
+        status = "blocked"
+        next_action = "fix_deployment_contract"
+    elif environment == "production" and not cohort_status.get("ready"):
+        phase = "deployment_blocked"
+        status = "blocked"
+        next_action = "approve_verified_cohort"
     elif blockers:
         phase = "deployment_blocked"
         status = "blocked"
@@ -194,6 +220,8 @@ def build_rollout_status(
             "runtime_mode": runtime_mode,
             "kill_switch": settings.kill_switch,
         },
+        "auth_configuration": auth_status,
+        "trusted_cohort": cohort_status,
         "control": control,
         "shadow": {
             "terminal_runs": terminal_runs,

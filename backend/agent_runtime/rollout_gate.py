@@ -167,6 +167,8 @@ def _evidence_reasons(
             reasons.append("control_baseline_environment_mismatch")
         if baseline.get("source") != "server_trace_aggregate":
             reasons.append("control_baseline_source_untrusted")
+        if baseline.get("trust_contract") != "verified-cohort-v1":
+            reasons.append("evidence_trust_contract_outdated")
         if not baseline.get("commit") or not baseline.get("config_version"):
             reasons.append("control_baseline_version_missing")
         if int(baseline.get("sample_count") or 0) < minimum_terminal_runs:
@@ -200,7 +202,12 @@ def _query_rollout_rows(
         candidate_runs = []
         for run in raw_runs:
             refs = _json_object(run.get("context_refs_json"))
-            if refs.get("data_scope", "runtime") == "runtime" and refs.get("runtime_mode") == runtime_mode:
+            if (
+                refs.get("data_scope", "runtime") == "runtime"
+                and refs.get("runtime_mode") == runtime_mode
+                and refs.get("rollout_eligible") is True
+                and refs.get("traffic_cohort") == "verified"
+            ):
                 candidate_runs.append(run)
         missing_provenance = 0
         mismatched_provenance = 0
@@ -463,6 +470,7 @@ def build_rollout_readiness(
             for key in (
                 "commit", "config_version", "environment", "sample_count", "p50_ms", "p95_ms",
                 "source", "observed_from", "observed_to", "sha256",
+                "trust_contract",
             )
         }
     return {

@@ -61,6 +61,12 @@ def main() -> None:
     assert "DATABASE_URL" not in preflight
     assert "DIRECT_URL" not in preflight
     assert "JWT_SECRET" not in preflight
+    assert "secrets.API_TOKEN" not in preflight
+    assert "RUNTIME_ADMIN_USERNAME: ${{ secrets.RUNTIME_ADMIN_USERNAME }}" in preflight
+    assert "RUNTIME_ADMIN_PASSWORD: ${{ secrets.RUNTIME_ADMIN_PASSWORD }}" in preflight
+    assert "/api/auth/login" in preflight
+    assert 'p.get("role")=="admin"' in preflight
+    assert "::add-mask::$API_TOKEN" in preflight
     print("runtime_evidence_workflow_smoke=PASS")
 
 

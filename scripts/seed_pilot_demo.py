@@ -118,19 +118,21 @@ def _log(verbose: bool, message: str) -> None:
 def ensure_account(actor_id: str, role: str, password: str = PASSWORD, *, verbose: bool = True) -> None:
     """创建或重置 pilot 账号，保证 demo 口令稳定。"""
     try:
-        create_account(actor_id, actor_id, password, role, DISPLAY_NAMES.get(actor_id, actor_id))
+        create_account(actor_id, actor_id, password, role, DISPLAY_NAMES.get(actor_id, actor_id), traffic_cohort="demo")
         _log(verbose, f"[account] created {actor_id} / {password}")
     except Exception:
         with get_connection() as conn:
             conn.execute(
                 text("""UPDATE accounts
-                     SET password_hash=:password_hash, role=:role, display_name=:display_name
+                     SET password_hash=:password_hash, role=:role, display_name=:display_name,
+                         account_status='active', traffic_cohort='demo', updated_at=:updated_at
                      WHERE actor_id=:actor_id"""),
                 {
                     "password_hash": hash_password(password),
                     "role": role,
                     "display_name": DISPLAY_NAMES.get(actor_id, actor_id),
                     "actor_id": actor_id,
+                    "updated_at": now_iso(),
                 },
             )
         _log(verbose, f"[account] reset {actor_id} / {password}")

@@ -24,7 +24,7 @@ from agent_runtime.rollout_gate import build_rollout_readiness, seal_rollout_evi
 from db.engine import get_connection
 from security.audit_log import record_audit_event
 
-SCHEMA_READY = {"status": "ready", "schema_ready": True, "alembic_version": "011"}
+SCHEMA_READY = {"status": "ready", "schema_ready": True, "alembic_version": "012"}
 DEPLOYED_COMMIT = "rollout-smoke-commit"
 
 
@@ -51,6 +51,7 @@ def _evidence(config_version: str, *, runtime_mode: str = "active", baseline_p95
             "p50_ms": baseline_p95_ms * 0.7,
             "p95_ms": baseline_p95_ms,
             "source": "server_trace_aggregate",
+            "trust_contract": "verified-cohort-v1",
         },
     })
 
@@ -81,6 +82,8 @@ def _insert_slice(
                 "rollout_bucket": index,
                 "deployed_commit": DEPLOYED_COMMIT,
                 "environment": "staging",
+                "traffic_cohort": "verified",
+                "rollout_eligible": True,
             }
             conn.execute(text("""INSERT INTO agent_runs (
                 run_id, agent_type, actor_id, student_id, session_id, parent_run_id,
@@ -219,7 +222,12 @@ def main() -> None:
         row = conn.execute(text("SELECT run_id FROM agent_runs WHERE config_version='pass' LIMIT 1")).mappings().one()
         conn.execute(text("UPDATE agent_runs SET context_refs_json=:refs WHERE run_id=:run_id"), {
             "run_id": row["run_id"],
-            "refs": json.dumps({"runtime_mode": "active", "data_scope": "runtime"}),
+            "refs": json.dumps({
+                "runtime_mode": "active",
+                "data_scope": "runtime",
+                "traffic_cohort": "verified",
+                "rollout_eligible": True,
+            }),
         })
     incomplete_provenance = _gate("pass")
     assert incomplete_provenance["status"] == "unknown", incomplete_provenance

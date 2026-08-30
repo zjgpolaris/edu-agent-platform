@@ -2,6 +2,8 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import { fetchSSE } from "@/lib/sse";
+import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -57,13 +59,15 @@ type AgentOpsSummary = {
     status?: string;
     agent_type?: string;
     deployment?: { commit?: string | null; environment?: string | null; config_version?: string | null; runtime_enabled?: boolean; runtime_mode?: string; kill_switch?: boolean };
-    control?: { terminal_samples?: number; minimum_samples?: number; sample_sufficient?: boolean; p95_ms?: number | null };
+    control?: { terminal_samples?: number; minimum_samples?: number; sample_sufficient?: boolean; p95_ms?: number | null; observed_total?: number; excluded_samples?: number; excluded_by_reason?: Record<string, number> };
     shadow?: { terminal_runs?: number; minimum_terminal_runs?: number; run_provenance_coverage?: number | null; event_coverage?: number | null; terminal_consistency?: number | null; unexpected_failure_rate?: number | null; p95_regression?: number | null; run_latency?: { p95_ms?: number | null } };
     safety?: { duplicate_side_effects?: number; duplicate_attempts_prevented?: number; invalid_transitions?: number; high_risk_without_confirmation?: number; observation_write_failures?: number | null };
     evidence?: { present?: boolean; fresh?: boolean; age_hours?: number | null; profiles?: Record<string, string> };
     gate?: { status?: string; reasons?: string[] };
     blockers?: string[];
     next_action?: string;
+    auth_configuration?: { ok?: boolean; required?: boolean; auth_required?: boolean; errors?: string[] };
+    trusted_cohort?: { ready?: boolean; verified_actor_count?: number };
   };
   data_scope?: { active?: string; audit?: Record<string, number>; learning?: Record<string, number> };
   readiness?: {
@@ -290,7 +294,8 @@ function detectRegression(snaps: HistorySnapshot[]): RegressionAlert | null {
 }
 
 export default function EvalPage() {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
+  const router = useRouter();
   const [selected, setSelected] = useState("quick");
   const [suiteOptions, setSuiteOptions] = useState<SuiteOption[]>(FALLBACK_SUITES);
   const [running, setRunning] = useState(false);
@@ -311,8 +316,12 @@ export default function EvalPage() {
   const [caseSaveMessages, setCaseSaveMessages] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    if (ready && user?.role !== "admin") router.replace("/");
+  }, [ready, router, user?.role]);
+
+  useEffect(() => {
     async function loadSuites() {
-      if (!user?.token) return;
+      if (!user?.token || user.role !== "admin") return;
       try {
         const res = await fetch(`${API}/api/eval/suites`, { headers: authHeaders(user.token) });
         if (!res.ok) return;
@@ -374,6 +383,7 @@ export default function EvalPage() {
         }
       } catch { /* ignore */ }
     }
+    if (user?.role !== "admin") return;
     loadSuites();
     loadAgentOps();
     loadLatest();
@@ -384,7 +394,7 @@ export default function EvalPage() {
         .then(d => { if (d?.candidates) setCandidates(d.candidates as EvalCandidate[]); })
         .catch(() => null);
     }
-  }, [user?.token]);
+  }, [user?.role, user?.token]);
 
   const selectedOption = useMemo(
     () => suiteOptions.find(option => option.id === selected),
@@ -399,13 +409,11 @@ export default function EvalPage() {
     setResult(null);
     setRegressionAlert(null);
 
-    const headers = user?.token ? authHeaders(user.token) : undefined;
     const url = `${API}/api/eval/run-stream?suite=${encodeURIComponent(selected)}`;
-    const es = new EventSource(url + (headers?.Authorization ? `&token=${headers.Authorization.replace('Bearer ', '')}` : ''));
-
-    es.onmessage = (event) => {
+    try {
+      await fetchSSE(url, { token: user?.token, onMessage: (data) => {
       try {
-        const msg = JSON.parse(event.data);
+        const msg = JSON.parse(data);
         if (msg.type === 'start') {
           setRunTotal(msg.total || 0);
           setRunLog([{ type: 'start', index: 0 }]);
@@ -419,7 +427,6 @@ export default function EvalPage() {
           setResult({ ...msg.summary, suites: Array.isArray(msg.summary?.suites) ? msg.summary.suites : [] });
           setLatestStatus("刚刚生成新的 eval report");
           if (msg.summary?.agent_ops) setAgentOps(msg.summary.agent_ops);
-          es.close();
           setRunning(false);
           // refresh history
           fetch(`${API}/api/eval/history?limit=20`, { headers: { "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) } })
@@ -432,19 +439,16 @@ export default function EvalPage() {
             }).catch(() => null);
         } else if (msg.type === 'done_error') {
           setRunLog(prev => [...prev, { type: 'done_error', error: msg.error }]);
-          es.close();
           setRunning(false);
         }
       } catch (e) {
         console.error('SSE parse error:', e);
       }
-    };
-
-    es.onerror = () => {
-      es.close();
+      }});
+    } catch {
       setRunning(false);
       setRunLog(prev => [...prev, { type: 'error', error: 'SSE 连接中断' }]);
-    };
+    }
   }
 
   const passedSuites = result?.passed_suites ?? result?.passed ?? 0;
@@ -500,6 +504,8 @@ export default function EvalPage() {
       setSavingCaseId(null);
     }
   }
+
+  if (!ready || user?.role !== "admin") return null;
 
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: "2rem 1.5rem", fontFamily: "inherit" }}>
@@ -1086,6 +1092,9 @@ const ROLLOUT_ACTION_LABELS: Record<string, string> = {
   continue_48h_observation: "继续 48 小时稳定观察",
   stop_rollout: "停止灰度并检查安全信号",
   shadow_operational_complete: "Shadow Operational Complete",
+  fix_auth_configuration: "修复生产认证配置",
+  bootstrap_admin: "初始化管理员账号",
+  approve_verified_cohort: "审批可信试点 Cohort",
 };
 
 function percent(value?: number | null): string {
@@ -1112,7 +1121,9 @@ function RuntimeRolloutPanel({ rollout }: { rollout?: AgentOpsSummary["runtime_r
         </span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: "0.6rem" }}>
-        <OpsCard label="Control 样本" value={`${control?.terminal_samples ?? 0}/${control?.minimum_samples ?? 100}`} hint={`p95 ${control?.p95_ms != null ? `${Math.round(control.p95_ms)}ms` : "--"}`} />
+        <OpsCard label="Control 可信样本" value={`${control?.terminal_samples ?? 0}/${control?.minimum_samples ?? 100}`} hint={`总观测 ${control?.observed_total ?? 0} · 排除 ${control?.excluded_samples ?? 0} · p95 ${control?.p95_ms != null ? `${Math.round(control.p95_ms)}ms` : "--"}`} />
+        <OpsCard label="生产认证" value={rollout.auth_configuration?.ok ? "PASS" : "BLOCKED"} hint={rollout.auth_configuration?.auth_required ? "authentication required" : "authentication disabled"} />
+        <OpsCard label="可信 Cohort" value={rollout.trusted_cohort?.ready ? "READY" : "MISSING"} hint={`${rollout.trusted_cohort?.verified_actor_count ?? 0} verified actors`} />
         <OpsCard label="Shadow Runs" value={`${shadow?.terminal_runs ?? 0}/${shadow?.minimum_terminal_runs ?? 100}`} hint={`p95 ${shadow?.run_latency?.p95_ms != null ? `${Math.round(shadow.run_latency.p95_ms)}ms` : "--"}`} />
         <OpsCard label="Provenance" value={percent(shadow?.run_provenance_coverage)} hint={`event coverage ${percent(shadow?.event_coverage)}`} />
         <OpsCard label="Terminal 一致性" value={percent(shadow?.terminal_consistency)} hint={`unexpected failure ${percent(shadow?.unexpected_failure_rate)}`} />

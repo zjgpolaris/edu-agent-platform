@@ -13,7 +13,7 @@ from agent_runtime.event_store import (
 )
 from agent_runtime.models import ResumeSignal
 from agent_runtime.recovery import recover_stale_runs
-from security.auth import Actor, assert_teacher_student_access, auth_required, require_auth
+from security.auth import Actor, assert_teacher_student_access, auth_required, require_admin, require_auth
 
 router = APIRouter(tags=["agent-runtime"])
 
@@ -193,16 +193,12 @@ async def confirm_agent_run(run_id: str, req: RunConfirmRequest, actor: Actor = 
 
 
 @router.post("/api/admin/agent-runs/recover")
-async def recover_agent_runs(req: RecoverRunsRequest, actor: Actor = Depends(require_auth)):
-    if auth_required() and actor.role != "admin":
-        raise HTTPException(status_code=403, detail="仅管理员可恢复 Agent Run。")
+async def recover_agent_runs(req: RecoverRunsRequest, actor: Actor = Depends(require_admin)):
     return recover_stale_runs(updated_before=req.updated_before)
 
 
 @router.get("/api/admin/agent-runtime/readiness")
-async def get_agent_runtime_readiness(actor: Actor = Depends(require_auth)):
-    if auth_required() and actor.role != "admin":
-        raise HTTPException(status_code=403, detail="仅管理员可检查 Agent Runtime readiness。")
+async def get_agent_runtime_readiness(actor: Actor = Depends(require_admin)):
     from agent_runtime.readiness import runtime_schema_readiness
 
     return runtime_schema_readiness()
@@ -213,10 +209,8 @@ async def get_agent_runtime_rollout_readiness(
     agent_type: str = Query(min_length=1, max_length=80),
     window_hours: int = Query(default=24, ge=1, le=24 * 31),
     minimum_terminal_runs: int = Query(default=100, ge=1, le=100_000),
-    actor: Actor = Depends(require_auth),
+    actor: Actor = Depends(require_admin),
 ):
-    if auth_required() and actor.role != "admin":
-        raise HTTPException(status_code=403, detail="仅管理员可检查 Agent Runtime rollout readiness。")
     from agent_runtime.rollout_gate import build_rollout_readiness
 
     return build_rollout_readiness(
@@ -231,10 +225,8 @@ async def get_agent_runtime_rollout_status(
     agent_type: str = Query(min_length=1, max_length=80),
     window_hours: int = Query(default=168, ge=1, le=24 * 31),
     minimum_samples: int = Query(default=100, ge=1, le=100_000),
-    actor: Actor = Depends(require_auth),
+    actor: Actor = Depends(require_admin),
 ):
-    if auth_required() and actor.role != "admin":
-        raise HTTPException(status_code=403, detail="仅管理员可检查 Agent Runtime rollout 状态。")
     from agent_runtime.rollout_status import build_rollout_status
 
     if minimum_samples < 100:

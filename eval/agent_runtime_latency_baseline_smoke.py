@@ -50,6 +50,7 @@ def _evidence(config: str, baseline_p95: float) -> dict:
             "p50_ms": baseline_p95,
             "p95_ms": baseline_p95,
             "source": "server_trace_aggregate",
+            "trust_contract": "verified-cohort-v1",
         },
     })
 
@@ -81,6 +82,8 @@ def _insert(config: str, durations: list[int], *, invalid_timestamp: bool = Fals
                     "data_scope": "runtime",
                     "deployed_commit": COMMIT,
                     "environment": "staging",
+                    "traffic_cohort": "verified",
+                    "rollout_eligible": True,
                 }),
                 "completion": json.dumps({"status": "completed", "reason_codes": ["completion_criteria_satisfied"]}),
                 "config": config,

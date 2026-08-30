@@ -24,6 +24,13 @@ def main() -> None:
         assert conn.dialect.name == "postgresql"
         tables = set(sa_inspect(conn).get_table_names())
         assert {"agent_rollout_observations", "agent_release_evidence", "agent_runs", "review_mastery_state"} <= tables
+        inspector = sa_inspect(conn)
+        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+        observation_columns = {column["name"] for column in inspector.get_columns("agent_rollout_observations")}
+        observation_indexes = {index["name"] for index in inspector.get_indexes("agent_rollout_observations")}
+        assert {"account_status", "traffic_cohort", "updated_at"} <= account_columns
+        assert {"traffic_cohort", "rollout_eligible", "eligibility_reason"} <= observation_columns
+        assert "idx_rollout_observation_eligibility" in observation_indexes
         version = str(conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar_one())
         assert version == RUNTIME_SCHEMA_HEAD, (version, RUNTIME_SCHEMA_HEAD)
         pgvector = conn.execute(text("SELECT extname FROM pg_extension WHERE extname='vector'")).scalar()

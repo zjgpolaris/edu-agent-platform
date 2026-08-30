@@ -166,9 +166,9 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 健康检查分层：`/api/health` 是 liveness；`/api/ready` 是 shallow readiness，默认不触发外部 LLM/Embedding；`/api/debug/rag/health?deep=true` 与 `production_rag_health_smoke.py` 用于生产 RAG 深度检查。
 传入 `--ready-url` 时，release gate 现在会输出 required / failed / warnings 摘要；若带 `--production`、`--ready-require-rag` 或 `--ready-require-external`，会把 RAG / 外部依赖配置作为 blocking readiness check。
 
-Runtime v2 灰度发布还需显式加入 `--ready-require-runtime`。该检查要求部署 commit/config、Alembic 011 schema 和当前版本 rollout evidence 一致；Runtime 关闭、样本不足或证据未运行都不会显示为通过。生产镜像不内置 Eval 目录，真实 LLM/RAG 聚合报告通过 `scripts/build_rollout_evidence.py` 绑定 control baseline 后写入 `agent_release_evidence`。
+Runtime v2 灰度发布还需显式加入 `--ready-require-runtime`。该检查要求部署 commit/config、Alembic 012 schema、生产认证配置和当前版本 rollout evidence 一致；Runtime 关闭、可信样本不足或证据未运行都不会显示为通过。生产镜像不内置 Eval 目录，真实 LLM/RAG 聚合报告通过 `scripts/build_rollout_evidence.py` 绑定 control baseline 后写入 `agent_release_evidence`。
 
-v1.41 的生产启动入口会先在 PostgreSQL advisory lock 下执行 Alembic `upgrade head`，确认 revision `011` 与 Runtime schema 完整后才启动 API。Render 必须配置 `DIRECT_URL`（Supabase direct/session connection）；普通 `DATABASE_URL` 继续供业务请求使用，transaction pooler 不承担 migration/advisory lock。迁移失败会输出结构化失败摘要并以非零状态退出；不要通过跳过迁移来恢复服务，应先检查数据库快照、连接和 migration 日志。本地或 CI 可分别验证：
+v1.43 的生产启动入口先验证 `EDU_AGENT_AUTH_REQUIRED=true` 和至少 32 字节的随机 `JWT_SECRET`，再在 PostgreSQL advisory lock 下执行 Alembic `upgrade head`，确认 revision `012` 与 Runtime schema 完整后才启动 API。Render 必须配置 `DIRECT_URL`（Supabase direct/session connection）；普通 `DATABASE_URL` 继续供业务请求使用，transaction pooler 不承担 migration/advisory lock。认证或迁移失败都会输出结构化失败摘要并以非零状态退出；不要通过关闭认证或跳过迁移来恢复服务。
 
 ```bash
 # SQLite：成功迁移、重复执行 no-op、失败时拒绝启动
@@ -184,19 +184,35 @@ DATABASE_URL=postgresql://... PYTHONPATH=backend \
 
 Runtime 开启时必须显式提供 `EDU_AGENT_RUNTIME_V2_CONFIG_VERSION`；空值和旧的 `v1.33-control` 默认值均 fail-closed。Run 由服务端写入 `deployed_commit` 与 `environment`，per-agent gate 只统计 provenance 完整且与当前部署一致的样本，coverage 不足 100% 时状态保持 `unknown`。
 
+生产首次启用认证前，用一次性环境变量创建管理员；脚本不会输出密码、Hash 或连接串，已有管理员默认 no-op。公开 Pilot 固定为 `demo`，自助注册和历史账户默认为 `unverified`，都不会贡献 rollout 样本。受控试点学生只能逐个审批或撤销：
+
+```bash
+ADMIN_USERNAME=<secret> ADMIN_PASSWORD=<至少12字符> \
+DATABASE_URL=<direct-or-session-url> PYTHONPATH=backend \
+  python3 scripts/bootstrap_admin.py
+
+DATABASE_URL=<direct-or-session-url> PYTHONPATH=backend \
+  python3 scripts/set_rollout_cohort.py \
+  --actor-id <student-id> --cohort verified --reason approved_pilot
+
+DATABASE_URL=<direct-or-session-url> PYTHONPATH=backend \
+  python3 scripts/set_rollout_cohort.py \
+  --actor-id <student-id> --cohort unverified --reason rollout_revoked
+```
+
 v1.42 增加了只读灰度操作面。管理员可通过 `GET /api/admin/agent-runtime/rollout-status?agent_type=history_character` 查看当前 phase、control/shadow 样本进度、hard blockers 与唯一建议动作；Eval 页复用 AgentOps summary 展示相同口径。切换 Shadow 前先运行配置预检，生产最小样本数不可低于 100：
 
 ```bash
 PYTHONPATH=backend python3 scripts/validate_runtime_rollout_config.py \
   --phase control --agent-type history_character
 
-API_TOKEN=<admin-token> PYTHONPATH=backend \
+API_TOKEN=<短期admin-token> PYTHONPATH=backend \
   python3 scripts/validate_runtime_rollout_config.py \
   --phase shadow --agent-type history_character \
   --status-url https://<后端>/api/admin/agent-runtime/rollout-status
 ```
 
-GitHub Actions 的手动工作流 **Runtime Rollout Preflight** 只验证部署 commit、control baseline、线上聚合状态和建议的 history-only Shadow 配置，并产出脱敏 promotion plan；它不会修改 Render 环境变量或流量。`EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED` 必须保持 `false`，其他 Agent 的 BPS 必须为 0。配置不一致、样本不足或线上状态不可用时预检 fail-closed。
+GitHub Actions 的手动工作流 **Runtime Rollout Preflight** 使用受保护的 `RUNTIME_ADMIN_USERNAME` / `RUNTIME_ADMIN_PASSWORD` 在每次运行时换取一小时内有效的管理员 Token，不再保存长期 `API_TOKEN`。它只验证部署 commit、可信 control baseline、线上聚合状态和建议的 history-only Shadow 配置，并产出脱敏 promotion plan；不会修改 Render 环境变量或流量。`EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED` 必须保持 `false`，其他 Agent 的 BPS 必须为 0。认证、cohort、配置、样本或线上状态不满足时预检 fail-closed。
 
 生产 evidence 使用 GitHub Actions 的手动工作流 **Runtime Rollout Evidence**，由受保护的 `production` environment 审批后执行。它会校验线上 commit、运行 offline/real-LLM/production-RAG 三类 profile、持久化 hash-bound aggregate evidence，再要求 strict readiness 和 per-agent gate PASS。control 与 shadow 的状态语义如下：
 
@@ -205,7 +221,7 @@ GitHub Actions 的手动工作流 **Runtime Rollout Preflight** 只验证部署 
 - `unknown`：schema、证据、provenance、baseline 或样本不足，不得放量；
 - `fail`：出现重复副作用、非法状态迁移、高风险违规或质量阈值越线，必须停止。
 
-本地 deterministic/CI 通过仅代表 **Development Complete**。生产 revision `011`、control ≥100、shadow ≥100、gate PASS 以及后续 48 小时稳定观察完成前，Operational 状态仍为 `NOT_RUN/unknown`。
+本地 deterministic/CI 通过仅代表 **Development Complete**。生产 revision `012`、认证与数据库授权验收、verified control ≥100、verified shadow ≥100、gate PASS 以及后续 48 小时稳定观察完成前，Operational 状态仍为 `NOT_RUN/unknown`。
 
 ```bash
 # 三份报告必须来自同一 clean deployed commit，且生成时间不超过 7 天。

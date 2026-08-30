@@ -49,7 +49,7 @@ export default function Home() {
     try {
       await login(username, password);
       const auth = JSON.parse(localStorage.getItem("edu_auth") || "{}");
-      router.push(auth.role === "teacher" ? "/teacher" : "/student");
+      router.push(auth.role === "admin" ? "/eval" : auth.role === "teacher" ? "/teacher" : "/student");
     } catch {
       setError("用户名或密码错误，请重试");
     } finally {

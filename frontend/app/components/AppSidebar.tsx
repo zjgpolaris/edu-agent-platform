@@ -8,7 +8,7 @@ import {
   Home, Bot, BookOpen, MessageSquare, Sword, Gamepad2, Map,
   ClipboardList, RotateCcw, BrainCircuit, BarChart3, Route,
   Sparkles, Award, BookMarked, HelpCircle, Users, FileText,
-  Camera, TrendingUp, Library, Settings, FlaskConical, LogOut,
+  Camera, TrendingUp, Library, Settings, LogOut,
   ChevronDown, ChevronRight, LayoutDashboard, CalendarDays,
   Pencil, Database, Star, Bell, Layers
 } from "lucide-react";
@@ -300,11 +300,6 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
         {role === "student" && (
           <Link href="/student/settings" className="sidebar-footer-link" title="偏好设置">
             <Settings size={14} strokeWidth={2} />
-          </Link>
-        )}
-        {role === "teacher" && (
-          <Link href="/eval" className="sidebar-footer-link" title="Eval Dashboard">
-            <FlaskConical size={14} strokeWidth={2} />
           </Link>
         )}
         <button className="sidebar-logout" onClick={handleLogout} title="退出登录">

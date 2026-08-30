@@ -34,7 +34,7 @@ def main() -> None:
         agent_rollout_observations.create(bind=conn, checkfirst=True)
         agent_release_evidence.create(bind=conn, checkfirst=True)
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('011')"))
+        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('012')"))
     init_db()
     _ensure_table()
 
@@ -43,8 +43,8 @@ def main() -> None:
         "status": "ready",
         "schema_ready": True,
         "database_dialect": "sqlite",
-        "required_alembic_version": "011",
-        "alembic_version": "011",
+        "required_alembic_version": "012",
+        "alembic_version": "012",
         "missing_tables": [],
         "missing_columns": [],
     }

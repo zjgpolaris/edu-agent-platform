@@ -10,6 +10,7 @@ from security.audit_log import record_audit_event
 from agent_ops import build_agent_ops_summary
 from services.agent_job_service import create_job as create_agent_job, get_job as get_agent_job, request_cancel as cancel_agent_job
 from security.auth import auth_required
+from deployment import deployment_environment
 
 router = APIRouter(tags=["eval_ops"])
 
@@ -30,8 +31,9 @@ def load_eval_runner():
 
 
 def require_eval_actor(actor: Actor) -> None:
-    if auth_required() and actor.role not in {"teacher", "admin"}:
-        raise HTTPException(status_code=403, detail="仅教师可访问")
+    allowed_roles = {"admin"} if deployment_environment() == "production" else {"teacher", "admin"}
+    if auth_required() and actor.role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="insufficient_role")
 
 
 class EvalRunRequest(BaseModel):

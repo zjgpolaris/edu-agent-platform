@@ -17,7 +17,22 @@ from sqlalchemy import create_engine, inspect as sa_inspect, text
 from db.engine import DATABASE_URL
 
 MIGRATION_LOCK_KEY = 4_539_941_140
-REQUIRED_REVISION = "011"
+REQUIRED_REVISION = "012"
+
+
+def validate_auth_preflight() -> dict[str, object]:
+    from deployment import auth_configuration_status
+
+    payload = auth_configuration_status()
+    if not payload.get("ok"):
+        failure = {
+            "status": "fail",
+            "failure_stage": "auth_preflight",
+            "reasons": payload.get("errors") or [],
+        }
+        print(json.dumps(failure, sort_keys=True), flush=True)
+        raise RuntimeError("production authentication preflight failed")
+    return payload
 
 
 def _bounded_milliseconds(name: str, default: int, maximum: int) -> int:
@@ -137,6 +152,8 @@ def main() -> None:
     parser.add_argument("--migrate-only", action="store_true")
     parser.add_argument("--skip-migration", action="store_true")
     args = parser.parse_args()
+    if not args.migrate_only:
+        validate_auth_preflight()
     auto_migrate = os.getenv("EDU_AGENT_AUTO_MIGRATE", "true").strip().lower() in {"1", "true", "yes", "on"}
     if not args.skip_migration and auto_migrate:
         run_migrations()

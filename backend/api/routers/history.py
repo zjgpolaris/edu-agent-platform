@@ -139,6 +139,7 @@ def _observable_subgraph_run(
     objective: str,
     idempotency_key: str | None,
 ):
+    from agent_runtime.context import rollout_eligibility
     from agent_runtime.models import AgentPlan, AgentStep
     from agent_runtime.product_runtime import ObservableProductRun
 
@@ -150,6 +151,7 @@ def _observable_subgraph_run(
         generated_by="template",
         planner_version=f"{agent_type}-v1.33",
     )
+    eligible, _ = rollout_eligibility(actor, "runtime")
     return ObservableProductRun.start(
         agent_type=agent_type,
         actor_id=actor.actor_id,
@@ -160,14 +162,19 @@ def _observable_subgraph_run(
         objective=objective,
         plan=plan,
         idempotency_key=idempotency_key,
+        traffic_cohort=actor.traffic_cohort,
+        rollout_eligible=eligible,
     )
 
 
-def _record_history_rollout(runtime, *, started_at: float, status: str, trace_id: str | None) -> None:
-    from agent_runtime.context import RuntimeV2Settings
+def _record_history_rollout(runtime, *, actor: Actor, started_at: float, status: str, trace_id: str | None) -> None:
+    from agent_runtime.context import RuntimeV2Settings, rollout_eligibility
+    from agent_runtime.models import default_data_scope
     from agent_runtime.rollout_observations import try_record_rollout_observation
 
     settings = RuntimeV2Settings.from_env()
+    data_scope = default_data_scope()
+    eligible, reason = rollout_eligibility(actor, data_scope)
     runtime_mode = "control" if runtime is None else ("shadow" if settings.shadow_mode else "active")
     try_record_rollout_observation(
         agent_type="history_character",
@@ -175,6 +182,10 @@ def _record_history_rollout(runtime, *, started_at: float, status: str, trace_id
         status=status,
         latency_ms=round((time.monotonic() - started_at) * 1000),
         trace_id=trace_id,
+        data_scope=data_scope,
+        traffic_cohort=actor.traffic_cohort,
+        rollout_eligible=eligible,
+        eligibility_reason=reason,
     )
 
 
@@ -260,7 +271,7 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
             )
             replay = runtime.replay_output() if runtime and runtime.replay else None
             if replay is not None:
-                _record_history_rollout(runtime, started_at=started_at, status="idempotent_replay", trace_id=current_trace_id())
+                _record_history_rollout(runtime, actor=actor, started_at=started_at, status="idempotent_replay", trace_id=current_trace_id())
                 return replay
             try:
                 execution_run_id = runtime.run_id if runtime else f"ephemeral_{uuid4().hex}"
@@ -294,7 +305,7 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
             except Exception as exc:
                 if runtime:
                     runtime.fail(exc)
-                _record_history_rollout(runtime, started_at=started_at, status="failed", trace_id=current_trace_id())
+                _record_history_rollout(runtime, actor=actor, started_at=started_at, status="failed", trace_id=current_trace_id())
                 raise
             if session_key and final.get("response"):
                 save_messages(session_key, history + [
@@ -302,7 +313,7 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
                     {"role": "assistant", "content": final["response"]},
                 ])
             record_event_if_student(req.student_id, session_id=req.session_id, feature="history_character", event_type="character_chat", grade=req.grade, topic=req.character, success=bool(final.get("verified")), metadata={"character": req.character, "mode": mode, "verified": final.get("verified", False)})
-            _record_history_rollout(runtime, started_at=started_at, status="completed" if final.get("verified") else "partial", trace_id=current_trace_id())
+            _record_history_rollout(runtime, actor=actor, started_at=started_at, status="completed" if final.get("verified") else "partial", trace_id=current_trace_id())
             return final
 
     async def event_stream():
@@ -327,7 +338,7 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
                 replay = runtime.replay_output() if runtime and runtime.replay else None
                 if replay is not None:
                     yield sse_frame("final", replay)
-                    _record_history_rollout(runtime, started_at=started_at, status="idempotent_replay", trace_id=trace_id)
+                    _record_history_rollout(runtime, actor=actor, started_at=started_at, status="idempotent_replay", trace_id=trace_id)
                     return
                 if runtime:
                     yield sse_frame("run_started", {"run_id": runtime.run_id, "event_cursor": runtime.milestone("tool_started", {"operation": "history.retrieve"})})
@@ -383,14 +394,14 @@ async def character_chat(req: CharacterRequest, actor: Actor = Depends(require_a
                     history2.append({"role": "assistant", "content": final_response})
                     save_messages(session_key, history2)
                 if final_data is not None:
-                    _record_history_rollout(runtime, started_at=started_at, status="completed" if final_data.get("verified") else "partial", trace_id=trace_id)
+                    _record_history_rollout(runtime, actor=actor, started_at=started_at, status="completed" if final_data.get("verified") else "partial", trace_id=trace_id)
             except HTTPException as exc:
-                _record_history_rollout(runtime, started_at=started_at, status="expected_control", trace_id=trace_id)
+                _record_history_rollout(runtime, actor=actor, started_at=started_at, status="expected_control", trace_id=trace_id)
                 yield sse_frame("error", {"message": exc.detail})
             except Exception as exc:
                 if runtime:
                     runtime.fail(exc)
-                _record_history_rollout(runtime, started_at=started_at, status="failed", trace_id=trace_id)
+                _record_history_rollout(runtime, actor=actor, started_at=started_at, status="failed", trace_id=trace_id)
                 yield sse_frame("error", {"message": str(exc) or "stream failed"})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

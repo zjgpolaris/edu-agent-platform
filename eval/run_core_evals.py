@@ -150,6 +150,7 @@ CORE_SUITES = [
     "agent_runtime_latency_baseline_smoke",
     "rollout_evidence_supply_chain_smoke",
     "runtime_evidence_workflow_smoke",
+    "production_auth_trusted_rollout_smoke",
     "agent_runtime_non_tool_policy_smoke",
     "agent_runtime_learning_assistant_api_smoke",
 ]
@@ -219,6 +220,7 @@ QUICK_SUITES = [
     "agent_runtime_latency_baseline_smoke",
     "rollout_evidence_supply_chain_smoke",
     "runtime_evidence_workflow_smoke",
+    "production_auth_trusted_rollout_smoke",
     "agent_runtime_non_tool_policy_smoke",
     "agent_runtime_learning_assistant_api_smoke",
     # LLM/embed-dependent (skipped gracefully when credentials absent)
@@ -313,6 +315,7 @@ SMOKE_SUITES = [
     "agent_runtime_latency_baseline_smoke",
     "rollout_evidence_supply_chain_smoke",
     "runtime_evidence_workflow_smoke",
+    "production_auth_trusted_rollout_smoke",
     "agent_runtime_learning_assistant_api_smoke",
 ]
 SUITE_FILES = {
@@ -408,6 +411,7 @@ SUITE_FILES = {
     "agent_runtime_latency_baseline_smoke": EVAL_DIR / "agent_runtime_latency_baseline_smoke.py",
     "rollout_evidence_supply_chain_smoke": EVAL_DIR / "rollout_evidence_supply_chain_smoke.py",
     "runtime_evidence_workflow_smoke": EVAL_DIR / "runtime_evidence_workflow_smoke.py",
+    "production_auth_trusted_rollout_smoke": EVAL_DIR / "production_auth_trusted_rollout_smoke.py",
     "agent_runtime_non_tool_policy_smoke": EVAL_DIR / "agent_runtime_non_tool_policy_smoke.py",
     "agent_runtime_learning_assistant_api_smoke": EVAL_DIR / "agent_runtime_learning_assistant_api_smoke.py",
     "production_rag_health_smoke": EVAL_DIR / "production_rag_health_smoke.py",
@@ -869,6 +873,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     "runtime_evidence_workflow_smoke": {
         "label": "Runtime 发布证据工作流 Smoke",
         "category": "observability",
+        "kind": "smoke",
+        "priority": "p0",
+    },
+    "production_auth_trusted_rollout_smoke": {
+        "label": "生产认证与可信灰度 Smoke",
+        "category": "security",
         "kind": "smoke",
         "priority": "p0",
     },

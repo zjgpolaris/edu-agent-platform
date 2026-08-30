@@ -59,6 +59,8 @@ class AgentContext(BaseModel):
     durability_mode: DurabilityMode
     config_version: str = Field(min_length=1, max_length=120)
     rollout_bucket: int | None = Field(default=None, ge=0, le=9999)
+    traffic_cohort: Literal["demo", "unverified", "verified", "operator", "legacy_untrusted"] = "unverified"
+    rollout_eligible: bool = False
     locale: str = Field(default="zh-CN", max_length=24)
 
     @model_validator(mode="after")

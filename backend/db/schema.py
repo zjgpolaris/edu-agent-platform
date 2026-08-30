@@ -139,7 +139,12 @@ accounts = Table(
     Column("role", Text, nullable=False),
     Column("display_name", Text),
     Column("created_at", Text, nullable=False),
+    Column("account_status", Text, nullable=False, server_default="active"),
+    Column("traffic_cohort", Text, nullable=False, server_default="unverified"),
+    Column("updated_at", Text, nullable=False, server_default=""),
     CheckConstraint("role IN ('student','teacher','admin')", name="ck_accounts_role"),
+    CheckConstraint("account_status IN ('active','disabled')", name="ck_accounts_status"),
+    CheckConstraint("traffic_cohort IN ('demo','unverified','verified','operator')", name="ck_accounts_cohort"),
 )
 
 audit_events = Table(
@@ -496,9 +501,13 @@ agent_rollout_observations = Table(
     Column("latency_ms", Integer, nullable=False),
     Column("trace_id", Text),
     Column("data_scope", Text, nullable=False, server_default="runtime"),
+    Column("traffic_cohort", Text, nullable=False, server_default="legacy_untrusted"),
+    Column("rollout_eligible", Integer, nullable=False, server_default="0"),
+    Column("eligibility_reason", Text, nullable=False, server_default="legacy_untrusted"),
     Column("created_at", Text, nullable=False),
     Index("idx_rollout_observation_slice_created", "agent_type", "config_version", "runtime_mode", "data_scope", "created_at"),
     Index("idx_rollout_observation_commit_created", "deployed_commit", "created_at"),
+    Index("idx_rollout_observation_eligibility", "rollout_eligible", "eligibility_reason", "created_at"),
 )
 
 agent_release_evidence = Table(

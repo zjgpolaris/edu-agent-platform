@@ -82,7 +82,8 @@ jobs:
 
       - name: Run read-only Shadow preflight
         env:
-          API_TOKEN: ${{ secrets.API_TOKEN }}
+          RUNTIME_ADMIN_USERNAME: ${{ secrets.RUNTIME_ADMIN_USERNAME }}
+          RUNTIME_ADMIN_PASSWORD: ${{ secrets.RUNTIME_ADMIN_PASSWORD }}
           EDU_AGENT_DEPLOYED_COMMIT: ${{ inputs.deployed_commit }}
           EDU_AGENT_ENVIRONMENT: production
           EDU_AGENT_RUNTIME_V2_ENABLED: 'true'
@@ -108,7 +109,15 @@ jobs:
           PYTHONPATH: backend
         run: |
           status_url="${READY_URL%/api/ready}/api/admin/agent-runtime/rollout-status?agent_type=history_character&minimum_samples=${EDU_AGENT_RUNTIME_ROLLOUT_MIN_TERMINAL_RUNS}"
+          auth_url="${READY_URL%/api/ready}/api/auth/login"
           mkdir -p /tmp/runtime-preflight
+          login_response="$(curl --fail-with-body --silent --show-error \
+            -H 'Content-Type: application/json' \
+            --data "$(python3 -c 'import json,os; print(json.dumps({"username":os.environ["RUNTIME_ADMIN_USERNAME"],"password":os.environ["RUNTIME_ADMIN_PASSWORD"]}))')" \
+            "$auth_url")"
+          API_TOKEN="$(LOGIN_RESPONSE="$login_response" python3 -c 'import json,os; p=json.loads(os.environ["LOGIN_RESPONSE"]); assert p.get("role")=="admin"; print(p["token"])')"
+          echo "::add-mask::$API_TOKEN"
+          export API_TOKEN
           python3 scripts/validate_runtime_rollout_config.py \
             --phase shadow \
             --agent-type history_character \

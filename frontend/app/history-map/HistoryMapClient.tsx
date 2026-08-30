@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { apiUrl } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { authHeaders } from "@/lib/auth";
+import { fetchSSE } from "@/lib/sse";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -87,6 +90,7 @@ interface GeoEvent {
 }
 
 export default function HistoryMapClient() {
+  const { user } = useAuth();
   const [events, setEvents] = useState<GeoEvent[]>([]);
   const [selectedDynasty, setSelectedDynasty] = useState(DYNASTIES[0].name);
   const [selectedEvent, setSelectedEvent] = useState<GeoEvent | null>(null);
@@ -100,7 +104,7 @@ export default function HistoryMapClient() {
   const [chatInput, setChatInput] = useState("");
   const [chatResponse, setChatResponse] = useState("");
 
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const eventSourceRef = useRef<AbortController | null>(null);
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
   const narrationRef = useRef("");
 
@@ -112,9 +116,21 @@ export default function HistoryMapClient() {
 
   useEffect(() => {
     return () => {
-      eventSourceRef.current?.close();
+      eventSourceRef.current?.abort();
     };
   }, []);
+
+  const fetchEvents = useCallback(async (dynasty: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/history/geo/events?dynasty=${encodeURIComponent(dynasty)}`), {
+        headers: user?.token ? authHeaders(user.token) : undefined,
+      });
+      const data = await res.json();
+      setEvents(data.events || []);
+    } catch {
+      // keep existing events on fetch error
+    }
+  }, [user?.token]);
 
   // 自动播放时间轴
   useEffect(() => {
@@ -148,17 +164,7 @@ export default function HistoryMapClient() {
 
   useEffect(() => {
     fetchEvents(selectedDynasty);
-  }, [selectedDynasty]);
-
-  const fetchEvents = async (dynasty: string) => {
-    try {
-      const res = await fetch(apiUrl(`/api/history/geo/events?dynasty=${encodeURIComponent(dynasty)}`));
-      const data = await res.json();
-      setEvents(data.events || []);
-    } catch {
-      // keep existing events on fetch error
-    }
-  };
+  }, [fetchEvents, selectedDynasty]);
 
   const handleEventClick = (event: GeoEvent) => {
     setSelectedEvent(event);
@@ -171,16 +177,15 @@ export default function HistoryMapClient() {
     setIsAutoPlay(false); // 点击事件时暂停自动播放
 
     if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+      eventSourceRef.current.abort();
     }
-
-    const source = new EventSource(
-      apiUrl(`/api/history/geo/narrate?event_id=${event.id}`)
-    );
-    eventSourceRef.current = source;
-
-    source.onmessage = (e) => {
-      const data = JSON.parse(e.data);
+    const controller = new AbortController();
+    eventSourceRef.current = controller;
+    void fetchSSE(apiUrl(`/api/history/geo/narrate?event_id=${event.id}`), {
+      token: user?.token,
+      signal: controller.signal,
+      onMessage: (message) => {
+      const data = JSON.parse(message);
       if (data.event === "delta") {
         setNarration((prev) => {
           const next = prev + data.data.text;
@@ -197,19 +202,18 @@ export default function HistoryMapClient() {
           setMapCenter([action.lat, action.lng]);
           setMapZoom(action.zoom || 6);
         }
-        source.close();
+        controller.abort();
       } else if (data.event === "error") {
         const message = data.data?.message || "地图讲解暂不可用，请稍后重试。";
         narrationRef.current = message;
         setNarration(message);
-        source.close();
+        controller.abort();
       }
-    };
-
-    source.onerror = () => {
+    }}).catch(() => {
+      if (controller.signal.aborted) return;
       if (!narrationRef.current) setNarration("加载失败，请点击其他事件重试。");
-      source.close();
-    };
+      controller.abort();
+    });
   };
 
   const handleRelatedClick = (eventId: string) => {

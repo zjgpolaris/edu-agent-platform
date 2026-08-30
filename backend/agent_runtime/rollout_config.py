@@ -132,6 +132,12 @@ def validate_runtime_rollout_config(
         if environment == "production" and minimum < 100:
             errors.append("production_minimum_samples_below_100")
         if online_status is not None:
+            auth = online_status.get("auth_configuration") if isinstance(online_status.get("auth_configuration"), Mapping) else {}
+            if environment == "production" and not bool(auth.get("ok")):
+                errors.append("production_auth_configuration_invalid")
+            cohort = online_status.get("trusted_cohort") if isinstance(online_status.get("trusted_cohort"), Mapping) else {}
+            if environment == "production" and not bool(cohort.get("ready")):
+                errors.append("trusted_cohort_missing")
             deployment = online_status.get("deployment") if isinstance(online_status.get("deployment"), Mapping) else {}
             online_commit = str(deployment.get("commit") or "")
             if online_commit and commit and online_commit != commit:

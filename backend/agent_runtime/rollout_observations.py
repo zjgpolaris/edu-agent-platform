@@ -16,6 +16,11 @@ from deployment import deployed_commit, deployment_environment, runtime_config_v
 
 VALID_MODES = {"control", "shadow", "active"}
 VALID_SCOPES = {"runtime", "eval", "demo"}
+VALID_COHORTS = {"demo", "unverified", "verified", "operator", "anonymous", "legacy_untrusted"}
+VALID_ELIGIBILITY_REASONS = {
+    "verified_runtime_actor", "demo_actor", "unverified_actor", "operator_actor",
+    "eval_scope", "demo_scope", "anonymous_actor", "legacy_untrusted",
+}
 BASELINE_STATUSES = {"completed", "partial", "failed"}
 OBSERVATION_FAILURE_ACTION = "agent_runtime.rollout_observation_write_failed"
 _failure_audit_lock = threading.Lock()
@@ -53,6 +58,9 @@ def record_rollout_observation(
     config_version: str | None = None,
     deployed_commit: str | None = None,
     environment: str | None = None,
+    traffic_cohort: str | None = None,
+    rollout_eligible: bool | None = None,
+    eligibility_reason: str | None = None,
 ) -> str:
     if runtime_mode not in VALID_MODES:
         raise ValueError("runtime_mode must be control, shadow or active")
@@ -65,6 +73,17 @@ def record_rollout_observation(
         scope = "demo"
     if scope not in VALID_SCOPES:
         scope = "runtime"
+    cohort = str(traffic_cohort or ("verified" if deployment_environment() != "production" else "legacy_untrusted"))
+    if cohort not in VALID_COHORTS:
+        cohort = "legacy_untrusted"
+    if rollout_eligible is None:
+        rollout_eligible = deployment_environment() != "production" and scope == "runtime"
+    reason = str(eligibility_reason or ("verified_runtime_actor" if rollout_eligible else "legacy_untrusted"))
+    if reason not in VALID_ELIGIBILITY_REASONS:
+        reason = "legacy_untrusted"
+    if scope != "runtime":
+        rollout_eligible = False
+        reason = "eval_scope" if scope == "eval" else "demo_scope"
     if not config or not commit:
         raise ValueError("deployment commit and runtime config version are required")
     observation_id = f"obs_{uuid4().hex}"
@@ -74,9 +93,11 @@ def record_rollout_observation(
         conn.execute(text("""INSERT INTO agent_rollout_observations (
             observation_id, agent_type, config_version, runtime_mode, deployed_commit,
             environment, status, latency_ms, trace_id, data_scope, created_at
+            , traffic_cohort, rollout_eligible, eligibility_reason
         ) VALUES (
             :observation_id, :agent_type, :config_version, :runtime_mode, :deployed_commit,
             :environment, :status, :latency_ms, :trace_id, :data_scope, :created_at
+            , :traffic_cohort, :rollout_eligible, :eligibility_reason
         )"""), {
             "observation_id": observation_id,
             "agent_type": agent_type[:80],
@@ -89,6 +110,9 @@ def record_rollout_observation(
             "trace_id": trace_id[:160] if trace_id else None,
             "data_scope": scope,
             "created_at": _now(),
+            "traffic_cohort": cohort,
+            "rollout_eligible": 1 if rollout_eligible else 0,
+            "eligibility_reason": reason,
         })
     return observation_id
 
@@ -179,7 +203,7 @@ def aggregate_control_baseline(
         rows = conn.execute(text("""SELECT latency_ms, status, created_at FROM agent_rollout_observations
             WHERE agent_type=:agent_type AND config_version=:config_version
               AND runtime_mode='control' AND deployed_commit=:deployed_commit
-              AND environment=:environment AND data_scope=:data_scope
+              AND environment=:environment AND data_scope=:data_scope AND rollout_eligible=1
             ORDER BY created_at ASC"""), {
                 "agent_type": agent_type,
                 "config_version": config_version,
@@ -200,6 +224,7 @@ def aggregate_control_baseline(
         "p50_ms": _percentile(durations, 0.50),
         "p95_ms": _percentile(durations, 0.95),
         "source": "server_trace_aggregate",
+        "trust_contract": "verified-cohort-v1",
         "observed_from": included_rows[0]["created_at"],
         "observed_to": included_rows[-1]["created_at"],
     }
@@ -221,23 +246,39 @@ def control_observation_progress(
         rows = conn.execute(text("""SELECT latency_ms, status, created_at FROM agent_rollout_observations
             WHERE agent_type=:agent_type AND config_version=:config_version
               AND runtime_mode='control' AND deployed_commit=:deployed_commit
-              AND environment=:environment AND data_scope=:data_scope
+              AND environment=:environment AND data_scope=:data_scope AND rollout_eligible=1
             ORDER BY created_at ASC"""), {
                 "agent_type": agent_type,
                 "config_version": config_version,
                 "deployed_commit": deployed_commit,
                 "environment": environment,
                 "data_scope": data_scope,
-            }).mappings().all()
+        }).mappings().all()
+        excluded_rows = conn.execute(text("""SELECT eligibility_reason, COUNT(*) AS count
+            FROM agent_rollout_observations
+            WHERE agent_type=:agent_type AND config_version=:config_version
+              AND runtime_mode='control' AND deployed_commit=:deployed_commit
+              AND environment=:environment AND rollout_eligible=0
+            GROUP BY eligibility_reason"""), {
+            "agent_type": agent_type,
+            "config_version": config_version,
+            "deployed_commit": deployed_commit,
+            "environment": environment,
+        }).mappings().all()
     included = [row for row in rows if str(row["status"]) in BASELINE_STATUSES]
     durations = [int(row["latency_ms"]) for row in included]
     required = max(1, int(minimum_samples))
+    excluded_by_reason = {str(row["eligibility_reason"]): int(row["count"] or 0) for row in excluded_rows}
+    excluded_samples = sum(excluded_by_reason.values())
     return {
         "commit": deployed_commit or None,
         "config_version": config_version or None,
         "environment": environment or None,
         "terminal_samples": len(included),
         "minimum_samples": required,
+        "observed_total": len(included) + excluded_samples,
+        "excluded_samples": excluded_samples,
+        "excluded_by_reason": excluded_by_reason,
         "sample_sufficient": len(included) >= required,
         "baseline_ready": len(included) >= required and bool(durations),
         "p50_ms": _percentile(durations, 0.50),

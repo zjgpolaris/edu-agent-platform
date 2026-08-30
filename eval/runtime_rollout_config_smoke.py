@@ -59,6 +59,8 @@ def main() -> None:
     assert control.ok, control.as_dict()
 
     status = {
+        "auth_configuration": {"ok": True},
+        "trusted_cohort": {"ready": True, "verified_actor_count": 1},
         "deployment": {"commit": COMMIT},
         "control": {"terminal_samples": 100},
         "safety": {"observation_write_failures": 0},
