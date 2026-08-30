@@ -29,7 +29,7 @@ def main() -> None:
             "[史料3] 商鞅变法确立县制，废除贵族世袭特权，改革户籍制度，严明法度。",
         ],
         "mode": "factual",
-    }, "anthropic credentials are not configured")
+    }, "provider credentials are not configured")
     assert "核心目标是让秦国富强起来" in fallback, fallback
     assert "县制" in fallback and "贵族世袭特权" in fallback, fallback
     assert "[史料1]" in fallback and "[史料3]" in fallback, fallback

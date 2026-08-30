@@ -1,5 +1,7 @@
 # 初中历史小游戏模块开发文档
 
+> 历史实现说明：本文中的旧 LLM 传输描述已由 `docs/20260830-llm-provider-langchain-migration-v144-spec.md` 替代。
+
 > 日期：2026-06-04 | 项目：edu-agent-platform | 第一阶段实现：历史时间线闯关
 
 ---

@@ -26,6 +26,7 @@ def main() -> None:
         "python": platform.python_version(),
         "node": _command_version("node", "--version"),
         "npm": _command_version("npm", "--version"),
+        "langchain_openai": _package("langchain-openai"),
         "langgraph": _package("langgraph"),
         "pydantic": _package("pydantic"),
         "fastapi": _package("fastapi"),
@@ -35,6 +36,9 @@ def main() -> None:
     langgraph = payload["langgraph"]
     if langgraph is None or tuple(int(part) for part in langgraph.split(".")[:2]) != (1, 2):
         failures.append("langgraph_must_be_1.2.x")
+    langchain_openai = payload["langchain_openai"]
+    if langchain_openai is None or int(langchain_openai.split(".")[0]) != 1:
+        failures.append("langchain_openai_must_be_v1")
     pydantic = payload["pydantic"]
     if pydantic is None or int(pydantic.split(".")[0]) != 2:
         failures.append("pydantic_must_be_v2")

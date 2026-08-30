@@ -1,12 +1,21 @@
-"""从 PDF 提取原文，用 Claude API 生成知识库条目并合并到 corpus.json。
+"""从 PDF 提取原文，用统一百炼 LLM 入口生成知识库条目并合并到 corpus.json。
 用法: python3 scripts/pdf_to_yaml.py --grade 七上
 """
-import os, re, json, time, argparse, subprocess
+import argparse
+import json
+import re
+import sys
+import time
 from pathlib import Path
+
 import fitz
 
-BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "").rstrip("/")
-API_KEY = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+ROOT = Path(__file__).resolve().parents[1]
+BACKEND = ROOT / "backend"
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+
+from llm_config import llm_material  # noqa: E402
 
 PDF_MAP = {
     "七上": ("textbooks/raw/义务教育教科书·历史七年级上册.pdf", "七年级上", "中国历史七年级上册（人教版）"),
@@ -50,35 +59,14 @@ def make_chunks(pages: list[tuple[int, str]], max_chars: int = 3500) -> list[str
 
 
 def call_api(text: str) -> str:
-    payload = json.dumps({
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 4000,
-        "system": SYSTEM,
-        "messages": [{"role": "user", "content": USER_TMPL.format(text=text)}],
-    }, ensure_ascii=False)
-    result = subprocess.run(
-        ["curl", "-s", "--noproxy", "*", "--max-time", "120",
-         "-X", "POST", f"{BASE_URL}/v1/messages",
-         "-H", f"x-api-key: {API_KEY}",
-         "-H", "anthropic-version: 2023-06-01",
-         "-H", "content-type: application/json",
-         "-d", payload],
-        capture_output=True, text=True, timeout=130,
+    response = llm_material.invoke(
+        [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": USER_TMPL.format(text=text)},
+        ],
+        max_retries=1,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"curl: {result.stderr}")
-    parts = []
-    for line in result.stdout.splitlines():
-        if line.startswith("data: "):
-            try:
-                d = json.loads(line[6:])
-                if d.get("type") == "content_block_delta":
-                    parts.append(d["delta"].get("text", ""))
-            except json.JSONDecodeError:
-                pass
-    if not parts:
-        raise RuntimeError(f"empty: {result.stdout[:100]}")
-    return "".join(parts).strip()
+    return response.content.strip()
 
 
 def parse_response(raw: str, grade: str, book: str) -> list[dict]:
@@ -128,7 +116,7 @@ def main():
     args = ap.parse_args()
 
     pdf_rel, grade_label, book_label = PDF_MAP[args.grade]
-    root = Path(__file__).parent.parent
+    root = ROOT
     pdf_path = root / pdf_rel
     corpus_path = root / "knowledge_base/history/corpus.json"
     done_marker = root / "textbooks/structured" / f"{args.grade}.yaml"

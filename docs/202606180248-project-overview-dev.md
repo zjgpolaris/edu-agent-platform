@@ -1,6 +1,6 @@
 # EduAgent 项目开发文档
 
-**更新日期**: 2026-06-18
+**更新日期**: 2026-08-30
 
 ---
 
@@ -19,7 +19,7 @@ EduAgent 是面向初中的 AI 教学平台，当前以历史/语文科目为主
 | 前端 | Next.js 14 App Router · TypeScript strict |
 | 后端 | FastAPI · Python 3.12 |
 | Agent 框架 | LangGraph 状态图 |
-| LLM 调用 | `backend/llm_config.py` → `zode_client.js`（支持 Anthropic / Bailian / DashScope）|
+| LLM 调用 | `backend/llm_config.py` → `backend/llm/` → LangChain `ChatOpenAI` → 百炼 |
 | RAG | Chroma + BGE-large-zh-v1.5（CPU）|
 | Session 存储 | Redis（优先）/ 内存 fallback |
 | 追踪 | Langfuse（`backend/tracing.py`）|
@@ -127,14 +127,15 @@ EduAgent 是面向初中的 AI 教学平台，当前以历史/语文科目为主
 通过 `.env.local` 配置：
 
 ```
-LLM_PROVIDER=anthropic | bailian | dashscope
-ANTHROPIC_API_KEY=...
-LLM_MODEL_FAST=claude-haiku-4-5-20251001
-LLM_MODEL_QUALITY=claude-sonnet-4-6
-LLM_MODEL_REASONING=claude-opus-4-6
+LLM_PROVIDER=bailian
+BAILIAN_API_KEY=...
+BAILIAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+LLM_MODEL_FAST=qwen3.6-35b-a3b
+LLM_MODEL_QUALITY=qwen3.7-plus
+LLM_MODEL_REASONING=qwen3.7-max-2026-06-08
 ```
 
-调用链：`llm_config.py` → `zode_client.js`（Node 子进程）
+调用链：`llm_config.py` 兼容 facade → `backend/llm/` Profile Registry → `ChatOpenAI` → 百炼。后端不需要 Node.js，不允许隐式跨 Provider fallback。
 
 ---
 

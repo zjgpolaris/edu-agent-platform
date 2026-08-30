@@ -133,7 +133,7 @@ def stream_map_narrate(event_id: str, user_query: str = "") -> Iterator[dict[str
     generation_error = None
     fallback_used = False
     try:
-        for chunk in llm.stream([{"role": "user", "content": narrate_prompt}]):
+        for chunk in llm.stream_text([{"role": "user", "content": narrate_prompt}]):
             full_text.append(chunk)
             yield {"event": "delta", "data": {"text": chunk}}
     except Exception as exc:

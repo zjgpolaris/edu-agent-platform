@@ -49,7 +49,8 @@ edu-agent-platform/
 │   ├── utils/                 # 工具函数
 │   ├── agent_ops.py           # Agent 运维
 │   ├── game_store.py          # 游戏状态存储
-│   ├── llm_config.py          # LLM 配置
+│   ├── llm/                   # LangChain Provider、Profile Registry、能力探测
+│   ├── llm_config.py          # LLM 兼容 facade
 │   ├── mcp_server.py          # stdio MCP 工具协议适配
 │   ├── session_store.py       # 会话存储
 │   ├── student_profile.py     # 学生档案
@@ -57,7 +58,6 @@ edu-agent-platform/
 │   ├── tracing.py             # 链路追踪
 │   ├── trace_store.py         # Trace 存储与可视化
 │   ├── user_memory.py         # 用户记忆
-│   └── zode_client.js         # Node.js LLM 客户端
 │
 ├── frontend/                  # 前端应用
 │   ├── app/                   # Next.js App Router
@@ -195,14 +195,14 @@ backend/
 │
 ├── agent_ops.py               # Agent 运维
 ├── game_store.py              # 游戏状态存储
-├── llm_config.py              # LLM 配置
+├── llm/                       # LangChain Provider、Profile Registry、能力探测
+├── llm_config.py              # LLM 兼容 facade
 ├── mcp_server.py              # stdio MCP 工具协议适配
 ├── session_store.py           # 会话存储
 ├── student_profile.py         # 学生档案
 ├── structured_output.py       # 结构化输出
 ├── tracing.py                 # 链路追踪
 ├── user_memory.py             # 用户记忆
-└── zode_client.js             # Node.js LLM 客户端
 ```
 
 ### 核心模块说明
@@ -1012,7 +1012,7 @@ docs/YYYYMMDDHHMM-feature-name-dev.md
 | `scripts/release_gate.py` | 发布前统一闸门：Python 语法检查、后端 smoke/关键 smoke、前端 build；默认 PR CI 主门禁复用该入口，可选生产 RAG smoke；配合 `/api/ready` 做线上浅 readiness 检查 |
 | `scripts/build_pgvector_index.py` | 离线构建历史 RAG pgvector 索引（corpus.json → OpenAI-compatible embedding → rag_documents） |
 
-关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）、`ANTHROPIC_AUTH_TOKEN` 等 LLM 凭证。v1.29 随问灰度变量为 `EDU_AGENT_ASSISTANT_SEMANTIC_ROUTER_ENABLED=false`、`EDU_AGENT_ASSISTANT_ROUTER_SHADOW_MODE=true`、`EDU_AGENT_ASSISTANT_ROUTER_CONFIDENCE_THRESHOLD=0.65`、`EDU_AGENT_ASSISTANT_PLANNER_ENABLED=false`；评测 runner 自动设置内部 `EDU_AGENT_DATA_SCOPE=eval`，AgentOps 只用 `runtime` 事件计算生产 readiness，另行展示 eval/demo 计数。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。默认 PR CI 不要求生产 `API_BASE`、线上 RAG、真实 LLM deep health 或生产认证；production smoke / `npm run release:gate:prod` / 手动 `production-readiness` 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
+关键环境变量：`NEXT_PUBLIC_API_BASE_URL`（前端→后端）、`FRONTEND_ORIGIN`（后端 CORS 放行自定义域名，`*.vercel.app` 已由正则放行）、`DATABASE_URL`/`DIRECT_URL`、`BAILIAN_API_KEY`/`BAILIAN_BASE_URL`、`LLM_MODEL_*`、`LLM_REQUEST_TIMEOUT_SECONDS`、`EMBED_API_BASE`（Render 默认 Jina `https://api.jina.ai/v1`）、`EMBED_API_KEY`、`EMBED_MODEL`（Render 默认 `jina-embeddings-v3`）、`EMBED_TASK`（Jina 使用 `text-matching`）、`EMBED_DIM`（默认 `1024`）等。v1.29 随问灰度变量为 `EDU_AGENT_ASSISTANT_SEMANTIC_ROUTER_ENABLED=false`、`EDU_AGENT_ASSISTANT_ROUTER_SHADOW_MODE=true`、`EDU_AGENT_ASSISTANT_ROUTER_CONFIDENCE_THRESHOLD=0.65`、`EDU_AGENT_ASSISTANT_PLANNER_ENABLED=false`；评测 runner 自动设置内部 `EDU_AGENT_DATA_SCOPE=eval`，AgentOps 只用 `runtime` 事件计算生产 readiness，另行展示 eval/demo 计数。生产 RAG 使用托管 embedding + pgvector；未建索引或 embedding API 不可用时，人物对话/游戏/学习助手走降级路径。默认 PR CI 不要求生产 `API_BASE`、线上 RAG、真实 LLM deep health 或生产认证；production smoke / `npm run release:gate:prod` / 手动 `production-readiness` 使用的 `API_BASE`、`API_TOKEN`/`AUTH_TOKEN`、`SMOKE_USERNAME`、`SMOKE_PASSWORD`、`RAG_HEALTH_COLLECTION` 是验收脚本环境变量，不是必须写入 Render 的应用环境变量。
 
 ---
 

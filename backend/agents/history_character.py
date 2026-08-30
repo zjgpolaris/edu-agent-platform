@@ -680,7 +680,7 @@ def stream_character_response(state: CharacterState, rag_retriever) -> Iterator[
     draft_parts = []
     generation_error = None
     try:
-        for chunk in llm.stream(build_generation_messages(state)):
+        for chunk in llm.stream_text(build_generation_messages(state)):
             draft_parts.append(chunk)
             yield {"event": "delta", "data": {"text": chunk}}
     except Exception as exc:

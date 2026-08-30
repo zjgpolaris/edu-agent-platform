@@ -15,7 +15,7 @@ try:
     from ragas import evaluate
     from ragas.metrics import faithfulness, answer_relevancy, context_recall
     from ragas.dataset import Dataset as RagasDataset
-    from langchain_anthropic import ChatAnthropic
+    from langchain_openai import ChatOpenAI
     RAGAS_AVAILABLE = True
 except Exception as exc:
     RAGAS_AVAILABLE = False
@@ -68,22 +68,23 @@ def main() -> None:
     if not RAGAS_AVAILABLE:
         print("SKIP ragas_eval: ragas package not installed or import failed")
         print(f"Error: {_IMPORT_ERROR}")
-        print("Install with: pip install ragas>=0.2.0 langchain-anthropic>=0.3.0")
+        print("Install with: pip install ragas>=0.2.0 langchain-openai>=1.6.0")
         return
 
-    # Configure Ragas LLM judge (Anthropic)
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")
-    if not anthropic_key:
-        print("SKIP ragas_eval: ANTHROPIC_API_KEY not set for Ragas LLM judge")
+    # Configure the Ragas judge through the same explicit Bailian provider.
+    bailian_key = os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+    if not bailian_key:
+        print("SKIP ragas_eval: BAILIAN_API_KEY not set for Ragas LLM judge")
         return
 
     try:
         from ragas.llms import LangchainLLMWrapper
         judge_llm = LangchainLLMWrapper(
-            ChatAnthropic(
-                model=os.getenv("ANTHROPIC_MODEL_QUALITY", "claude-3-5-sonnet-20241022"),
-                api_key=anthropic_key,
-                base_url=os.getenv("ANTHROPIC_BASE_URL"),
+            ChatOpenAI(
+                model=os.getenv("LLM_MODEL_QUALITY", "qwen3.7-plus"),
+                api_key=bailian_key,
+                base_url=os.getenv("BAILIAN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+                max_retries=0,
             )
         )
         faithfulness.llm = judge_llm

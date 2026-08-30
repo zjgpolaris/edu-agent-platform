@@ -1,5 +1,7 @@
 # CI/CD + 自动 Eval 开发说明
 
+> 历史实现说明：本文中的旧 Provider 凭证判断已由 v1.44 百炼直连接入替代；当前真实 LLM eval 只读取百炼凭证。
+
 ## 背景
 
 本阶段将 EduAgent 已有的本地验证、Eval Dashboard、Trace-to-Eval 回归样本能力固化为自动化 CI 流程。当前主目标是把发布前统一闸门 `scripts/release_gate.py` 接入 GitHub Actions，让 PR / push 默认验证核心工程质量，并继续产出可下载的 eval report artifact。

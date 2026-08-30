@@ -56,12 +56,14 @@ Notes:
 
 ## Environment and LLM configuration
 
-Backend LLM calls go through `backend/llm_config.py`, which invokes `backend/zode_client.js` as a Node helper. The helper supports:
+Backend LLM calls go through the compatibility facade in `backend/llm_config.py` and the unified registry in `backend/llm/`. The runtime uses `langchain-openai` to call Bailian/DashScope directly from Python; the backend does not require Node.js.
 
-- Anthropic-compatible requests using `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY`, with optional `ANTHROPIC_BASE_URL`.
-- Bailian/DashScope OpenAI-compatible requests when `LLM_PROVIDER=bailian` or `LLM_PROVIDER=dashscope`, using `BAILIAN_API_KEY` or `DASHSCOPE_API_KEY` and optional `BAILIAN_BASE_URL`.
+- Set `LLM_PROVIDER=bailian` and `BAILIAN_API_KEY` (or the compatibility alias `DASHSCOPE_API_KEY`).
+- `BAILIAN_BASE_URL` defaults to the official OpenAI-compatible endpoint.
+- Profiles include `fast`, `quality`, `fallback`, `reasoning`, `multimodal`, `material`, and `card_pool`.
+- Existing code uses `llm_fast`/`llm_quality`; new LangGraph code can use `as_langchain()` when it needs the native model contract.
 
-Model environment variables include `LLM_MODEL_FAST`, `LLM_MODEL_QUALITY`, `LLM_MODEL_FALLBACK`, `LLM_MODEL_REASONING`, plus Anthropic defaults `ANTHROPIC_MODEL_FAST`, `ANTHROPIC_MODEL_QUALITY`, `ANTHROPIC_MODEL_FALLBACK`, and `ANTHROPIC_MODEL_REASONING`.
+Model environment variables include `LLM_MODEL_FAST`, `LLM_MODEL_QUALITY`, `LLM_MODEL_FALLBACK`, `LLM_MODEL_REASONING`, `LLM_MODEL_MULTIMODAL`, and `LLM_MODEL_MULTIMODAL_QUALITY`.
 
 ## Backend architecture
 

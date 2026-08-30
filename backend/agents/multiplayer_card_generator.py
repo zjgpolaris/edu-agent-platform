@@ -23,10 +23,8 @@ from agents.timeline_question_generator import (
     normalize_text,
     update_recent_event_ids,
 )
-from llm_config import MODEL_FALLBACK, MODEL_FAST, ZodeChatModel
+from llm_config import llm_card_pool
 from structured_output import StructuredOutputError, invoke_structured
-
-llm_card_pool = ZodeChatModel(MODEL_FAST, max_tokens=3072, fallback_models=[MODEL_FALLBACK])
 
 logger = logging.getLogger(__name__)
 FORBIDDEN_CLUE_TERMS = ("公元前", "公元", "世纪", "距今")

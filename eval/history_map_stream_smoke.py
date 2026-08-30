@@ -17,7 +17,7 @@ from api.main import app  # noqa: E402
 
 
 class UnavailableLlm:
-    def stream(self, _messages):
+    def stream_text(self, _messages):
         raise RuntimeError("provider credentials are not configured")
         yield ""  # pragma: no cover - keeps this method a generator
 

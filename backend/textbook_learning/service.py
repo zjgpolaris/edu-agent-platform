@@ -305,7 +305,7 @@ def stream_ask_events(req: TextbookAskRequest) -> Iterator[tuple[str, dict]]:
     generation_started = perf_counter()
     generation_error = None
     try:
-        for chunk in llm_quality.stream(messages):
+        for chunk in llm_quality.stream_text(messages):
             chunks.append(chunk)
             yield "delta", {"text": chunk}
     except Exception as exc:
@@ -353,7 +353,7 @@ def stream_summary_events(req: TextbookSummaryRequest) -> Iterator[tuple[str, di
     lesson = get_lesson(req.book_id, req.lesson_id)
     yield "status", {"phase": "generating", "message": "正在生成本课学习摘要"}
     chunks: list[str] = []
-    for chunk in llm_fast.stream(summary_messages(lesson, req.mode)):
+    for chunk in llm_fast.stream_text(summary_messages(lesson, req.mode)):
         chunks.append(chunk)
         yield "delta", {"text": chunk}
     response = "".join(chunks).strip()

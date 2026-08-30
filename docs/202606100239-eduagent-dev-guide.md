@@ -1,6 +1,6 @@
 # EduAgent 开发文档
 
-> 版本：2026-06-10 | 适用范围：本地开发、功能扩展、新成员上手
+> 版本：2026-08-30 | 适用范围：本地开发、功能扩展、新成员上手
 
 ---
 
@@ -27,7 +27,7 @@ EduAgent 是一个 K-12 历史/语文 AI 教学平台，核心能力为：
 | 前端 | Next.js 14 App Router, TypeScript strict |
 | 向量库 | Chroma + BGE-large-zh-v1.5 (CPU) |
 | 会话存储 | Redis（降级为内存，TTL 1h） |
-| LLM 调用 | `zode_client.js` Node 中间层（多 Provider） |
+| LLM 调用 | `backend/llm/` + LangChain `ChatOpenAI` 直连百炼 |
 
 ---
 
@@ -75,16 +75,15 @@ npm install --prefix frontend
 在项目根目录创建 `.env.local`：
 
 ```bash
-# LLM Provider（选其一）
-LLM_PROVIDER=anthropic          # 或 bailian / dashscope
-ANTHROPIC_AUTH_TOKEN=sk-ant-xxx
-# BAILIAN_API_KEY=xxx
-# DASHSCOPE_API_KEY=xxx
+# LLM Provider
+LLM_PROVIDER=bailian
+BAILIAN_API_KEY=your_bailian_key
+BAILIAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 
 # 可选：覆盖模型
-LLM_MODEL_FAST=claude-haiku-4-5-20251001
-LLM_MODEL_QUALITY=claude-opus-4-6
-LLM_MODEL_FALLBACK=claude-sonnet-4-6
+LLM_MODEL_FAST=qwen3.6-35b-a3b
+LLM_MODEL_QUALITY=qwen3.7-plus
+LLM_MODEL_FALLBACK=qwen3.7-max-2026-06-08
 ```
 
 ### 4.3 启动服务
@@ -225,17 +224,17 @@ YAML 格式参考 `textbooks/structured/README.md`。
 
 ## 8. LLM 配置
 
-`backend/llm_config.py` 通过 `zode_client.js` 调用 LLM，支持自动 fallback：
+`backend/llm_config.py` 是兼容 facade，实际通过 `backend/llm/` 的 Profile Registry 和 `langchain-openai` 直连百炼：
 
 ```
-主 Provider (LLM_PROVIDER)
-  └─ MODEL_FAST    → 意图识别、简单分类
-  └─ MODEL_QUALITY → 验证、最终生成
-  └─ MODEL_FALLBACK
-  └─ 若主 Provider 失败 → 自动切换到 Anthropic fallback
+业务模块
+  → llm_fast / llm_quality / llm_reasoning / llm_multimodal
+  → ManagedChatModel（重试、同 Provider 模型 fallback、Langfuse）
+  → ChatOpenAI
+  → 百炼 OpenAI-compatible API
 ```
 
-`ZodeChatModel` 使用 `_provider_model_chain()` 构建尝试链，按顺序逐个调用直到成功。
+配置使用 `LLM_PROVIDER=bailian`、`BAILIAN_API_KEY`、`BAILIAN_BASE_URL` 和 `LLM_MODEL_*`。流式业务调用 `stream_text()`；需要标准 LangChain 模型的 LangGraph 节点调用 `as_langchain()`。不再支持隐式跨 Provider fallback。
 
 ---
 

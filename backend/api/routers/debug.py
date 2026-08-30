@@ -11,7 +11,14 @@ from pydantic import BaseModel
 from security.auth import Actor, require_auth
 from tracing import current_trace_id, trace_context
 from trace_store import get_trace_store
-from llm_config import LLM_PROVIDER, MODEL_FALLBACK, MODEL_FAST, MODEL_QUALITY, llm_fast
+from llm_config import (
+    LLM_PROVIDER,
+    MODEL_FALLBACK,
+    MODEL_FAST,
+    MODEL_QUALITY,
+    llm_configuration_status,
+    llm_fast,
+)
 from rag.knowledge_base import check_rag_health
 from deployment import (
     auth_configuration_status,
@@ -88,17 +95,19 @@ async def api_ready(
     except Exception as exc:
         checks["database"] = {"ok": False, "error_type": exc.__class__.__name__, "reason": str(exc)[:300]}
 
+    llm_status = llm_configuration_status()
+    non_credential_errors = [error for error in llm_status.get("errors", []) if "API_KEY" not in error]
     checks["llm_config"] = {
-        "ok": bool(LLM_PROVIDER and MODEL_FAST and MODEL_QUALITY),
+        "ok": bool(LLM_PROVIDER and MODEL_FAST and MODEL_QUALITY) and not non_credential_errors,
         "provider": LLM_PROVIDER,
+        "transport": llm_status.get("transport"),
         "fast_model": MODEL_FAST,
         "quality_model": MODEL_QUALITY,
         "fallback_model": MODEL_FALLBACK,
         "mode": "shallow",
-        "credentials_configured": bool(
-            (LLM_PROVIDER in {"bailian", "dashscope"} and (os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")))
-            or (LLM_PROVIDER not in {"bailian", "dashscope"} and (os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY")))
-        ),
+        "credentials_configured": bool(llm_status.get("credentials_configured")),
+        "configuration_errors": non_credential_errors,
+        "profiles": llm_status.get("profiles", {}),
     }
 
     try:
@@ -264,7 +273,16 @@ async def get_trace(trace_id: str, actor: Actor = Depends(require_auth)):
 
 @router.get("/api/debug/llm/health")
 async def llm_health(deep: bool = False, actor: Actor = Depends(require_auth)):
-    config = {"provider": LLM_PROVIDER, "quality_model": MODEL_QUALITY, "fast_model": MODEL_FAST, "fallback_model": MODEL_FALLBACK}
+    status = llm_configuration_status()
+    config = {
+        "provider": LLM_PROVIDER,
+        "transport": status.get("transport"),
+        "quality_model": MODEL_QUALITY,
+        "fast_model": MODEL_FAST,
+        "fallback_model": MODEL_FALLBACK,
+        "credentials_configured": status.get("credentials_configured"),
+        "profiles": status.get("profiles", {}),
+    }
     if not deep:
         return {**config, "ok": True, "mode": "shallow", "message": "LLM config loaded; use ?deep=true to test provider connectivity"}
     with trace_context(name="GET /api/debug/llm/health", metadata=trace_meta("llm_health", "/api/debug/llm/health", stream=False)):

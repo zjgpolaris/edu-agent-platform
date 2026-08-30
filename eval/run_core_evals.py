@@ -72,6 +72,7 @@ DEDICATED_INTEGRATION_SUITES = {
 }
 
 CORE_SUITES = [
+    "llm_provider_contract_smoke",
     "eval_run_evidence_smoke",
     "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
@@ -357,6 +358,7 @@ SUITE_FILES = {
     "learning_closure_smoke": EVAL_DIR / "learning_closure_smoke.py",
     "teacher_features_smoke": EVAL_DIR / "teacher_features_smoke.py",
     "review_system_smoke": EVAL_DIR / "review_system_smoke.py",
+    "llm_provider_contract_smoke": EVAL_DIR / "llm_provider_contract_smoke.py",
     "adaptive_review_question_quality_eval": EVAL_DIR / "adaptive_review_question_quality_eval.py",
     "review_mastery_evidence_eval": EVAL_DIR / "review_mastery_evidence_eval.py",
     "review_retention_scheduler_smoke": EVAL_DIR / "review_retention_scheduler_smoke.py",
@@ -1543,8 +1545,8 @@ def build_json_summary(
         _metric_count(result, {"fallback_call_count", "fallback_calls"})
         for result in results
     )
-    provider = os.getenv("LLM_PROVIDER", "unknown").strip().lower() or "unknown"
-    model = os.getenv("LLM_MODEL_QUALITY") or os.getenv("ANTHROPIC_MODEL_QUALITY") or "unknown"
+    provider = os.getenv("LLM_PROVIDER", "bailian").strip().lower() or "bailian"
+    model = os.getenv("LLM_MODEL_QUALITY") or "qwen3.7-plus"
     llm_p95_values = [
         float(metric.get("value") or 0)
         for result in results

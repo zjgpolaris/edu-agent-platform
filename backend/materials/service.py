@@ -11,7 +11,7 @@ import fitz
 from langchain_core.documents import Document
 from PIL import Image, ImageEnhance, ImageFilter, UnidentifiedImageError
 
-from llm_config import LLM_PROVIDER, MODEL_FALLBACK, MODEL_FAST, ZodeChatModel, llm_multimodal
+from llm_config import LLM_PROVIDER, llm_material, llm_multimodal
 from materials.schema import (
     MaterialAnalyzeResponse,
     MaterialAnswerResponse,
@@ -82,9 +82,6 @@ HISTORY_ENTITY_CORRECTIONS = {
     "苹命军": "革命军",
     "苹世钟": "警世钟",
 }
-llm_material = ZodeChatModel(MODEL_FAST, max_tokens=4096, fallback_models=[MODEL_FALLBACK], name="llm_material")
-
-
 class MaterialSetupError(RuntimeError):
     pass
 

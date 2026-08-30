@@ -27,13 +27,10 @@ CASES = [
 def _llm_credentials_available() -> bool:
     if os.getenv("EDU_AGENT_LLM_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
         return False
-    provider = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
-    anthropic_available = bool(os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY"))
+    provider = os.getenv("LLM_PROVIDER", "bailian").strip().lower()
     bailian_available = bool(os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY"))
     if provider in {"bailian", "dashscope"}:
-        return bailian_available or anthropic_available
-    if provider == "anthropic":
-        return anthropic_available
+        return bailian_available
     return False
 
 

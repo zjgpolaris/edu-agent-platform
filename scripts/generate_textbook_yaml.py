@@ -1,13 +1,14 @@
-"""用 Claude API 生成人教版初中历史 6 册 YAML 知识库文件"""
-import os
+"""用统一百炼 LLM 入口生成人教版初中历史 6 册 YAML 知识库文件。"""
 import sys
 import time
 from pathlib import Path
 
-import anthropic
+ROOT = Path(__file__).resolve().parents[1]
+BACKEND = ROOT / "backend"
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
 
-BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "https://zode.qa.qima-inc.com/api/proxy/forward")
-API_KEY = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+from llm_config import llm_quality  # noqa: E402
 
 # 每册定义各单元，按单元分批请求避免超时
 BOOKS = [
@@ -104,16 +105,11 @@ UNIT_PROMPT = """你是人教版历史教材专家。请为《{book}》中的"{u
 """
 
 
-def call_api(client: anthropic.Anthropic, prompt: str) -> str:
-    resp = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return resp.content[0].text.strip()
+def call_api(prompt: str) -> str:
+    return llm_quality.invoke([{"role": "user", "content": prompt}]).content.strip()
 
 
-def generate_book_yaml(book_info: dict, client: anthropic.Anthropic) -> str:
+def generate_book_yaml(book_info: dict) -> str:
     lines = [
         f"grade: {book_info['grade']}",
         f"book: {book_info['book']}",
@@ -126,7 +122,7 @@ def generate_book_yaml(book_info: dict, client: anthropic.Anthropic) -> str:
             unit_title=unit_title,
             unit_desc=unit_desc,
         )
-        lessons_yaml = call_api(client, prompt)
+        lessons_yaml = call_api(prompt)
         lines.append(f"  - title: {unit_title}")
         lines.append("    lessons:")
         for line in lessons_yaml.splitlines():
@@ -136,7 +132,6 @@ def generate_book_yaml(book_info: dict, client: anthropic.Anthropic) -> str:
 
 
 def main():
-    client = anthropic.Anthropic(api_key=API_KEY, base_url=BASE_URL)
     out_dir = Path("textbooks/structured")
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -148,7 +143,7 @@ def main():
 
         print(f"Generating {book['grade']} ({book['filename']})...", flush=True)
         try:
-            yaml_text = generate_book_yaml(book, client)
+            yaml_text = generate_book_yaml(book)
             out_path.write_text(yaml_text, encoding="utf-8")
             print(f"  Saved {out_path} ({len(yaml_text)} chars)")
         except Exception as e:

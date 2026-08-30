@@ -1,5 +1,7 @@
 # EduAgent AI Agent 能力补强开发文档
 
+> 历史实现说明：本文中的旧 LLM 传输层已由 `docs/20260830-llm-provider-langchain-migration-v144-spec.md` 替代；当前运行时使用 `backend/llm/` 直连百炼。
+
 ## 1. 背景
 
 当前项目 EduAgent 是面向 K-12 中文/历史学习场景的 AI 教学平台，已经具备历史人物对话、教材问答、作文批改、辩论、历史时间线游戏、时间巨轮卡牌游戏和多人 AI 游戏等能力。

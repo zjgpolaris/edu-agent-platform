@@ -48,7 +48,7 @@ async def run_case(character: str, message: str, expected_source_keyword: str) -
 
 
 async def main() -> None:
-    has_key = any(os.getenv(k) for k in ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "BAILIAN_API_KEY", "DASHSCOPE_API_KEY"))
+    has_key = any(os.getenv(k) for k in ("BAILIAN_API_KEY", "DASHSCOPE_API_KEY"))
     if not has_key:
         print("SKIP history_character_smoke: no LLM API key set")
         return

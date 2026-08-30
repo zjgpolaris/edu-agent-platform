@@ -1,5 +1,7 @@
 # Langfuse Tracing 接入开发文档
 
+> 历史实现说明：本文记录最初接入；LLM 传输层现已由 `docs/20260830-llm-provider-langchain-migration-v144-spec.md` 替代，Langfuse generation 由 `ManagedChatModel` 保持兼容。
+
 ## 1. 背景
 
 根据 `docs/202606081653-ai-agent-capability-roadmap-dev.md`，EduAgent 下一阶段需要补齐生产级 Agent 应用的观测能力。当前项目虽然已经在 `backend/requirements.txt` 中声明 `langfuse` 依赖，但尚未在 LLM 调用、RAG 检索或 Agent 工作流中接入 trace。

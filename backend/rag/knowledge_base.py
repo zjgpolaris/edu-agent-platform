@@ -185,8 +185,6 @@ def _sanitize_health_reason(exc: Exception, max_chars: int = 240) -> str:
         "EMBED_API_KEY",
         "BAILIAN_API_KEY",
         "DASHSCOPE_API_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_API_KEY",
     ):
         value = os.getenv(key)
         if value:

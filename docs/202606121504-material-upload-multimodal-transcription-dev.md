@@ -1,5 +1,7 @@
 # 资料上传多模态教材转写接入开发文档
 
+> 历史实现说明：本文中的旧 LLM 传输层已由 `docs/20260830-llm-provider-langchain-migration-v144-spec.md` 替代；当前多模态模型由统一 Profile Registry 管理。
+
 ## 背景
 
 当前「资料上传学习」已完成 Level 1 MVP，并对 Tesseract OCR 做了图片预处理、教材页分区、质量评分、噪声过滤和历史实体纠错。但从教材截图验证结果看，复杂图文混排页面仍存在明显问题：
