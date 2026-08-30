@@ -52,6 +52,19 @@ type SuiteResult = {
 };
 type AgentOpsSummary = {
   status: string;
+  runtime_rollout?: {
+    phase?: string;
+    status?: string;
+    agent_type?: string;
+    deployment?: { commit?: string | null; environment?: string | null; config_version?: string | null; runtime_enabled?: boolean; runtime_mode?: string; kill_switch?: boolean };
+    control?: { terminal_samples?: number; minimum_samples?: number; sample_sufficient?: boolean; p95_ms?: number | null };
+    shadow?: { terminal_runs?: number; minimum_terminal_runs?: number; run_provenance_coverage?: number | null; event_coverage?: number | null; terminal_consistency?: number | null; unexpected_failure_rate?: number | null; p95_regression?: number | null; run_latency?: { p95_ms?: number | null } };
+    safety?: { duplicate_side_effects?: number; duplicate_attempts_prevented?: number; invalid_transitions?: number; high_risk_without_confirmation?: number; observation_write_failures?: number | null };
+    evidence?: { present?: boolean; fresh?: boolean; age_hours?: number | null; profiles?: Record<string, string> };
+    gate?: { status?: string; reasons?: string[] };
+    blockers?: string[];
+    next_action?: string;
+  };
   data_scope?: { active?: string; audit?: Record<string, number>; learning?: Record<string, number> };
   readiness?: {
     status: string;
@@ -344,7 +357,6 @@ export default function EvalPage() {
         }
         setResult({ ...data, suites: Array.isArray(data.suites) ? data.suites : [] });
         setLatestStatus("已加载 latest report");
-        if (data.agent_ops) setAgentOps(data.agent_ops);
       } catch (e) {
         setLatestStatus(String(e));
       }
@@ -1039,6 +1051,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="受限计划步骤" value={String(runtime?.plan_step_count ?? "--")} hint={`${runtime?.routing_count ?? 0} routed requests`} />
             <OpsCard label="Repair 成功率" value={runtime?.repair_count ? `${Math.round((runtime.repair_success_rate ?? 0) * 100)}%` : "--"} hint={`${runtime?.repair_success_count ?? 0}/${runtime?.repair_count ?? 0} repairs · rate ${Math.round((runtime?.repair_rate ?? 0) * 100)}%`} />
           </div>
+          <RuntimeRolloutPanel rollout={summary?.runtime_rollout} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
             <Rollup title="Top actions" items={summary?.audit?.by_action} />
             <Rollup title="Top features" items={summary?.learning?.by_feature} />
@@ -1059,6 +1072,64 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
         </>
       )}
     </div>
+  );
+}
+
+const ROLLOUT_ACTION_LABELS: Record<string, string> = {
+  fix_deployment_contract: "修复部署或配置合同",
+  continue_collecting_control: "继续收集 Control 样本",
+  run_shadow_preflight: "运行 Shadow Preflight",
+  deploy_shadow_config: "经审批后部署 Shadow 配置",
+  continue_collecting_shadow: "继续收集 Shadow 样本",
+  run_rollout_evidence: "运行 Rollout Evidence 工作流",
+  investigate_gate_failure: "调查 Gate 失败",
+  continue_48h_observation: "继续 48 小时稳定观察",
+  stop_rollout: "停止灰度并检查安全信号",
+  shadow_operational_complete: "Shadow Operational Complete",
+};
+
+function percent(value?: number | null): string {
+  return value == null ? "--" : `${Math.round(value * 100)}%`;
+}
+
+function RuntimeRolloutPanel({ rollout }: { rollout?: AgentOpsSummary["runtime_rollout"] }) {
+  if (!rollout) return null;
+  const control = rollout.control;
+  const shadow = rollout.shadow;
+  const safety = rollout.safety;
+  const deployment = rollout.deployment;
+  const blockers = rollout.blockers || [];
+  const nextAction = ROLLOUT_ACTION_LABELS[rollout.next_action || ""] || rollout.next_action || "等待状态";
+  const statusColor = rollout.status === "pass" ? "var(--jade-dark)" : rollout.status === "warn" || rollout.status === "unknown" ? "#7a5524" : "var(--cinnabar-dark)";
+  return (
+    <section aria-label="Runtime Rollout" style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.85rem", background: "var(--paper-strong)", marginBottom: "0.85rem" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem" }}>
+        <strong style={{ color: "var(--ink)" }}>Runtime Rollout</strong>
+        <Badge>{rollout.agent_type || "history_character"}</Badge>
+        <span style={{ color: statusColor, fontSize: "0.78rem", fontWeight: 700 }}>{rollout.phase || "unknown"} · {rollout.status || "unknown"}</span>
+        <span style={{ color: "var(--muted)", fontSize: "0.72rem", marginLeft: "auto" }}>
+          {(deployment?.commit || "").slice(0, 8) || "no commit"} · {deployment?.config_version || "no config"}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: "0.6rem" }}>
+        <OpsCard label="Control 样本" value={`${control?.terminal_samples ?? 0}/${control?.minimum_samples ?? 100}`} hint={`p95 ${control?.p95_ms != null ? `${Math.round(control.p95_ms)}ms` : "--"}`} />
+        <OpsCard label="Shadow Runs" value={`${shadow?.terminal_runs ?? 0}/${shadow?.minimum_terminal_runs ?? 100}`} hint={`p95 ${shadow?.run_latency?.p95_ms != null ? `${Math.round(shadow.run_latency.p95_ms)}ms` : "--"}`} />
+        <OpsCard label="Provenance" value={percent(shadow?.run_provenance_coverage)} hint={`event coverage ${percent(shadow?.event_coverage)}`} />
+        <OpsCard label="Terminal 一致性" value={percent(shadow?.terminal_consistency)} hint={`unexpected failure ${percent(shadow?.unexpected_failure_rate)}`} />
+        <OpsCard label="p95 回归" value={percent(shadow?.p95_regression)} hint={`gate ${rollout.gate?.status || "unknown"}`} />
+        <OpsCard label="Evidence" value={rollout.evidence?.present ? (rollout.evidence.fresh ? "fresh" : "stale") : "missing"} hint={Object.entries(rollout.evidence?.profiles || {}).map(([name, status]) => `${name}:${status}`).join(" ") || "profiles unknown"} />
+        <OpsCard label="Safety" value={String((safety?.duplicate_side_effects || 0) + (safety?.invalid_transitions || 0) + (safety?.high_risk_without_confirmation || 0))} hint={`${safety?.duplicate_attempts_prevented ?? 0} duplicate attempts prevented`} />
+        <OpsCard label="Observation" value={String(safety?.observation_write_failures ?? "--")} hint="write failures" />
+      </div>
+      <div style={{ marginTop: "0.7rem", fontSize: "0.78rem", color: statusColor }}>
+        下一步：{nextAction}
+      </div>
+      {blockers.length ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.55rem" }}>
+          {blockers.slice(0, 8).map((blocker) => <Badge key={blocker}>{blocker}</Badge>)}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

@@ -184,6 +184,20 @@ DATABASE_URL=postgresql://... PYTHONPATH=backend \
 
 Runtime 开启时必须显式提供 `EDU_AGENT_RUNTIME_V2_CONFIG_VERSION`；空值和旧的 `v1.33-control` 默认值均 fail-closed。Run 由服务端写入 `deployed_commit` 与 `environment`，per-agent gate 只统计 provenance 完整且与当前部署一致的样本，coverage 不足 100% 时状态保持 `unknown`。
 
+v1.42 增加了只读灰度操作面。管理员可通过 `GET /api/admin/agent-runtime/rollout-status?agent_type=history_character` 查看当前 phase、control/shadow 样本进度、hard blockers 与唯一建议动作；Eval 页复用 AgentOps summary 展示相同口径。切换 Shadow 前先运行配置预检，生产最小样本数不可低于 100：
+
+```bash
+PYTHONPATH=backend python3 scripts/validate_runtime_rollout_config.py \
+  --phase control --agent-type history_character
+
+API_TOKEN=<admin-token> PYTHONPATH=backend \
+  python3 scripts/validate_runtime_rollout_config.py \
+  --phase shadow --agent-type history_character \
+  --status-url https://<后端>/api/admin/agent-runtime/rollout-status
+```
+
+GitHub Actions 的手动工作流 **Runtime Rollout Preflight** 只验证部署 commit、control baseline、线上聚合状态和建议的 history-only Shadow 配置，并产出脱敏 promotion plan；它不会修改 Render 环境变量或流量。`EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED` 必须保持 `false`，其他 Agent 的 BPS 必须为 0。配置不一致、样本不足或线上状态不可用时预检 fail-closed。
+
 生产 evidence 使用 GitHub Actions 的手动工作流 **Runtime Rollout Evidence**，由受保护的 `production` environment 审批后执行。它会校验线上 commit、运行 offline/real-LLM/production-RAG 三类 profile、持久化 hash-bound aggregate evidence，再要求 strict readiness 和 per-agent gate PASS。control 与 shadow 的状态语义如下：
 
 - `pass`：证据、provenance、样本和安全/一致性/延迟阈值全部满足；

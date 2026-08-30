@@ -735,6 +735,24 @@ def build_agent_ops_summary(
         "reasons": ["readiness_is_runtime_only"],
     }
 
+    try:
+        from agent_runtime.rollout_status import build_rollout_status
+
+        runtime_rollout = build_rollout_status(
+            agent_type=os.getenv("EDU_AGENT_RUNTIME_ROLLOUT_AGENT_TYPE", "history_character"),
+            window_hours=configured_window,
+        )
+    except Exception as exc:
+        runtime_rollout = {
+            "schema_version": 1,
+            "phase": "deployment_blocked",
+            "status": "unknown",
+            "agent_type": os.getenv("EDU_AGENT_RUNTIME_ROLLOUT_AGENT_TYPE", "history_character"),
+            "blockers": ["rollout_status_unavailable"],
+            "next_action": "fix_deployment_contract",
+            "error_type": exc.__class__.__name__,
+        }
+
     return {
         "schema_version": 2,
         "generated_at": _generated_at(),
@@ -747,6 +765,7 @@ def build_agent_ops_summary(
         },
         "status": _status(total_events, coverage_rate),
         "readiness": readiness,
+        "runtime_rollout": runtime_rollout,
         "trace_correlation": {
             "audit_total": len(audit_events),
             "audit_with_trace": audit_with_trace,

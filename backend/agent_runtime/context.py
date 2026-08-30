@@ -41,6 +41,7 @@ def stable_rollout_bucket(agent_type: str, subject: str) -> int:
 class RuntimeV2Settings:
     enabled: bool
     shadow_mode: bool
+    active_enabled: bool
     global_bps: int
     config_version: str
     kill_switch: bool
@@ -56,6 +57,7 @@ class RuntimeV2Settings:
         return cls(
             enabled=_enabled("EDU_AGENT_RUNTIME_V2_ENABLED"),
             shadow_mode=_enabled("EDU_AGENT_RUNTIME_V2_SHADOW_MODE", True),
+            active_enabled=_enabled("EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED"),
             global_bps=_bps("EDU_AGENT_RUNTIME_V2_PERCENT_BPS"),
             config_version=runtime_config_version(),
             kill_switch=_enabled("EDU_AGENT_RUNTIME_V2_KILL_SWITCH"),
@@ -69,7 +71,7 @@ class RuntimeV2Settings:
 
     def rollout_decision(self, agent_type: str, subject: str) -> tuple[bool, int]:
         bucket = stable_rollout_bucket(agent_type, subject)
-        if self.kill_switch or not self.enabled or not self.persist_events or runtime_configuration_errors(
+        if self.kill_switch or not self.enabled or not self.persist_events or (not self.shadow_mode and not self.active_enabled) or runtime_configuration_errors(
             enabled=self.enabled,
             config_version=self.config_version,
         ):

@@ -93,6 +93,20 @@ def main() -> None:
         assert teacher.status_code == 200
         unrelated_teacher = client.get("/api/agent-runs/run_security", headers=headers("teacher-other", "teacher"))
         assert unrelated_teacher.status_code == 403
+        rollout_teacher_denied = client.get(
+            "/api/admin/agent-runtime/rollout-status",
+            params={"agent_type": "history_character"},
+            headers=headers("teacher-a", "teacher"),
+        )
+        assert rollout_teacher_denied.status_code == 403
+        rollout_admin = client.get(
+            "/api/admin/agent-runtime/rollout-status",
+            params={"agent_type": "history_character"},
+            headers=headers("admin-a", "admin"),
+        )
+        assert rollout_admin.status_code == 200, rollout_admin.text
+        assert "student_id" not in rollout_admin.text
+        assert "session_id" not in rollout_admin.text
         history_denied = client.post(
             "/api/history/character/recommend",
             json={"message": "推荐一位人物", "student_id": "student-owner"},

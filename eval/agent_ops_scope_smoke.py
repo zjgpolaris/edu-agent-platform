@@ -83,6 +83,9 @@ def main() -> None:
     assert runtime["readiness"]["sample_sufficient"] is True
     assert runtime["data_scope"]["audit"]["runtime"] == 152
     assert runtime["data_scope"]["audit"]["eval"] == 1000
+    assert runtime["runtime_rollout"]["agent_type"] == "history_character"
+    assert runtime["runtime_rollout"]["next_action"] == "fix_deployment_contract"
+    assert "student_id" not in str(runtime["runtime_rollout"])
 
     assert evaluation["window"]["scope"] == "eval"
     assert evaluation["audit"]["total"] == 100

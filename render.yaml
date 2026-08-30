@@ -34,9 +34,19 @@ services:
         value: "false"
       - key: EDU_AGENT_RUNTIME_V2_SHADOW_MODE
         value: "true"
+      - key: EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED
+        value: "false"
       - key: EDU_AGENT_RUNTIME_V2_PERCENT_BPS
         value: "0"
       - key: EDU_AGENT_RUNTIME_V2_HISTORY_CHARACTER_BPS
+        value: "0"
+      - key: EDU_AGENT_RUNTIME_V2_LEARNING_ASSISTANT_BPS
+        value: "0"
+      - key: EDU_AGENT_RUNTIME_V2_AUTOTUTOR_BPS
+        value: "0"
+      - key: EDU_AGENT_RUNTIME_V2_ESSAY_GRADER_BPS
+        value: "0"
+      - key: EDU_AGENT_RUNTIME_V2_DEBATE_BPS
         value: "0"
       - key: EDU_AGENT_RUNTIME_V2_KILL_SWITCH
         value: "false"
@@ -44,6 +54,16 @@ services:
         value: "true"
       - key: EDU_AGENT_RUNTIME_V2_ARTIFACT_ENABLED
         value: "false"
+      - key: EDU_AGENT_RUNTIME_V2_CHECKPOINT_ENABLED
+        value: "false"
+      - key: EDU_AGENT_RUNTIME_V2_RESUMABLE_ENABLED
+        value: "false"
+      - key: EDU_AGENT_RUNTIME_V2_DYNAMIC_REPLAN_ENABLED
+        value: "false"
+      - key: EDU_AGENT_RUNTIME_V2_READ_FANOUT_ENABLED
+        value: "false"
+      - key: EDU_AGENT_RUNTIME_ROLLOUT_MIN_TERMINAL_RUNS
+        value: "100"
       # 线上前端域名（Vercel 自定义域名时回填；*.vercel.app 已由后端正则放行）
       - key: FRONTEND_ORIGIN
         sync: false

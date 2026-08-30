@@ -20,6 +20,7 @@ const python = resolvePython();
 process.env.E2E_PYTHON = python;
 const backendPort = process.env.E2E_BACKEND_PORT || "18080";
 const frontendPort = process.env.E2E_FRONTEND_PORT || "13000";
+const browserChannel = process.env.E2E_BROWSER_CHANNEL === "chrome" ? "chrome" : undefined;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -38,6 +39,7 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
+        channel: browserChannel,
         launchOptions: { args: ["--host-resolver-rules=MAP localhost 127.0.0.1"] },
       },
     },

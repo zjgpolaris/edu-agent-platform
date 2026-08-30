@@ -1,0 +1,133 @@
+name: Runtime Rollout Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployed_commit:
+        description: Full commit SHA currently deployed to production
+        required: true
+        type: string
+      agent_type:
+        description: Runtime agent slice
+        required: true
+        default: history_character
+        type: string
+      target_config_version:
+        description: Proposed shadow config version
+        required: true
+        default: v1.42-history-shadow
+        type: string
+      baseline_config_version:
+        description: Trusted control config version
+        required: true
+        default: v1.41-history-control
+        type: string
+      baseline_commit:
+        description: Full commit SHA that produced control observations
+        required: true
+        type: string
+      minimum_samples:
+        description: Production minimum sample count
+        required: true
+        default: '100'
+        type: string
+      ready_url:
+        description: Production backend /api/ready URL
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-rollout-preflight-production-${{ inputs.agent_type }}
+  cancel-in-progress: false
+
+jobs:
+  validate-shadow-promotion:
+    name: Validate history-only Shadow promotion
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Checkout proposed deployed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.deployed_commit }}
+
+      - name: Validate immutable inputs
+        env:
+          EXPECTED_COMMIT: ${{ inputs.deployed_commit }}
+          BASELINE_COMMIT: ${{ inputs.baseline_commit }}
+          MINIMUM_SAMPLES: ${{ inputs.minimum_samples }}
+          AGENT_TYPE: ${{ inputs.agent_type }}
+        run: |
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BASELINE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$MINIMUM_SAMPLES" =~ ^[0-9]+$ ]]
+          test "$MINIMUM_SAMPLES" -ge 100
+          test "$AGENT_TYPE" = "history_character"
+          test "$GITHUB_SHA" = "$EXPECTED_COMMIT"
+          test -z "$(git status --porcelain)"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify deployed commit
+        env:
+          READY_URL: ${{ inputs.ready_url }}
+        run: python3 scripts/verify_deployed_commit.py --ready-url "$READY_URL" --expected-commit "$GITHUB_SHA"
+
+      - name: Run read-only Shadow preflight
+        env:
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          EDU_AGENT_DEPLOYED_COMMIT: ${{ inputs.deployed_commit }}
+          EDU_AGENT_ENVIRONMENT: production
+          EDU_AGENT_RUNTIME_V2_ENABLED: 'true'
+          EDU_AGENT_RUNTIME_V2_SHADOW_MODE: 'true'
+          EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED: 'false'
+          EDU_AGENT_RUNTIME_V2_PERCENT_BPS: '10000'
+          EDU_AGENT_RUNTIME_V2_HISTORY_CHARACTER_BPS: '10000'
+          EDU_AGENT_RUNTIME_V2_LEARNING_ASSISTANT_BPS: '0'
+          EDU_AGENT_RUNTIME_V2_AUTOTUTOR_BPS: '0'
+          EDU_AGENT_RUNTIME_V2_ESSAY_GRADER_BPS: '0'
+          EDU_AGENT_RUNTIME_V2_DEBATE_BPS: '0'
+          EDU_AGENT_RUNTIME_V2_PERSIST_EVENTS: 'true'
+          EDU_AGENT_RUNTIME_V2_ARTIFACT_ENABLED: 'true'
+          EDU_AGENT_RUNTIME_V2_CHECKPOINT_ENABLED: 'false'
+          EDU_AGENT_RUNTIME_V2_RESUMABLE_ENABLED: 'false'
+          EDU_AGENT_RUNTIME_V2_DYNAMIC_REPLAN_ENABLED: 'false'
+          EDU_AGENT_RUNTIME_V2_READ_FANOUT_ENABLED: 'false'
+          EDU_AGENT_RUNTIME_V2_CONFIG_VERSION: ${{ inputs.target_config_version }}
+          EDU_AGENT_RUNTIME_ROLLOUT_BASELINE_CONFIG_VERSION: ${{ inputs.baseline_config_version }}
+          EDU_AGENT_RUNTIME_ROLLOUT_BASELINE_COMMIT: ${{ inputs.baseline_commit }}
+          EDU_AGENT_RUNTIME_ROLLOUT_MIN_TERMINAL_RUNS: ${{ inputs.minimum_samples }}
+          READY_URL: ${{ inputs.ready_url }}
+          PYTHONPATH: backend
+        run: |
+          status_url="${READY_URL%/api/ready}/api/admin/agent-runtime/rollout-status?agent_type=history_character&minimum_samples=${EDU_AGENT_RUNTIME_ROLLOUT_MIN_TERMINAL_RUNS}"
+          mkdir -p /tmp/runtime-preflight
+          python3 scripts/validate_runtime_rollout_config.py \
+            --phase shadow \
+            --agent-type history_character \
+            --status-url "$status_url" \
+            --json | tee /tmp/runtime-preflight/rollout-preflight.json
+
+      - name: Write non-secret promotion plan
+        env:
+          TARGET_CONFIG_VERSION: ${{ inputs.target_config_version }}
+          BASELINE_CONFIG_VERSION: ${{ inputs.baseline_config_version }}
+          BASELINE_COMMIT: ${{ inputs.baseline_commit }}
+        run: |
+          python3 -c 'import json, os, pathlib; payload={"status":"preflight_passed","target":{"agent_type":"history_character","runtime_mode":"shadow","config_version":os.environ["TARGET_CONFIG_VERSION"],"global_bps":10000,"agent_bps":10000},"baseline":{"config_version":os.environ["BASELINE_CONFIG_VERSION"],"commit":os.environ["BASELINE_COMMIT"]},"non_target_agent_bps":0,"active_enabled":False}; pathlib.Path("/tmp/runtime-preflight/promotion-plan.json").write_text(json.dumps(payload, indent=2)+"\n")'
+
+      - name: Upload sanitized preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-rollout-preflight-${{ inputs.agent_type }}-${{ inputs.deployed_commit }}
+          path: /tmp/runtime-preflight/*.json
+          if-no-files-found: warn
+          retention-days: 14

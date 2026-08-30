@@ -178,4 +178,6 @@ test("Eval 页面展示评测与 Trace 运行状态", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Eval 评估中心" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "AgentOps 运行状态" })).toBeVisible();
   await expect(page.getByText("Trace 覆盖率")).toBeVisible();
+  await expect(page.getByLabel("Runtime Rollout")).toBeVisible();
+  await expect(page.getByText("下一步：")).toBeVisible();
 });

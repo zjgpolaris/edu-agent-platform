@@ -205,6 +205,48 @@ def aggregate_control_baseline(
     }
 
 
+def control_observation_progress(
+    *,
+    agent_type: str,
+    config_version: str,
+    deployed_commit: str,
+    environment: str,
+    minimum_samples: int = 100,
+    data_scope: str = "runtime",
+) -> dict[str, Any]:
+    """Return a PII-free view of the exact rows eligible for a control baseline."""
+    with get_connection() as conn:
+        if "agent_rollout_observations" not in set(sa_inspect(conn).get_table_names()):
+            raise LookupError("rollout observation schema is not migrated")
+        rows = conn.execute(text("""SELECT latency_ms, status, created_at FROM agent_rollout_observations
+            WHERE agent_type=:agent_type AND config_version=:config_version
+              AND runtime_mode='control' AND deployed_commit=:deployed_commit
+              AND environment=:environment AND data_scope=:data_scope
+            ORDER BY created_at ASC"""), {
+                "agent_type": agent_type,
+                "config_version": config_version,
+                "deployed_commit": deployed_commit,
+                "environment": environment,
+                "data_scope": data_scope,
+            }).mappings().all()
+    included = [row for row in rows if str(row["status"]) in BASELINE_STATUSES]
+    durations = [int(row["latency_ms"]) for row in included]
+    required = max(1, int(minimum_samples))
+    return {
+        "commit": deployed_commit or None,
+        "config_version": config_version or None,
+        "environment": environment or None,
+        "terminal_samples": len(included),
+        "minimum_samples": required,
+        "sample_sufficient": len(included) >= required,
+        "baseline_ready": len(included) >= required and bool(durations),
+        "p50_ms": _percentile(durations, 0.50),
+        "p95_ms": _percentile(durations, 0.95),
+        "observed_from": included[0]["created_at"] if included else None,
+        "observed_to": included[-1]["created_at"] if included else None,
+    }
+
+
 def observation_summary(*, agent_type: str, config_version: str, data_scope: str = "runtime") -> dict[str, Any]:
     with get_connection() as conn:
         rows = conn.execute(text("""SELECT runtime_mode, status, COUNT(*) AS count

@@ -224,3 +224,29 @@ async def get_agent_runtime_rollout_readiness(
         window_hours=window_hours,
         minimum_terminal_runs=minimum_terminal_runs,
     )
+
+
+@router.get("/api/admin/agent-runtime/rollout-status")
+async def get_agent_runtime_rollout_status(
+    agent_type: str = Query(min_length=1, max_length=80),
+    window_hours: int = Query(default=168, ge=1, le=24 * 31),
+    minimum_samples: int = Query(default=100, ge=1, le=100_000),
+    actor: Actor = Depends(require_auth),
+):
+    if auth_required() and actor.role != "admin":
+        raise HTTPException(status_code=403, detail="仅管理员可检查 Agent Runtime rollout 状态。")
+    from agent_runtime.rollout_status import build_rollout_status
+
+    if minimum_samples < 100:
+        from deployment import deployment_environment
+
+        if deployment_environment() == "production":
+            raise HTTPException(status_code=400, detail="生产 rollout 最少需要 100 个样本。")
+    try:
+        return build_rollout_status(
+            agent_type=agent_type,
+            window_hours=window_hours,
+            minimum_samples=minimum_samples,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

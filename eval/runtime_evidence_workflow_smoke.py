@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "runtime-rollout-evidence.yml"
+PREFLIGHT_WORKFLOW = ROOT / ".github" / "workflows" / "runtime-rollout-preflight.yml"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -43,6 +44,23 @@ def main() -> None:
         "rollout gate provenance coverage is not 100%",
         "rollout observation writes are unhealthy",
     ]
+    preflight = PREFLIGHT_WORKFLOW.read_text(encoding="utf-8")
+    for name in (
+        "deployed_commit", "agent_type", "target_config_version", "baseline_config_version",
+        "baseline_commit", "minimum_samples", "ready_url",
+    ):
+        assert f"      {name}:" in preflight
+    assert "  workflow_dispatch:" in preflight
+    assert "    environment: production" in preflight
+    assert "permissions:\n  contents: read" in preflight
+    assert 'test "$MINIMUM_SAMPLES" -ge 100' in preflight
+    assert "validate_runtime_rollout_config.py" in preflight
+    assert "agent-runtime/rollout-status" in preflight
+    assert "EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED: 'false'" in preflight
+    assert "EDU_AGENT_RUNTIME_V2_LEARNING_ASSISTANT_BPS: '0'" in preflight
+    assert "DATABASE_URL" not in preflight
+    assert "DIRECT_URL" not in preflight
+    assert "JWT_SECRET" not in preflight
     print("runtime_evidence_workflow_smoke=PASS")
 
 
