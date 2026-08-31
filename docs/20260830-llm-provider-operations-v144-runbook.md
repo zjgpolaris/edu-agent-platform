@@ -147,7 +147,7 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 ## 8. 不可变镜像与 Manifest Store 发布
 
 1. 手动运行 **Backend Immutable Image Release**，输入 full commit；工作流完成 release gate、PostgreSQL 迁移演练并只构建一次 `linux/amd64` 镜像，下载 `backend-image-<commit>` 记录 digest。
-2. 使用 **Deploy Immutable Backend Environment** 先部署到受保护的 `staging` Environment。目标 Render 服务必须是 image-backed service，`BACKEND_IMAGE_BASE` 与 deploy hook 的默认镜像仓库一致。
+2. Demo 环境由 `main` 分支推送触发 Render Git 自动部署；不再要求独立 staging、image-backed service 或 digest deploy hook。
 3. 运行 **Runtime Rollout Evidence**。工作流先执行 capability probe，将 manifest 写入目标数据库，再运行真实业务和 RAG，最后写入 Evidence v2。
 4. staging gate 至少 100 个可信 terminal runs 后，production 1% 才能复用同一 digest；10% 晋级还要求 production Evidence v2 和至少 48 小时观察窗口。
 5. strict readiness 必须同时通过 deployment digest、Alembic 013、数据库 manifest、rollout evidence 与 observation health。

@@ -1,5 +1,7 @@
 # EduAgent 不可变部署与 LLM 证据闭环 v1.45.2 实施报告
 
+> **状态：发布链路已退役。** 项目现按 Agent Demo 运行，不再启用 GHCR immutable image、独立 staging、Render digest deploy 或 production canary 工作流；底层运行时观测与能力清单代码仍保留。
+
 **日期：** 2026-08-31
 **状态：** Development Complete · External Rollout NOT_RUN
 

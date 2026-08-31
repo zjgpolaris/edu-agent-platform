@@ -1,5 +1,7 @@
 # EduAgent 不可变部署与 LLM 生产证据闭环 v1.45.2 Spec
 
+> **状态：已归档，不执行。** 当前产品定位为单环境 Agent Demo，采用 `main` 推送后由 Render 自动构建部署；本文保留为生产化方案参考，不再对应启用中的 GitHub Actions 工作流。
+
 **创建时间：** 2026-08-31
 
 **状态：** Development Complete · P0 · External Rollout NOT_RUN

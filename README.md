@@ -166,7 +166,7 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 健康检查分层：`/api/health` 是 liveness；`/api/ready` 是 shallow readiness，默认不触发外部 LLM/Embedding；`/api/debug/rag/health?deep=true` 与 `production_rag_health_smoke.py` 用于生产 RAG 深度检查。
 传入 `--ready-url` 时，release gate 现在会输出 required / failed / warnings 摘要；若带 `--production`、`--ready-require-rag` 或 `--ready-require-external`，会把 RAG / 外部依赖配置作为 blocking readiness check。
 
-Runtime v2 灰度发布还需显式加入 `--ready-require-runtime`。该检查要求部署 commit/image digest/config、Alembic 013 schema、数据库 capability manifest、生产认证配置和当前版本 rollout evidence 一致；Runtime 关闭、可信样本不足或证据未运行都不会显示为通过。生产镜像不内置 Eval 目录，真实 LLM/RAG 聚合报告通过 `scripts/build_rollout_evidence.py` 绑定 control baseline 后写入 `agent_release_evidence`。
+当前项目按单环境 Agent Demo 部署：代码推送到 `main` 后先运行常规 CI，再由 Render 直接从 Git 仓库自动构建和发布。不要求 GHCR 镜像 digest、独立 staging、Render Deploy Hook 或生产灰度证据。Runtime v2 默认关闭，需要演示时通过 Render 环境变量显式开启；`--ready-require-runtime` 仅保留为可选的高级诊断，不属于 Demo 发布门禁。
 
 生产启动入口先验证 `EDU_AGENT_AUTH_REQUIRED=true` 和至少 32 字节的随机 `JWT_SECRET`，再在 PostgreSQL advisory lock 下执行 Alembic `upgrade head`，确认 revision `013` 与 Runtime schema 完整后才启动 API。Render 必须配置 `DIRECT_URL`（Supabase direct/session connection）；普通 `DATABASE_URL` 继续供业务请求使用，transaction pooler 不承担 migration/advisory lock。认证或迁移失败都会输出结构化失败摘要并以非零状态退出；不要通过关闭认证或跳过迁移来恢复服务。
 
@@ -212,35 +212,7 @@ API_TOKEN=<短期admin-token> PYTHONPATH=backend \
   --status-url https://<后端>/api/admin/agent-runtime/rollout-status
 ```
 
-GitHub Actions 的手动工作流 **Runtime Rollout Preflight** 使用受保护的 `RUNTIME_ADMIN_USERNAME` / `RUNTIME_ADMIN_PASSWORD` 在每次运行时换取一小时内有效的管理员 Token，不再保存长期 `API_TOKEN`。它只验证部署 commit、可信 control baseline、线上聚合状态和建议的 history-only Shadow 配置，并产出脱敏 promotion plan；不会修改 Render 环境变量或流量。`EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED` 必须保持 `false`，其他 Agent 的 BPS 必须为 0。认证、cohort、配置、样本或线上状态不满足时预检 fail-closed。
-
-生产 evidence 使用 GitHub Actions 的手动工作流 **Runtime Rollout Evidence**，由受保护的 `production` environment 审批后执行。它会校验线上 commit、运行 offline/real-LLM/production-RAG 三类 profile、持久化 hash-bound aggregate evidence，再要求 strict readiness 和 per-agent gate PASS。control 与 shadow 的状态语义如下：
-
-- `pass`：证据、provenance、样本和安全/一致性/延迟阈值全部满足；
-- `warn`：证据完整，但非阻断阈值进入观察区；
-- `unknown`：schema、证据、provenance、baseline 或样本不足，不得放量；
-- `fail`：出现重复副作用、非法状态迁移、高风险违规或质量阈值越线，必须停止。
-
-本地 deterministic/CI 通过仅代表 **Development Complete**。生产 revision `013`、认证与数据库授权验收、同一不可变 digest 的 staging 证据、verified control ≥100、verified shadow ≥100、gate PASS 以及后续 48 小时稳定观察完成前，Operational 状态仍为 `NOT_RUN/unknown`。
-
-```bash
-# 三份报告必须来自同一 clean deployed commit，且生成时间不超过 7 天。
-# control baseline 只读取同环境、同 commit/config 的服务端聚合观测，不读取客户端耗时。
-PYTHONPATH=backend python3 scripts/build_rollout_evidence.py \
-  --agent-type history_character \
-  --config-version v1.40-history-shadow \
-  --runtime-mode shadow \
-  --deployed-commit "$RENDER_GIT_COMMIT" \
-  --environment staging \
-  --baseline-config-version v1.40-history-control \
-  --baseline-commit <control-commit> \
-  --minimum-samples 100 \
-  --offline-report /secure/evidence/offline.json \
-  --real-llm-report /secure/evidence/real-llm.json \
-  --production-rag-report /secure/evidence/production-rag.json \
-  --output /secure/evidence/rollout-evidence.json \
-  --persist
-```
+生产级不可变镜像、staging canary、Runtime evidence 和自动放量工作流未在 Demo 项目中启用。相关运行时观测字段与本地验证脚本仍保留，便于展示 Agent 生命周期、工具幂等和故障降级，但不会阻断普通 Git 部署。
 
 `duplicate_side_effect_prevented` 与 `tool.idempotent_replay` 是幂等保护生效的观测计数，不等同于重复副作用；只有 `duplicate_side_effect_executed` 会触发重复副作用阻断。
 
