@@ -80,7 +80,12 @@ DEDICATED_INTEGRATION_SUITES = {
 CORE_SUITES = [
     "llm_provider_contract_smoke",
     "llm_capability_manifest_smoke",
+    "llm_capability_manifest_provenance_smoke",
+    "llm_capability_gate_smoke",
     "llm_capability_api_smoke",
+    "llm_release_evidence_v2_smoke",
+    "llm_profile_coverage_smoke",
+    "llm_fallback_capability_smoke",
     "eval_run_evidence_smoke",
     "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
@@ -165,7 +170,12 @@ CORE_SUITES = [
 ]
 QUICK_SUITES = [
     "llm_capability_manifest_smoke",
+    "llm_capability_manifest_provenance_smoke",
+    "llm_capability_gate_smoke",
     "llm_capability_api_smoke",
+    "llm_release_evidence_v2_smoke",
+    "llm_profile_coverage_smoke",
+    "llm_fallback_capability_smoke",
     "eval_run_evidence_smoke",
     "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",

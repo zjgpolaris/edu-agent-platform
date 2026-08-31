@@ -84,7 +84,13 @@ PY_COMPILE_TARGETS = [
     "eval/learning_assistant_blind_eval.py",
     "eval/learning_assistant_semantic_router_eval.py",
     "eval/llm_capability_manifest_smoke.py",
+    "eval/llm_capability_manifest_provenance_smoke.py",
+    "eval/llm_capability_gate_smoke.py",
     "eval/llm_capability_api_smoke.py",
+    "eval/llm_release_evidence_v2_smoke.py",
+    "eval/llm_profile_coverage_smoke.py",
+    "eval/llm_fallback_capability_smoke.py",
+    "eval/llm_capability_test_support.py",
     "eval/learning_assistant_external_ood_eval.py",
     "eval/production_rag_health_smoke.py",
 ]
@@ -103,7 +109,12 @@ PY_COMPILE_TARGETS.extend(
 
 FAST_SUITES = [
     "llm_capability_manifest_smoke",
+    "llm_capability_manifest_provenance_smoke",
+    "llm_capability_gate_smoke",
     "llm_capability_api_smoke",
+    "llm_release_evidence_v2_smoke",
+    "llm_profile_coverage_smoke",
+    "llm_fallback_capability_smoke",
     "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
     "backend_startup_migration_failure_smoke",

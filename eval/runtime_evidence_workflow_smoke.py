@@ -17,14 +17,15 @@ def main() -> None:
     required_inputs = {
         "deployed_commit", "agent_type", "target_config_version", "runtime_mode",
         "baseline_config_version", "baseline_commit", "target_environment",
-        "minimum_samples", "ready_url",
+        "minimum_samples", "ready_url", "image_digest",
     }
     assert all(f"      {name}:" in raw for name in required_inputs)
     assert "  workflow_dispatch:" in raw
-    assert "    environment: production" in raw
+    assert "    environment: ${{ inputs.target_environment }}" in raw
     assert "  cancel-in-progress: false" in raw
     assert 'test "$MINIMUM_SAMPLES" -ge 100' in raw
-    assert 'test "$TARGET_ENVIRONMENT" = "production"' in raw
+    assert "staging|production" in raw
+    assert "          - staging" in raw and "          - production" in raw
     assert "--require-clean-revision" in raw
     assert "--require-real-llm" in raw
     assert "production_rag_health_smoke" in raw

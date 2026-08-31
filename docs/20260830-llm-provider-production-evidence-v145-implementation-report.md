@@ -4,7 +4,7 @@
 
 **基线：** `main@3c67314`
 
-**状态：** In Progress · Milestone A/B/C code complete · Milestone D external evidence NOT_RUN
+**状态：** Blocked / Not Ready · Milestone A/B/C code complete · Milestone D 缺少 staging 准入条件
 
 ## 已完成
 
@@ -57,3 +57,26 @@ only skipped: history_character_eval（需要真实 LLM/RAG，外部证据保持
 10. 生产回滚演练。
 
 Milestone D 未完成前，本版本不得标记 Complete。
+
+## 2026-08-31 续作与环境盘点
+
+代码验收继续补齐：
+
+- 按 Spec 13.1 将 7 个能力合同测试拆分为独立 smoke：manifest、provenance、gate、admin API、release evidence v2、profile coverage、fallback；
+- 7/7 能力合同 smoke 通过；
+- 更新后的 fast release gate：51/51 suites、512/512 cases，PASS；
+- 完整后端 smoke：95/96 suites、405/406 cases；唯一 skip 仍为需要真实 Provider/RAG 的 `history_character_smoke`；
+- 前端 Next.js production build 通过；
+- Runtime evidence workflow 已支持 `staging` 与 `production` 两个受保护 GitHub Environment，不再把 evidence 目标硬编码为 production。
+
+对现有 Render 生产服务进行了无凭证只读盘点：
+
+- `/api/health`：PASS；
+- `/api/ready`：shallow readiness PASS，状态 degraded 仅来自 latest eval 与 rollout evidence 缺失；
+- 当前线上 commit：`3c673147f22bdb63918814281c500e24f8408278`；
+- 当前 Runtime config：`v1.41-history-control`，Runtime rollout disabled；
+- PostgreSQL、Alembic `012`、pgvector 与 `rag_documents` 正常；history collection 文档数为 2850；
+- LLM Provider 配置与凭证存在，但受保护的 deep health/all-profile probe 未在无管理员凭证条件下执行；
+- 当前线上版本尚未暴露 v1.45 image digest/capability manifest/evidence v2 字段。
+
+根据 Spec Definition of Ready，当前仍缺：staging backend、staging 百炼/API 与数据库 secrets、管理员 smoke 凭证、不可变 image digest、canary owner/测试账号和 secret-store 管理权限。生产服务启用了 main auto-deploy；在 staging 验收缺失时不得直接推送并以生产替代 staging。

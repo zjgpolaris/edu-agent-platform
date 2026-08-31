@@ -35,8 +35,11 @@ on:
       target_environment:
         description: Evidence environment
         required: true
-        default: production
-        type: string
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
       minimum_samples:
         description: Minimum control and target terminal samples
         required: true
@@ -63,7 +66,7 @@ jobs:
     name: Build and persist Runtime evidence
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    environment: production
+    environment: ${{ inputs.target_environment }}
     steps:
       - name: Checkout deployed commit
         uses: actions/checkout@v4
@@ -82,7 +85,10 @@ jobs:
           [[ "$BASELINE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$MINIMUM_SAMPLES" =~ ^[0-9]+$ ]]
           test "$MINIMUM_SAMPLES" -ge 100
-          test "$TARGET_ENVIRONMENT" = "production"
+          case "$TARGET_ENVIRONMENT" in
+            staging|production) ;;
+            *) exit 1 ;;
+          esac
           [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           test "$GITHUB_SHA" = "$EXPECTED_COMMIT"
           test -z "$(git status --porcelain)"

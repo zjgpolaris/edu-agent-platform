@@ -2,7 +2,7 @@
 
 **创建时间：** 2026-08-30
 
-**状态：** Proposed · 外部环境准入条件待确认
+**状态：** In Progress · Milestone A/B/C complete · Milestone D blocked on staging access
 
 **目标版本：** v1.45.0（能力证据合同）+ v1.45.1（真实业务评测与发布证据）+ v1.45.2（staging / production canary 闭环）
 
