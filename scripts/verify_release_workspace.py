@@ -83,8 +83,8 @@ def main() -> None:
             if not isinstance(profile, dict) or profile.get("status") != "pass" or profile.get("commit") != head:
                 reasons.append(f"{profile_name}_profile_not_passed_for_head")
         if schema_version == 2:
-            manifest_path_raw = os.getenv("EDU_AGENT_LLM_CAPABILITY_MANIFEST_PATH", "").strip()
-            manifest = _read_json(Path(manifest_path_raw)) if manifest_path_raw else None
+            from llm.capability_manifest import resolve_capability_manifest
+            manifest, manifest_resolution = resolve_capability_manifest()
             if manifest is None:
                 reasons.append("llm_capability_manifest_missing_or_invalid")
             else:

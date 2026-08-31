@@ -409,7 +409,7 @@ def warnings_for_image(quality: OcrQuality, corrections: list[OcrCorrection]) ->
 
 
 def multimodal_configured() -> bool:
-    return LLM_PROVIDER in {"bailian", "dashscope"} and bool(os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY"))
+    return LLM_PROVIDER in {"bailian", "dashscope"} and bool(os.getenv("BAILIAN_API_KEY"))
 
 
 def normalize_multimodal_region_name(name: str) -> str:

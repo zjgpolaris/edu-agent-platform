@@ -27,7 +27,7 @@ def main() -> None:
     if os.getenv("EDU_AGENT_REAL_LLM", "").strip().lower() not in {"1", "true", "yes", "on"}:
         print("SKIP llm_provider_live_probe: set EDU_AGENT_REAL_LLM=1")
         return
-    if not (os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")):
+    if not os.getenv("BAILIAN_API_KEY"):
         print("SKIP llm_provider_live_probe: BAILIAN_API_KEY not configured")
         return
 

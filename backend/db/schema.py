@@ -524,3 +524,26 @@ agent_release_evidence = Table(
     Index("uq_agent_release_evidence_hash", "evidence_sha256", unique=True),
     Index("idx_release_evidence_slice_created", "agent_type", "config_version", "runtime_mode", "deployed_commit", "created_at"),
 )
+
+llm_capability_manifests = Table(
+    "llm_capability_manifests", metadata,
+    Column("manifest_id", Text, primary_key=True),
+    Column("schema_version", Integer, nullable=False),
+    Column("provider", Text, nullable=False),
+    Column("environment", Text, nullable=False),
+    Column("deployed_commit", Text, nullable=False),
+    Column("image_digest", Text, nullable=False),
+    Column("runtime_config_version", Text, nullable=False),
+    Column("endpoint_fingerprint", Text, nullable=False),
+    Column("manifest_sha256", Text, nullable=False),
+    Column("generated_at", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("payload_json", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("uq_llm_capability_manifest_hash", "manifest_sha256", unique=True),
+    Index(
+        "idx_llm_capability_manifest_provenance_expiry",
+        "provider", "environment", "deployed_commit", "image_digest", "runtime_config_version",
+        "endpoint_fingerprint", "expires_at",
+    ),
+)

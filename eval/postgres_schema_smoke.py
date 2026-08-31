@@ -23,7 +23,7 @@ def main() -> None:
     with get_connection() as conn:
         assert conn.dialect.name == "postgresql"
         tables = set(sa_inspect(conn).get_table_names())
-        assert {"agent_rollout_observations", "agent_release_evidence", "agent_runs", "review_mastery_state"} <= tables
+        assert {"agent_rollout_observations", "agent_release_evidence", "llm_capability_manifests", "agent_runs", "review_mastery_state"} <= tables
         inspector = sa_inspect(conn)
         account_columns = {column["name"] for column in inspector.get_columns("accounts")}
         observation_columns = {column["name"] for column in inspector.get_columns("agent_rollout_observations")}

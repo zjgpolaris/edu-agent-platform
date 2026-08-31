@@ -143,3 +143,13 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 - 自定义 endpoint 仅用于受控测试；生产不要设置 `EDU_AGENT_LLM_ALLOW_CUSTOM_ENDPOINT=true`。
 - 模型 tool call 必须返回 Runtime v2 与 Tool Registry 执行，不能直接执行任意函数。
 - 生产可关闭 `LANGFUSE_CAPTURE_INPUT/OUTPUT`，只保留必要 metadata。
+
+## 8. 不可变镜像与 Manifest Store 发布
+
+1. 手动运行 **Backend Immutable Image Release**，输入 full commit；工作流完成 release gate、PostgreSQL 迁移演练并只构建一次 `linux/amd64` 镜像，下载 `backend-image-<commit>` 记录 digest。
+2. 使用 **Deploy Immutable Backend Environment** 先部署到受保护的 `staging` Environment。目标 Render 服务必须是 image-backed service，`BACKEND_IMAGE_BASE` 与 deploy hook 的默认镜像仓库一致。
+3. 运行 **Runtime Rollout Evidence**。工作流先执行 capability probe，将 manifest 写入目标数据库，再运行真实业务和 RAG，最后写入 Evidence v2。
+4. staging gate 至少 100 个可信 terminal runs 后，production 1% 才能复用同一 digest；10% 晋级还要求 production Evidence v2 和至少 48 小时观察窗口。
+5. strict readiness 必须同时通过 deployment digest、Alembic 013、数据库 manifest、rollout evidence 与 observation health。
+
+生产关闭 Git push auto-deploy。回滚时选择最近一个仍保留 manifest/evidence 的 digest，通过相同的显式部署工作流发布；数据库不做破坏性 downgrade。旧 `DASHSCOPE_API_KEY` alias 已无运行时消费者，只保留 `BAILIAN_API_KEY`。外部 secret store 的删除/轮换必须由环境管理员执行并记录状态，不得把值写入报告。

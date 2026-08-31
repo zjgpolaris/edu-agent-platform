@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+ARG EDU_AGENT_BUILD_COMMIT=""
+
 WORKDIR /app
 
 # Production images only need runtime dependencies. requirements.txt is the
@@ -25,6 +27,7 @@ RUN useradd --create-home --uid 10001 appuser \
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV EDU_AGENT_BUILD_COMMIT=${EDU_AGENT_BUILD_COMMIT}
 # Render Web Services use port 10000 by default. start_backend.py still honors
 # an injected PORT, while local Compose explicitly overrides this to 8000.
 ENV PORT=10000

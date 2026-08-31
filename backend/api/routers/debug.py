@@ -82,8 +82,13 @@ async def api_ready(
     runtime_enabled = os.getenv("EDU_AGENT_RUNTIME_V2_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
     runtime_mode = "shadow" if os.getenv("EDU_AGENT_RUNTIME_V2_SHADOW_MODE", "true").strip().lower() in {"1", "true", "yes", "on"} else "active"
     deployment_errors = runtime_configuration_errors(enabled=runtime_enabled)
-    if require_evidence_v2 and not image_digest:
-        deployment_errors.append("image_digest_missing")
+    if require_evidence_v2:
+        if not image_digest:
+            deployment_errors.append("image_digest_missing")
+        elif not re.fullmatch(r"sha256:[0-9a-f]{64}", image_digest):
+            deployment_errors.append("image_digest_invalid")
+        if not re.fullmatch(r"[0-9a-f]{40}", deployed_commit):
+            deployment_errors.append("deployed_commit_not_full_sha")
     checks["deployment"] = {
         "ok": bool(deployed_commit and runtime_config_version) and not deployment_errors,
         "deployed_commit": deployed_commit or None,
@@ -116,6 +121,11 @@ async def api_ready(
         "configuration_errors": non_credential_errors,
         "profiles": llm_status.get("profiles", {}),
         "capability_manifest": llm_status.get("capability_manifest", {}),
+    }
+    capability_manifest = checks["llm_config"]["capability_manifest"]
+    checks["llm_capabilities"] = {
+        "ok": isinstance(capability_manifest, dict) and capability_manifest.get("status") == "pass",
+        **(capability_manifest if isinstance(capability_manifest, dict) else {"status": "unavailable"}),
     }
 
     try:
@@ -265,7 +275,7 @@ async def api_ready(
 
     required = (["auth_configuration"] if deployment_environment() == "production" else []) + ["database", "llm_config"] + (["rag"] if require_rag else []) + (["external_dependencies"] if require_external else [])
     if require_runtime:
-        required.extend(["deployment", "runtime_schema", "rollout_evidence", "rollout_observations"])
+        required.extend(["deployment", "runtime_schema", "llm_capabilities", "rollout_evidence", "rollout_observations"])
     ok = all(bool(checks.get(name, {}).get("ok")) for name in required)
     failed_required_checks = [name for name in required if not bool(checks.get(name, {}).get("ok"))]
     warnings = [name for name, payload in checks.items() if name not in required and not payload.get("ok")]

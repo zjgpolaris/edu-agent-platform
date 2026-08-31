@@ -143,6 +143,7 @@ def llm_capability_profile(
     required_profiles: list[str] | None = None,
 ) -> dict[str, Any]:
     expected = {
+        "provider": (str(manifest.get("provider") or "")),
         "deployed_commit": deployed_commit,
         "image_digest": image_digest,
         "runtime_config_version": config_version,
@@ -168,6 +169,11 @@ def llm_capability_profile(
         "generated_at": manifest.get("generated_at"),
         "expires_at": manifest.get("expires_at"),
         "required_profiles": required,
+        "source": "database",
+        "required_profile_count": len(required),
+        "passed_profile_count": sum(
+            1 for name in required if isinstance(profiles.get(name), dict) and profiles[name].get("required_status") == "pass"
+        ),
         "reasons": list(dict.fromkeys(reasons)),
     }
 

@@ -101,7 +101,7 @@ def main() -> None:
     assert progress["terminal_samples"] == 3
     assert progress["baseline_ready"] is True
 
-    with patch("agent_runtime.rollout_status.runtime_schema_readiness", return_value={"status": "ready", "schema_ready": True, "alembic_version": "012"}), \
+    with patch("agent_runtime.rollout_status.runtime_schema_readiness", return_value={"status": "ready", "schema_ready": True, "alembic_version": "013"}), \
          patch("agent_runtime.rollout_status.observation_write_health", return_value={"status": "ok", "ok": True, "failure_count": 0, "by_reason": {}}):
         control_status = build_rollout_status(agent_type="history_character", minimum_samples=3)
     assert control_status["phase"] == "control_ready", control_status
@@ -110,7 +110,7 @@ def main() -> None:
 
     control_ready = dict(progress)
     health = {"status": "ok", "ok": True, "failure_count": 0, "by_reason": {}}
-    schema = {"status": "ready", "schema_ready": True, "alembic_version": "012"}
+    schema = {"status": "ready", "schema_ready": True, "alembic_version": "013"}
     with patch.dict(os.environ, _shadow_env(), clear=True), \
          patch("agent_runtime.rollout_status.control_observation_progress", return_value=control_ready), \
          patch("agent_runtime.rollout_status.observation_write_health", return_value=health), \
@@ -143,7 +143,7 @@ def main() -> None:
     from fastapi.testclient import TestClient
     from api.main import app
 
-    with patch("agent_runtime.rollout_status.runtime_schema_readiness", return_value={"status": "ready", "schema_ready": True, "alembic_version": "012"}), \
+    with patch("agent_runtime.rollout_status.runtime_schema_readiness", return_value={"status": "ready", "schema_ready": True, "alembic_version": "013"}), \
          patch("agent_runtime.rollout_status.observation_write_health", return_value={"status": "ok", "ok": True, "failure_count": 0, "by_reason": {}}):
         response = TestClient(app).get(
             "/api/admin/agent-runtime/rollout-status",

@@ -1,4 +1,4 @@
-"""SQLite upgrade/downgrade coverage through trusted rollout migration 012."""
+"""SQLite upgrade/downgrade coverage through LLM capability migration 013."""
 from __future__ import annotations
 
 import os
@@ -19,6 +19,7 @@ RUNTIME_TABLES = {
     "agent_side_effects",
     "agent_rollout_observations",
     "agent_release_evidence",
+    "llm_capability_manifests",
     "weakpoint_evidence",
 }
 LEGACY_AUTOTUTOR_COLUMNS = {
@@ -89,11 +90,14 @@ def _assert_v2(db_path: Path) -> None:
         rollout_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(agent_rollout_observations)")}
         account_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(accounts)")}
         release_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(agent_release_evidence)")}
+        manifest_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(llm_capability_manifests)")}
         assert "idx_rollout_observation_slice_created" in rollout_indexes
         assert "idx_rollout_observation_eligibility" in rollout_indexes
         assert {"traffic_cohort", "rollout_eligible", "eligibility_reason"} <= rollout_columns
         assert {"account_status", "traffic_cohort", "updated_at"} <= account_columns
         assert "uq_agent_release_evidence_hash" in release_indexes
+        assert "uq_llm_capability_manifest_hash" in manifest_indexes
+        assert "idx_llm_capability_manifest_provenance_expiry" in manifest_indexes
         for suffix in ("a", "b"):
             conn.execute("""INSERT INTO learning_events (
                 id, student_id, feature, event_type, data_scope, metadata_json, created_at, effect_key

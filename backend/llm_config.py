@@ -57,7 +57,7 @@ logger.info(
     MODEL_MULTIMODAL,
     MODEL_MULTIMODAL_QUALITY,
     bailian_base_url_host(),
-    _mask_secret(os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")),
+    _mask_secret(os.getenv("BAILIAN_API_KEY")),
 )
 
 

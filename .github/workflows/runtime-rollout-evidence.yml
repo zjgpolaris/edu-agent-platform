@@ -123,7 +123,7 @@ jobs:
           cp eval/reports/latest.json /tmp/runtime-evidence/offline.json
           cp eval/reports/latest.md /tmp/runtime-evidence/offline.md
 
-      - name: Run real LLM profile
+      - name: Run live LLM capability probes
         env:
           BAILIAN_API_KEY: ${{ secrets.BAILIAN_API_KEY }}
           LLM_PROVIDER: bailian
@@ -136,11 +136,35 @@ jobs:
           EDU_AGENT_LLM_MANIFEST_OUTPUT: /tmp/runtime-evidence/llm-capabilities.json
         run: |
           test -n "$BAILIAN_API_KEY"
+          python3 eval/run_core_evals.py --suite llm_provider_live_probe --profile real_llm --require-real-llm --require-clean-revision --json
+          cp eval/reports/latest.json /tmp/runtime-evidence/capability-probe.json
+
+      - name: Persist capability manifest before business and RAG evaluation
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: backend
+        run: |
+          test -n "$DATABASE_URL"
+          python3 scripts/persist_llm_capability_manifest.py /tmp/runtime-evidence/llm-capabilities.json \
+            | tee /tmp/runtime-evidence/manifest-persist-status.json
+
+      - name: Run real LLM business profile
+        env:
+          BAILIAN_API_KEY: ${{ secrets.BAILIAN_API_KEY }}
+          LLM_PROVIDER: bailian
+          EDU_AGENT_REAL_LLM: '1'
+          PYTHONPATH: backend
+          EDU_AGENT_DEPLOYED_COMMIT: ${{ inputs.deployed_commit }}
+          EDU_AGENT_IMAGE_DIGEST: ${{ inputs.image_digest }}
+          EDU_AGENT_RUNTIME_V2_CONFIG_VERSION: ${{ inputs.target_config_version }}
+          EDU_AGENT_ENVIRONMENT: ${{ inputs.target_environment }}
+        run: |
+          test -n "$BAILIAN_API_KEY"
           python3 eval/run_core_evals.py --profile real_llm --require-real-llm --require-clean-revision --json
           cp eval/reports/latest.json /tmp/runtime-evidence/real-llm.json
           cp eval/reports/latest.md /tmp/runtime-evidence/real-llm.md
 
-      - name: Run production RAG profile
+      - name: Run production RAG profile after manifest persistence
         env:
           READY_URL: ${{ inputs.ready_url }}
           API_BASE: ${{ secrets.API_BASE }}
@@ -223,6 +247,8 @@ jobs:
             /tmp/runtime-evidence/real-llm.json
             /tmp/runtime-evidence/real-llm.md
             /tmp/runtime-evidence/llm-capabilities.json
+            /tmp/runtime-evidence/capability-probe.json
+            /tmp/runtime-evidence/manifest-persist-status.json
             /tmp/runtime-evidence/production-rag.json
             /tmp/runtime-evidence/production-rag.md
             /tmp/runtime-evidence/rollout-evidence.json

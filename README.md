@@ -166,9 +166,9 @@ npm run test:prod-rag                 # 显式运行生产 RAG 健康检查
 健康检查分层：`/api/health` 是 liveness；`/api/ready` 是 shallow readiness，默认不触发外部 LLM/Embedding；`/api/debug/rag/health?deep=true` 与 `production_rag_health_smoke.py` 用于生产 RAG 深度检查。
 传入 `--ready-url` 时，release gate 现在会输出 required / failed / warnings 摘要；若带 `--production`、`--ready-require-rag` 或 `--ready-require-external`，会把 RAG / 外部依赖配置作为 blocking readiness check。
 
-Runtime v2 灰度发布还需显式加入 `--ready-require-runtime`。该检查要求部署 commit/config、Alembic 012 schema、生产认证配置和当前版本 rollout evidence 一致；Runtime 关闭、可信样本不足或证据未运行都不会显示为通过。生产镜像不内置 Eval 目录，真实 LLM/RAG 聚合报告通过 `scripts/build_rollout_evidence.py` 绑定 control baseline 后写入 `agent_release_evidence`。
+Runtime v2 灰度发布还需显式加入 `--ready-require-runtime`。该检查要求部署 commit/image digest/config、Alembic 013 schema、数据库 capability manifest、生产认证配置和当前版本 rollout evidence 一致；Runtime 关闭、可信样本不足或证据未运行都不会显示为通过。生产镜像不内置 Eval 目录，真实 LLM/RAG 聚合报告通过 `scripts/build_rollout_evidence.py` 绑定 control baseline 后写入 `agent_release_evidence`。
 
-v1.43 的生产启动入口先验证 `EDU_AGENT_AUTH_REQUIRED=true` 和至少 32 字节的随机 `JWT_SECRET`，再在 PostgreSQL advisory lock 下执行 Alembic `upgrade head`，确认 revision `012` 与 Runtime schema 完整后才启动 API。Render 必须配置 `DIRECT_URL`（Supabase direct/session connection）；普通 `DATABASE_URL` 继续供业务请求使用，transaction pooler 不承担 migration/advisory lock。认证或迁移失败都会输出结构化失败摘要并以非零状态退出；不要通过关闭认证或跳过迁移来恢复服务。
+生产启动入口先验证 `EDU_AGENT_AUTH_REQUIRED=true` 和至少 32 字节的随机 `JWT_SECRET`，再在 PostgreSQL advisory lock 下执行 Alembic `upgrade head`，确认 revision `013` 与 Runtime schema 完整后才启动 API。Render 必须配置 `DIRECT_URL`（Supabase direct/session connection）；普通 `DATABASE_URL` 继续供业务请求使用，transaction pooler 不承担 migration/advisory lock。认证或迁移失败都会输出结构化失败摘要并以非零状态退出；不要通过关闭认证或跳过迁移来恢复服务。
 
 ```bash
 # SQLite：成功迁移、重复执行 no-op、失败时拒绝启动
@@ -221,7 +221,7 @@ GitHub Actions 的手动工作流 **Runtime Rollout Preflight** 使用受保护�
 - `unknown`：schema、证据、provenance、baseline 或样本不足，不得放量；
 - `fail`：出现重复副作用、非法状态迁移、高风险违规或质量阈值越线，必须停止。
 
-本地 deterministic/CI 通过仅代表 **Development Complete**。生产 revision `012`、认证与数据库授权验收、verified control ≥100、verified shadow ≥100、gate PASS 以及后续 48 小时稳定观察完成前，Operational 状态仍为 `NOT_RUN/unknown`。
+本地 deterministic/CI 通过仅代表 **Development Complete**。生产 revision `013`、认证与数据库授权验收、同一不可变 digest 的 staging 证据、verified control ≥100、verified shadow ≥100、gate PASS 以及后续 48 小时稳定观察完成前，Operational 状态仍为 `NOT_RUN/unknown`。
 
 ```bash
 # 三份报告必须来自同一 clean deployed commit，且生成时间不超过 7 天。

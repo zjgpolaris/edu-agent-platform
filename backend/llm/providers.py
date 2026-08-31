@@ -21,7 +21,7 @@ _TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 def bailian_api_key() -> str | None:
-    return os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+    return os.getenv("BAILIAN_API_KEY")
 
 
 def bailian_base_url() -> str:

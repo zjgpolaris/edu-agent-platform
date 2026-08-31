@@ -122,7 +122,7 @@ def _prepare_production_shape() -> dict[str, object]:
 
 def _verify_after(before: dict[str, object]) -> None:
     with get_connection() as conn:
-        assert _revision() == "012"
+        assert _revision() == "013"
         assert _legacy_fingerprints(conn) == before["legacy_fingerprints"]
         assert tuple(conn.execute(text("SELECT student_id, grade, display_name FROM students WHERE student_id=:sid"), {"sid": FIXTURE_STUDENT}).one()) == before["student"]
         assert tuple(conn.execute(text("SELECT id, student_id, feature, event_type FROM learning_events WHERE id='migration-event'")).one()) == before["learning"]
@@ -131,7 +131,7 @@ def _verify_after(before: dict[str, object]) -> None:
         assert tuple(conn.execute(text("SELECT session_id, student_id, trace_id, status FROM autotutor_sessions WHERE session_id='migration-autotutor'")).one()) == before["autotutor"]
         assert tuple(conn.execute(text("SELECT id, collection, content FROM rag_documents WHERE id='migration-rag'")).one()) == before["rag"]
         tables = set(sa_inspect(conn).get_table_names())
-        assert {"agent_runs", "agent_run_events", "agent_side_effects", "agent_rollout_observations", "agent_release_evidence", "review_mastery_state"} <= tables
+        assert {"agent_runs", "agent_run_events", "agent_side_effects", "agent_rollout_observations", "agent_release_evidence", "llm_capability_manifests", "review_mastery_state"} <= tables
         learning_columns = {column["name"] for column in sa_inspect(conn).get_columns("learning_events")}
         audit_columns = {column["name"] for column in sa_inspect(conn).get_columns("audit_events")}
         autotutor_columns = {column["name"] for column in sa_inspect(conn).get_columns("autotutor_sessions")}

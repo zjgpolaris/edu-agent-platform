@@ -12,7 +12,8 @@ services:
     dockerContext: .
     plan: free
     healthCheckPath: /api/health
-    autoDeploy: true
+    # Production promotion is explicit and digest-bound through the release workflow.
+    autoDeploy: false
     envVars:
       - key: PYTHONPATH
         value: /app
@@ -26,6 +27,10 @@ services:
         value: "true"
       - key: EDU_AGENT_ENVIRONMENT
         value: production
+      - key: EDU_AGENT_REQUIRE_LLM_EVIDENCE_V2
+        value: "true"
+      - key: EDU_AGENT_IMAGE_DIGEST
+        sync: false
       - key: EDU_AGENT_AUTH_REQUIRED
         value: "true"
       - key: EDU_AGENT_RUNTIME_V2_CONFIG_VERSION

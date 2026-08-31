@@ -29,6 +29,7 @@ from db.engine import engine
 from db.schema import metadata
 from scripts.build_rollout_evidence import build_evidence, offline_profile, production_rag_profile, real_llm_profile
 from llm.capability_manifest import capability_manifest_sha256, endpoint_fingerprint
+from llm.capability_store import save_capability_manifest
 
 DEPLOYED_COMMIT = "v140-deployed-commit"
 BASELINE_COMMIT = "v140-control-commit"
@@ -189,6 +190,7 @@ def main() -> None:
     assert loaded == evidence
     assert save_release_evidence(evidence) == evidence
 
+    capability_manifest = _capability_manifest()
     evidence_v2 = build_evidence(
         agent_type="history_character",
         config_version="v1.45-history-shadow",
@@ -201,13 +203,20 @@ def main() -> None:
         offline_report=_offline_report(),
         real_llm_report=_real_llm_report(),
         production_rag_report=_production_rag_report(),
-        capability_manifest=_capability_manifest(),
+        capability_manifest=capability_manifest,
         image_digest="sha256:" + "a" * 64,
         required_llm_profiles=["quality"],
     )
     assert evidence_v2["schema_version"] == 2
     assert evidence_v2["profiles"]["real_llm_business_eval"]["status"] == "pass"
     assert evidence_v2["profiles"]["llm_capabilities"]["status"] == "pass"
+    try:
+        save_release_evidence(evidence_v2)
+    except ValueError as exc:
+        assert "manifest is not persisted" in str(exc)
+    else:
+        raise AssertionError("schema v2 evidence accepted a missing capability manifest")
+    save_capability_manifest(capability_manifest)
     save_release_evidence(evidence_v2)
     loaded_v2 = load_release_evidence(
         agent_type="history_character",

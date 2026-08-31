@@ -1,0 +1,99 @@
+name: Backend Immutable Image Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full commit SHA to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: edu_agent
+          POSTGRES_USER: edu_agent
+          POSTGRES_PASSWORD: edu_agent_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U edu_agent -d edu_agent"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: pip install --constraint constraints-runtime.txt --requirement backend/requirements.txt
+      - run: npm ci --prefix frontend
+      - name: Complete release gate
+        run: npm run release:gate
+      - name: PostgreSQL migration rehearsal
+        env:
+          DATABASE_URL: postgresql://edu_agent:edu_agent_ci@127.0.0.1:5432/edu_agent
+          PYTHONPATH: backend
+        run: |
+          alembic -c backend/alembic.ini upgrade 003
+          python3 eval/postgres_upgrade_rehearsal.py
+
+  build:
+    needs: gate
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+      - name: Refuse mutable source
+        env:
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          test -z "$(git status --porcelain)"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          platforms: linux/amd64
+          build-args: EDU_AGENT_BUILD_COMMIT=${{ inputs.commit }}
+          push: true
+          tags: ghcr.io/${{ github.repository }}/backend:sha-${{ inputs.commit }}
+          provenance: mode=max
+          sbom: true
+      - name: Record immutable artifact
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          python3 -c 'import hashlib,json,os,pathlib; h=lambda p:"sha256:"+hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest(); pathlib.Path("backend-image.json").write_text(json.dumps({"schema_version":1,"source_commit":os.environ["COMMIT"],"image_repository":"ghcr.io/${{ github.repository }}/backend","image_digest":os.environ["IMAGE_DIGEST"],"platform":"linux/amd64","dockerfile_sha256":h("backend/Dockerfile"),"runtime_requirements_sha256":h("backend/requirements-runtime.txt")},sort_keys=True)+"\n")'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-${{ inputs.commit }}
+          path: backend-image.json
+          retention-days: 30

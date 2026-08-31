@@ -150,7 +150,11 @@ class LLMRegistry:
             },
             "capability_manifest": {
                 key: capabilities.get(key)
-                for key in ("status", "manifest_sha256", "generated_at", "expires_at", "deployment_provenance_match", "reasons")
+                for key in (
+                    "status", "manifest_sha256", "generated_at", "expires_at", "deployment_provenance_match",
+                    "manifest_source", "manifest_store_status", "queried_provenance", "cache_status", "warnings",
+                    "required_profile_count", "passed_profile_count", "reasons",
+                )
             },
         }
 

@@ -15,7 +15,7 @@ def _enabled(name: str, default: bool = False) -> bool:
 
 
 def deployed_commit() -> str:
-    for name in ("EDU_AGENT_DEPLOYED_COMMIT", "RENDER_GIT_COMMIT", "GITHUB_SHA"):
+    for name in ("EDU_AGENT_DEPLOYED_COMMIT", "EDU_AGENT_BUILD_COMMIT", "RENDER_GIT_COMMIT", "GITHUB_SHA"):
         value = os.getenv(name, "").strip()
         if value:
             return value[:120]

@@ -72,7 +72,7 @@ def main() -> None:
         return
 
     # Configure the Ragas judge through the same explicit Bailian provider.
-    bailian_key = os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+    bailian_key = os.getenv("BAILIAN_API_KEY")
     if not bailian_key:
         print("SKIP ragas_eval: BAILIAN_API_KEY not set for Ragas LLM judge")
         return

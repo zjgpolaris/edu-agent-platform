@@ -24,7 +24,7 @@ from agent_runtime.rollout_gate import build_rollout_readiness, seal_rollout_evi
 from db.engine import get_connection
 from security.audit_log import record_audit_event
 
-SCHEMA_READY = {"status": "ready", "schema_ready": True, "alembic_version": "012"}
+SCHEMA_READY = {"status": "ready", "schema_ready": True, "alembic_version": "013"}
 DEPLOYED_COMMIT = "rollout-smoke-commit"
 
 

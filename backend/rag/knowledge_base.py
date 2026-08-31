@@ -73,7 +73,7 @@ class OpenAICompatibleEmbeddings:
         explicit_embed_base = bool(os.getenv("EMBED_API_BASE"))
         key = os.getenv("EMBED_API_KEY")
         if not key and not explicit_embed_base:
-            key = os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+            key = os.getenv("BAILIAN_API_KEY")
         if not key:
             raise RuntimeError(
                 "EMBED_API_KEY is not set for the configured EMBED_API_BASE; "
@@ -174,7 +174,7 @@ def _embedding_api_key_configured() -> bool:
         return True
     if explicit_embed_base:
         return False
-    return bool(os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY"))
+    return bool(os.getenv("BAILIAN_API_KEY"))
 
 
 def _sanitize_health_reason(exc: Exception, max_chars: int = 240) -> str:
@@ -184,7 +184,6 @@ def _sanitize_health_reason(exc: Exception, max_chars: int = 240) -> str:
         "DIRECT_URL",
         "EMBED_API_KEY",
         "BAILIAN_API_KEY",
-        "DASHSCOPE_API_KEY",
     ):
         value = os.getenv(key)
         if value:

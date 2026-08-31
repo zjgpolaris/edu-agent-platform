@@ -79,6 +79,20 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
         with get_connection() as conn:
             if "agent_release_evidence" not in set(sa_inspect(conn).get_table_names()):
                 raise LookupError("release evidence schema is not migrated")
+            if schema_version == 2:
+                from llm.capability_store import load_capability_manifest_by_hash
+                capability = profiles["llm_capabilities"]
+                manifest = load_capability_manifest_by_hash(str(capability["manifest_sha256"]), connection=conn)
+                if manifest is None:
+                    raise ValueError("release evidence capability manifest is not persisted")
+                expected = {
+                    "deployed_commit": payload["deployed_commit"],
+                    "image_digest": payload["image_digest"],
+                    "runtime_config_version": payload["config_version"],
+                    "environment": payload["environment"],
+                }
+                if any(str(manifest.get(field) or "") != str(value) for field, value in expected.items()):
+                    raise ValueError("release evidence capability manifest provenance does not match")
             conn.execute(text("""INSERT INTO agent_release_evidence (
                 evidence_id, agent_type, config_version, runtime_mode, deployed_commit,
                 environment, evidence_sha256, payload_json, created_at

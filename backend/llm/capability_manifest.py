@@ -5,6 +5,7 @@ import hashlib
 import importlib.metadata
 import json
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from .providers import bailian_base_url
 SCHEMA_VERSION = 1
 OPTIONAL_CAPABILITIES = frozenset({"tool_calling", "native_structured_output"})
 _TRUE_VALUES = {"1", "true", "yes", "on"}
+_MANIFEST_CACHE: dict[tuple[str, ...], tuple[float, dict[str, Any] | None, str]] = {}
 
 
 def _canonical(payload: dict[str, Any], *, digest_field: str = "manifest_sha256") -> bytes:
@@ -46,12 +48,17 @@ def _package_version(name: str) -> str:
 
 def endpoint_fingerprint() -> str:
     parsed = urlparse(bailian_base_url())
-    normalized = f"{parsed.scheme.lower()}://{(parsed.hostname or '').lower()}{parsed.path.rstrip('/')}"
+    host = (parsed.hostname or "").lower()
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    normalized = f"{parsed.scheme.lower()}://{host}{parsed.path.rstrip('/')}"
     return f"sha256:{hashlib.sha256(normalized.encode('utf-8')).hexdigest()}"
 
 
 def current_provenance() -> dict[str, str]:
+    provider = (os.getenv("LLM_PROVIDER") or "bailian").strip().lower()
     return {
+        "provider": "bailian" if provider == "dashscope" else provider,
         "deployed_commit": deployed_commit(),
         "image_digest": deployment_image_digest(),
         "runtime_config_version": runtime_config_version(),
@@ -149,7 +156,7 @@ def validate_capability_manifest(
     if payload.get("manifest_sha256") != capability_manifest_sha256(payload):
         reasons.append("manifest_hash_mismatch")
     current = expected_provenance if expected_provenance is not None else current_provenance()
-    for field in ("deployed_commit", "image_digest", "runtime_config_version", "environment", "endpoint_fingerprint"):
+    for field in ("provider", "deployed_commit", "image_digest", "runtime_config_version", "environment", "endpoint_fingerprint"):
         expected = str(current.get(field) or "")
         actual = str(payload.get(field) or "")
         if require_expected_provenance and not expected:
@@ -197,8 +204,8 @@ def validate_capability_manifest(
     return list(dict.fromkeys(reasons))
 
 
-def load_capability_manifest(path: str | Path | None = None) -> dict[str, Any] | None:
-    configured = str(path or os.getenv("EDU_AGENT_LLM_CAPABILITY_MANIFEST_PATH", "")).strip()
+def _load_capability_manifest_file(path: str | Path) -> dict[str, Any] | None:
+    configured = str(path).strip()
     if not configured:
         return None
     try:
@@ -206,6 +213,52 @@ def load_capability_manifest(path: str | Path | None = None) -> dict[str, Any] |
     except (OSError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def clear_capability_manifest_cache() -> None:
+    _MANIFEST_CACHE.clear()
+
+
+def resolve_capability_manifest(path: str | Path | None = None) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Resolve file override first, otherwise query the exact DB provenance."""
+    configured = str(path or os.getenv("EDU_AGENT_LLM_CAPABILITY_MANIFEST_PATH", "")).strip()
+    provenance = current_provenance()
+    if configured:
+        payload = _load_capability_manifest_file(configured)
+        return payload, {
+            "source": "file_override",
+            "store_status": "bypassed",
+            "queried_provenance": provenance,
+            "warnings": ["manifest_file_override_in_production"] if deployment_environment() == "production" else [],
+        }
+    key = tuple(provenance.get(field, "") for field in (
+        "provider", "environment", "deployed_commit", "image_digest", "runtime_config_version", "endpoint_fingerprint"
+    ))
+    ttl = max(0, min(int(os.getenv("EDU_AGENT_LLM_MANIFEST_CACHE_TTL_SECONDS", "60")), 3600))
+    cached = _MANIFEST_CACHE.get(key)
+    if cached and time.monotonic() - cached[0] <= ttl:
+        return cached[1], {
+            "source": "database", "store_status": cached[2], "queried_provenance": provenance,
+            "cache_status": "hit", "warnings": [],
+        }
+    try:
+        from .capability_store import load_capability_manifest_exact
+        payload = load_capability_manifest_exact(provenance)
+        store_status = "pass" if payload is not None else "missing"
+    except Exception as exc:
+        from .capability_store import CapabilityManifestStoreUnavailable
+        if not isinstance(exc, CapabilityManifestStoreUnavailable):
+            raise
+        payload, store_status = None, "unavailable"
+    _MANIFEST_CACHE[key] = (time.monotonic(), payload, store_status)
+    return payload, {
+        "source": "database", "store_status": store_status, "queried_provenance": provenance,
+        "cache_status": "miss", "warnings": [],
+    }
+
+
+def load_capability_manifest(path: str | Path | None = None) -> dict[str, Any] | None:
+    return resolve_capability_manifest(path)[0]
 
 
 def requested_optional_capabilities() -> dict[str, set[str]]:
@@ -219,7 +272,14 @@ def requested_optional_capabilities() -> dict[str, set[str]]:
 
 
 def capability_status(registry: Any, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
-    payload = manifest if manifest is not None else load_capability_manifest()
+    if manifest is not None:
+        payload = manifest
+        resolution = {
+            "source": "argument", "store_status": "not_queried", "queried_provenance": current_provenance(),
+            "warnings": [],
+        }
+    else:
+        payload, resolution = resolve_capability_manifest()
     reasons = ["manifest_missing"] if payload is None else validate_capability_manifest(
         payload, registry, require_expected_provenance=True
     )
@@ -248,6 +308,13 @@ def capability_status(registry: Any, manifest: dict[str, Any] | None = None) -> 
         "generated_at": payload.get("generated_at") if isinstance(payload, dict) else None,
         "expires_at": payload.get("expires_at") if isinstance(payload, dict) else None,
         "deployment_provenance_match": valid,
+        "manifest_source": resolution["source"],
+        "manifest_store_status": resolution["store_status"],
+        "queried_provenance": resolution["queried_provenance"],
+        "cache_status": resolution.get("cache_status", "not_applicable"),
+        "warnings": resolution.get("warnings", []),
+        "required_profile_count": len(registry.profiles),
+        "passed_profile_count": sum(1 for item in profiles.values() if item["required_status"] == "pass") if valid else 0,
         "reasons": reasons,
         "profiles": profiles,
     }

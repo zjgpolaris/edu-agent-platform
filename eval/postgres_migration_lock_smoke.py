@@ -19,7 +19,7 @@ def main() -> None:
     for process, (stdout, stderr) in zip(processes, outputs):
         assert process.returncode == 0, stderr or stdout
         assert '"status": "pass"' in stdout, stdout
-        assert '"to_revision": "012"' in stdout, stdout
+        assert '"to_revision": "013"' in stdout, stdout
     print("postgres_migration_lock_smoke=PASS")
 
 

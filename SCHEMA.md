@@ -2,7 +2,15 @@
 
 **创建时间：** 2026-06-23
 **项目名称：** EduAgent - K-12 中文/历史 AI 教学平台
-**最后更新：** 2026-08-20
+**最后更新：** 2026-08-31
+
+---
+
+## LLM Capability Manifest Store（Alembic 013）
+
+`llm_capability_manifests` 是 append-only 发布事实表。每行以 `environment + deployed_commit + image_digest + runtime_config_version + endpoint_fingerprint` 精确绑定运行实例；`manifest_sha256` 唯一，重复写入幂等。Runtime 默认查询数据库，文件路径仅用于测试或显式 break-glass。Release Evidence Schema v2 入库时必须在同一数据库事务中找到对应 manifest hash，缺失或 provenance 不一致时拒绝写入。
+
+表内禁止 API key、Authorization、学生正文、prompt、图片 base64、完整模型输出及请求/响应 body。
 
 ---
 

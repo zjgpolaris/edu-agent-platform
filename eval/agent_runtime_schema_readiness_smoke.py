@@ -18,7 +18,7 @@ from sqlalchemy import text  # noqa: E402
 from agent_runtime.event_store import ensure_runtime_tables  # noqa: E402
 from agent_runtime.readiness import runtime_schema_readiness  # noqa: E402
 from db.engine import get_connection  # noqa: E402
-from db.schema import agent_release_evidence, agent_rollout_observations, autotutor_sessions  # noqa: E402
+from db.schema import agent_release_evidence, agent_rollout_observations, autotutor_sessions, llm_capability_manifests  # noqa: E402
 from student_profile import init_db  # noqa: E402
 from services.weakpoint_service import _ensure_table  # noqa: E402
 
@@ -33,8 +33,9 @@ def main() -> None:
         autotutor_sessions.create(bind=conn, checkfirst=True)
         agent_rollout_observations.create(bind=conn, checkfirst=True)
         agent_release_evidence.create(bind=conn, checkfirst=True)
+        llm_capability_manifests.create(bind=conn, checkfirst=True)
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('012')"))
+        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('013')"))
     init_db()
     _ensure_table()
 
@@ -43,8 +44,8 @@ def main() -> None:
         "status": "ready",
         "schema_ready": True,
         "database_dialect": "sqlite",
-        "required_alembic_version": "012",
-        "alembic_version": "012",
+        "required_alembic_version": "013",
+        "alembic_version": "013",
         "missing_tables": [],
         "missing_columns": [],
     }

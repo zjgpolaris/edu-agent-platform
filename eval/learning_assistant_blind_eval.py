@@ -33,7 +33,7 @@ def _llm_credentials_available() -> bool:
     if os.getenv("EDU_AGENT_LLM_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
         return False
     provider = os.getenv("LLM_PROVIDER", "bailian").strip().lower()
-    bailian_available = bool(os.getenv("BAILIAN_API_KEY") or os.getenv("DASHSCOPE_API_KEY"))
+    bailian_available = bool(os.getenv("BAILIAN_API_KEY"))
     if provider in {"bailian", "dashscope"}:
         return bailian_available
     return False
