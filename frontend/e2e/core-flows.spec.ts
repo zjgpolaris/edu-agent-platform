@@ -2,6 +2,11 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
+const E2E_ADMIN = {
+  username: "pilot-admin",
+  password: "pilot-admin-123",
+};
+
 test.beforeEach(async ({ context }) => {
   // Keep the real FastAPI boundary while avoiding browser/system proxy rules
   // that can intercept localhost cross-port requests on managed desktops.
@@ -29,13 +34,23 @@ test.beforeEach(async ({ context }) => {
 
 test.beforeAll(() => {
   const root = path.resolve(process.cwd(), "..");
+  const env = {
+    ...process.env,
+    PYTHONPATH: "backend",
+    EDU_AGENT_DB_PATH: "/tmp/edu-agent-playwright.sqlite3",
+    JWT_SECRET: "edu-agent-playwright-only-secret",
+  };
   execFileSync(process.env.E2E_PYTHON || "python3", ["scripts/seed_pilot_demo.py"], {
     cwd: root,
+    env,
+    stdio: "inherit",
+  });
+  execFileSync(process.env.E2E_PYTHON || "python3", ["scripts/bootstrap_admin.py"], {
+    cwd: root,
     env: {
-      ...process.env,
-      PYTHONPATH: "backend",
-      EDU_AGENT_DB_PATH: "/tmp/edu-agent-playwright.sqlite3",
-      JWT_SECRET: "edu-agent-playwright-only-secret",
+      ...env,
+      ADMIN_USERNAME: E2E_ADMIN.username,
+      ADMIN_PASSWORD: E2E_ADMIN.password,
     },
     stdio: "inherit",
   });
@@ -46,6 +61,14 @@ async function enterDemo(page: Page, role: "student" | "teacher") {
   await page.getByRole("tab", { name: role === "student" ? "学生" : "教师" }).click();
   await page.getByRole("button", { name: new RegExp(role === "student" ? "学生体验" : "教师体验") }).click();
   await expect(page).toHaveURL(new RegExp(`/${role}$`));
+}
+
+async function enterAdmin(page: Page) {
+  await page.goto("/");
+  await page.getByLabel("用户名 / 学号").fill(E2E_ADMIN.username);
+  await page.getByLabel("密码").fill(E2E_ADMIN.password);
+  await page.getByRole("button", { name: "登录学生工作台" }).click();
+  await expect(page).toHaveURL(/\/eval$/);
 }
 
 test("学生可从工作台进入今日复习与错题库", async ({ page }) => {
@@ -172,9 +195,8 @@ test("教师可查看作业管理与 Pilot 作业", async ({ page }) => {
   await expect(page.getByRole("button", { name: "+ 新建作业" })).toBeVisible();
 });
 
-test("Eval 页面展示评测与 Trace 运行状态", async ({ page }) => {
-  await enterDemo(page, "teacher");
-  await page.goto("/eval");
+test("管理员可查看 Eval 评测与 Trace 运行状态", async ({ page }) => {
+  await enterAdmin(page);
   await expect(page.getByRole("heading", { name: "Eval 评估中心" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "AgentOps 运行状态" })).toBeVisible();
   await expect(page.getByText("Trace 覆盖率")).toBeVisible();
