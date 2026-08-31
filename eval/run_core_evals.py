@@ -62,6 +62,12 @@ OPTIONAL_SKIP_SUITES = {
     # covered by history_character_runtime_smoke.
     "history_character_eval",
 }
+REAL_LLM_SUITES = [
+    "llm_provider_live_probe",
+    "learning_assistant_semantic_router_eval",
+    "history_character_eval",
+    "history_character_smoke",
+]
 
 # These suites validate infrastructure that the generic offline release gate
 # does not provision. They remain discoverable through --suite and are run by
@@ -73,6 +79,8 @@ DEDICATED_INTEGRATION_SUITES = {
 
 CORE_SUITES = [
     "llm_provider_contract_smoke",
+    "llm_capability_manifest_smoke",
+    "llm_capability_api_smoke",
     "eval_run_evidence_smoke",
     "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
@@ -156,6 +164,8 @@ CORE_SUITES = [
     "agent_runtime_learning_assistant_api_smoke",
 ]
 QUICK_SUITES = [
+    "llm_capability_manifest_smoke",
+    "llm_capability_api_smoke",
     "eval_run_evidence_smoke",
     "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
@@ -349,6 +359,7 @@ SUITE_FILES = {
     "learning_assistant_rollout_smoke": EVAL_DIR / "learning_assistant_rollout_smoke.py",
     "learning_assistant_blind_eval": EVAL_DIR / "learning_assistant_blind_eval.py",
     "learning_assistant_semantic_router_eval": EVAL_DIR / "learning_assistant_semantic_router_eval.py",
+    "llm_provider_live_probe": EVAL_DIR / "llm_provider_live_probe.py",
     "learning_assistant_external_ood_eval": EVAL_DIR / "learning_assistant_external_ood_eval.py",
     "intent_accuracy_eval": EVAL_DIR / "intent_accuracy_eval.py",
     "material_rag_smoke": EVAL_DIR / "material_rag_smoke.py",
@@ -599,6 +610,12 @@ SUITE_METADATA: dict[str, dict[str, str]] = {
     "learning_assistant_semantic_router_eval": {
         "label": "学习助手真实语义路由评测",
         "category": "agent",
+        "kind": "quality",
+        "priority": "p0",
+    },
+    "llm_provider_live_probe": {
+        "label": "LLM 全 Profile 真实能力探测",
+        "category": "observability",
         "kind": "quality",
         "priority": "p0",
     },
@@ -1307,7 +1324,7 @@ def selected_suites(args: argparse.Namespace) -> list[str]:
     if args.profile == "blind":
         return ["learning_assistant_blind_eval"]
     if args.profile == "real_llm":
-        return ["learning_assistant_semantic_router_eval"]
+        return REAL_LLM_SUITES
     return QUICK_SUITES if args.quick else SMOKE_SUITES if args.smoke else CORE_SUITES
 
 
@@ -1516,7 +1533,9 @@ def build_json_summary(
     allowed_skipped_suites = [
         result.name
         for result in results
-        if result.status == "skipped" and result.name in OPTIONAL_SKIP_SUITES
+        if result.status == "skipped"
+        and result.name in OPTIONAL_SKIP_SUITES
+        and not (evidence_profile == "real_llm" and result.name in REAL_LLM_SUITES)
     ]
     blocking_skipped_suites = [name for name in skipped_suites if name not in allowed_skipped_suites]
     required_by_profile = {"core": CORE_SUITES, "quick": QUICK_SUITES, "smoke": SMOKE_SUITES}
@@ -1569,9 +1588,9 @@ def build_json_summary(
         result.name == "learning_assistant_blind_eval" and result.status == "passed"
         for result in results
     )
-    real_llm_passed = any(
-        result.name == "learning_assistant_semantic_router_eval" and result.status == "passed"
-        for result in results
+    real_llm_passed = all(
+        name in result_by_name and result_by_name[name].status == "passed"
+        for name in REAL_LLM_SUITES
     ) and observed_llm_calls > 0
     required_profiles_passed = []
     if offline_core_passed:

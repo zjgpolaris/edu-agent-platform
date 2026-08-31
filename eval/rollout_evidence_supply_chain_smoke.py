@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +18,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from agent_runtime.evidence_store import load_release_evidence, save_release_evidence
+from agent_runtime.rollout_gate import _evidence_reasons
 from agent_runtime.rollout_observations import (
     aggregate_control_baseline,
     observation_write_health,
@@ -27,6 +28,7 @@ from agent_runtime.rollout_observations import (
 from db.engine import engine
 from db.schema import metadata
 from scripts.build_rollout_evidence import build_evidence, offline_profile, production_rag_profile, real_llm_profile
+from llm.capability_manifest import capability_manifest_sha256, endpoint_fingerprint
 
 DEPLOYED_COMMIT = "v140-deployed-commit"
 BASELINE_COMMIT = "v140-control-commit"
@@ -48,6 +50,15 @@ def _real_llm_report() -> dict:
             "provider": "bailian",
             "models": {"quality-model": 12},
         },
+        "suites": [
+            {"name": name, "status": "passed"}
+            for name in (
+                "llm_provider_live_probe",
+                "learning_assistant_semantic_router_eval",
+                "history_character_eval",
+                "history_character_smoke",
+            )
+        ],
     }
 
 
@@ -73,6 +84,37 @@ def _production_rag_report() -> dict:
         "eval_run": {"run_id": "eval_rag_v140", "profile": "production_canary"},
         "suites": [{"name": "production_rag_health_smoke", "status": "passed"}],
     }
+
+
+def _capability_manifest() -> dict:
+    payload = {
+        "schema_version": 1,
+        "provider": "bailian",
+        "transport": "langchain_openai",
+        "deployed_commit": DEPLOYED_COMMIT,
+        "image_digest": "sha256:" + "a" * 64,
+        "runtime_config_version": "v1.45-history-shadow",
+        "environment": "staging",
+        "endpoint_fingerprint": endpoint_fingerprint(),
+        "dependencies": {"langchain_openai": "1.6.0"},
+        "profiles": {
+            "quality": {
+                "profile_name": "llm_quality",
+                "model": "quality-model",
+                "max_tokens": 2048,
+                "fallback_profiles": ["fast", "fallback"],
+                "required_status": "pass",
+                "required_checks": {"invoke": {"status": "pass"}},
+                "optional_checks": {},
+                "validated_capabilities": ["chat"],
+                "trace_ids": ["trace-capability"],
+            }
+        },
+        "generated_at": _now(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+    }
+    payload["manifest_sha256"] = capability_manifest_sha256(payload)
+    return payload
 
 
 def main() -> None:
@@ -146,6 +188,80 @@ def main() -> None:
     )
     assert loaded == evidence
     assert save_release_evidence(evidence) == evidence
+
+    evidence_v2 = build_evidence(
+        agent_type="history_character",
+        config_version="v1.45-history-shadow",
+        runtime_mode="shadow",
+        deployed_commit=DEPLOYED_COMMIT,
+        environment="staging",
+        baseline_config_version="v1.40-history-control",
+        baseline_commit=BASELINE_COMMIT,
+        minimum_samples=100,
+        offline_report=_offline_report(),
+        real_llm_report=_real_llm_report(),
+        production_rag_report=_production_rag_report(),
+        capability_manifest=_capability_manifest(),
+        image_digest="sha256:" + "a" * 64,
+        required_llm_profiles=["quality"],
+    )
+    assert evidence_v2["schema_version"] == 2
+    assert evidence_v2["profiles"]["real_llm_business_eval"]["status"] == "pass"
+    assert evidence_v2["profiles"]["llm_capabilities"]["status"] == "pass"
+    save_release_evidence(evidence_v2)
+    loaded_v2 = load_release_evidence(
+        agent_type="history_character",
+        config_version="v1.45-history-shadow",
+        runtime_mode="shadow",
+        deployed_commit=DEPLOYED_COMMIT,
+        environment="staging",
+    )
+    assert loaded_v2 == evidence_v2
+    os.environ["EDU_AGENT_IMAGE_DIGEST"] = "sha256:" + "a" * 64
+    os.environ["EDU_AGENT_REQUIRE_LLM_EVIDENCE_V2"] = "true"
+    reasons, _baseline, profiles = _evidence_reasons(
+        evidence_v2,
+        agent_type="history_character",
+        config_version="v1.45-history-shadow",
+        runtime_mode="shadow",
+        deployed_commit=DEPLOYED_COMMIT,
+        environment="staging",
+        minimum_terminal_runs=100,
+    )
+    assert reasons == [], reasons
+    assert profiles["llm_capabilities"] == "pass"
+    legacy_reasons, _legacy_baseline, _legacy_profiles = _evidence_reasons(
+        evidence,
+        agent_type="history_character",
+        config_version="v1.40-history-shadow",
+        runtime_mode="shadow",
+        deployed_commit=DEPLOYED_COMMIT,
+        environment="staging",
+        minimum_terminal_runs=100,
+    )
+    assert "rollout_evidence_schema_v2_required" in legacy_reasons
+
+    wrong_image = _capability_manifest()
+    try:
+        build_evidence(
+            agent_type="history_character",
+            config_version="v1.45-history-shadow",
+            runtime_mode="shadow",
+            deployed_commit=DEPLOYED_COMMIT,
+            environment="staging",
+            baseline_config_version="v1.40-history-control",
+            baseline_commit=BASELINE_COMMIT,
+            minimum_samples=100,
+            offline_report=_offline_report(),
+            real_llm_report=_real_llm_report(),
+            production_rag_report=_production_rag_report(),
+            capability_manifest=wrong_image,
+            image_digest="sha256:" + "c" * 64,
+            required_llm_profiles=["quality"],
+        )
+        raise AssertionError("image mismatch must fail schema v2 evidence")
+    except ValueError:
+        pass
     assert observation_write_health()["status"] == "ok"
     assert try_record_rollout_observation(
         agent_type="history_character",

@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
-from security.auth import Actor, require_auth
+from security.auth import Actor, require_admin, require_auth
 from tracing import current_trace_id, trace_context
 from trace_store import get_trace_store
 from llm_config import (
@@ -23,6 +23,7 @@ from rag.knowledge_base import check_rag_health
 from deployment import (
     auth_configuration_status,
     deployed_commit as current_deployed_commit,
+    deployment_image_digest,
     deployment_environment,
     runtime_config_version as current_runtime_config_version,
     runtime_configuration_errors,
@@ -74,16 +75,22 @@ async def api_ready(
     checks["auth_configuration"] = auth_configuration_status()
 
     deployed_commit = current_deployed_commit()
+    image_digest = deployment_image_digest()
     runtime_config_version = current_runtime_config_version()
+    require_evidence_v2 = os.getenv("EDU_AGENT_REQUIRE_LLM_EVIDENCE_V2", "").strip().lower() in {"1", "true", "yes", "on"}
     rollout_agent_type = os.getenv("EDU_AGENT_RUNTIME_ROLLOUT_AGENT_TYPE", "history_character").strip()[:80]
     runtime_enabled = os.getenv("EDU_AGENT_RUNTIME_V2_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
     runtime_mode = "shadow" if os.getenv("EDU_AGENT_RUNTIME_V2_SHADOW_MODE", "true").strip().lower() in {"1", "true", "yes", "on"} else "active"
+    deployment_errors = runtime_configuration_errors(enabled=runtime_enabled)
+    if require_evidence_v2 and not image_digest:
+        deployment_errors.append("image_digest_missing")
     checks["deployment"] = {
-        "ok": bool(deployed_commit and runtime_config_version) and not runtime_configuration_errors(enabled=runtime_enabled),
+        "ok": bool(deployed_commit and runtime_config_version) and not deployment_errors,
         "deployed_commit": deployed_commit or None,
+        "image_digest": image_digest or None,
         "runtime_config_version": runtime_config_version or None,
         "environment": deployment_environment(),
-        "runtime_configuration_errors": runtime_configuration_errors(enabled=runtime_enabled),
+        "runtime_configuration_errors": deployment_errors,
     }
 
     try:
@@ -108,6 +115,7 @@ async def api_ready(
         "credentials_configured": bool(llm_status.get("credentials_configured")),
         "configuration_errors": non_credential_errors,
         "profiles": llm_status.get("profiles", {}),
+        "capability_manifest": llm_status.get("capability_manifest", {}),
     }
 
     try:
@@ -186,14 +194,24 @@ async def api_ready(
                 evidence_fresh = -0.1 <= evidence_age_hours <= 168
             except ValueError:
                 evidence_generated_at = None
+        evidence_schema = int((evidence or {}).get("schema_version") or 1) if isinstance(evidence, dict) else 1
+        required_profile_names = (
+            ("offline", "real_llm", "production_rag")
+            if evidence_schema == 1
+            else ("offline", "real_llm_business_eval", "production_rag", "llm_capabilities")
+        )
         evidence_ok = bool(
             isinstance(evidence, dict)
             and evidence.get("evidence_sha256") == evidence_sha256(evidence)
             and evidence.get("environment") == deployment_environment()
             and evidence_fresh
-            and (profiles.get("offline") or {}).get("status") == "pass"
-            and (profiles.get("real_llm") or {}).get("status") == "pass"
-            and (profiles.get("production_rag") or {}).get("status") == "pass"
+            and (not require_evidence_v2 or evidence_schema == 2)
+            and (
+                evidence_schema != 2
+                or not deployment_image_digest()
+                or evidence.get("image_digest") == deployment_image_digest()
+            )
+            and all((profiles.get(name) or {}).get("status") == "pass" for name in required_profile_names)
         )
         checks["rollout_evidence"] = {
             "ok": evidence_ok,
@@ -202,6 +220,8 @@ async def api_ready(
             "runtime_mode": runtime_mode,
             "agent_type": rollout_agent_type or None,
             "evidence_sha256": evidence.get("evidence_sha256") if isinstance(evidence, dict) else None,
+            "schema_version": evidence_schema if isinstance(evidence, dict) else None,
+            "required_schema_version": 2 if require_evidence_v2 else 1,
             "generated_at": evidence.get("generated_at") if isinstance(evidence, dict) else None,
             "fresh": evidence_fresh,
             "profiles": profiles,
@@ -282,15 +302,44 @@ async def llm_health(deep: bool = False, actor: Actor = Depends(require_auth)):
         "fallback_model": MODEL_FALLBACK,
         "credentials_configured": status.get("credentials_configured"),
         "profiles": status.get("profiles", {}),
+        "capability_manifest": status.get("capability_manifest", {}),
     }
     if not deep:
         return {**config, "ok": True, "mode": "shallow", "message": "LLM config loaded; use ?deep=true to test provider connectivity"}
     with trace_context(name="GET /api/debug/llm/health", metadata=trace_meta("llm_health", "/api/debug/llm/health", stream=False)):
         try:
             response = llm_fast.invoke([{"role": "system", "content": "你是健康检查助手，只返回 JSON。"}, {"role": "user", "content": "返回 {\"ok\": true, \"message\": \"pong\"}"}])
-            return {**config, "ok": True, "mode": "deep", "content": response.content[:500]}
+            return {
+                **config,
+                "ok": True,
+                "mode": "deep",
+                "scope": "fast_connectivity_only",
+                "proves": ["credentials", "endpoint_connectivity", "fast_invoke"],
+                "does_not_prove": [
+                    "all_profiles", "vision", "tool_calling", "native_structured_output", "business_quality"
+                ],
+                "content": response.content[:500],
+            }
         except Exception as exc:
-            return {**config, "ok": False, "mode": "deep", "error": str(exc)[:1200]}
+            return {
+                **config,
+                "ok": False,
+                "mode": "deep",
+                "scope": "fast_connectivity_only",
+                "proves": [],
+                "does_not_prove": [
+                    "all_profiles", "vision", "tool_calling", "native_structured_output", "business_quality"
+                ],
+                "error_type": exc.__class__.__name__,
+            }
+
+
+@router.get("/api/admin/llm/capabilities")
+async def llm_capabilities(actor: Actor = Depends(require_admin)):
+    """Return content-free, deployment-bound LLM capability evidence."""
+    from llm.registry import get_default_registry
+
+    return get_default_registry().capability_status()
 
 
 @router.get("/api/debug/rag/health")

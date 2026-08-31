@@ -67,11 +67,13 @@ class ManagedChatModel:
         *,
         client_factory: Callable[[LLMProfile], Any] = create_chat_model,
         sleep: Callable[[float], None] = time.sleep,
+        capability_enabled: Callable[[str], bool] | None = None,
     ) -> None:
         self.profile = profile
         self._profiles = dict(profiles)
         self._client_factory = client_factory
         self._sleep = sleep
+        self._capability_enabled = capability_enabled
         self._clients: dict[str, Any] = {}
 
         self.name = profile.name
@@ -84,9 +86,17 @@ class ManagedChatModel:
     def _execution_disabled() -> bool:
         return os.getenv("EDU_AGENT_LLM_DISABLED", "").strip().lower() in _TRUE_VALUES
 
-    def _profile_chain(self) -> list[LLMProfile]:
-        profiles = [self.profile, *(self._profiles[name] for name in self.profile.fallback_profiles)]
+    def _profile_chain(self, *, allow_fallback: bool = True) -> list[LLMProfile]:
+        profiles = [self.profile]
+        if allow_fallback:
+            profiles.extend(self._profiles[name] for name in self.profile.fallback_profiles)
         return list({profile.name: profile for profile in profiles}.values())
+
+    def _capability_allowed(self, capability: str) -> bool:
+        normalized = "tool_calling" if capability == "tools" else capability
+        if capability in self.profile.capabilities or normalized in self.profile.capabilities:
+            return True
+        return bool(self._capability_enabled and self._capability_enabled(normalized))
 
     def _client(self, profile: LLMProfile) -> Any:
         if profile.name not in self._clients:
@@ -111,7 +121,7 @@ class ManagedChatModel:
                 raise LLMConfigurationError("LLM message must be a mapping or BaseMessage")
             if role not in {"system", "user", "human", "assistant", "ai", "tool"}:
                 raise LLMConfigurationError(f"unsupported LLM message role: {role or 'missing'}")
-            if role == "tool" and "tools" not in profile.capabilities:
+            if role == "tool" and not self._capability_allowed("tool_calling"):
                 raise LLMCapabilityError(f"LLM profile {profile.name} has not passed tool capability validation")
             if isinstance(content, str):
                 continue
@@ -129,12 +139,12 @@ class ManagedChatModel:
         return self._client(self.profile)
 
     def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> Any:
-        if "tools" not in self.profile.capabilities:
+        if not self._capability_allowed("tool_calling"):
             raise LLMCapabilityError(f"LLM profile {self.profile.name} has not passed tool capability validation")
         return self.as_langchain().bind_tools(tools, **kwargs)
 
     def with_structured_output(self, schema: Any, **kwargs: Any) -> Any:
-        if "native_structured_output" not in self.profile.capabilities:
+        if not self._capability_allowed("native_structured_output"):
             raise LLMCapabilityError(
                 f"LLM profile {self.profile.name} has not passed native structured output validation"
             )
@@ -164,13 +174,20 @@ class ManagedChatModel:
             "operation": operation,
         }
 
-    def invoke(self, messages: Any, max_retries: int | None = None, **kwargs: Any) -> AIMessage:
+    def invoke(
+        self,
+        messages: Any,
+        max_retries: int | None = None,
+        *,
+        allow_fallback: bool = True,
+        **kwargs: Any,
+    ) -> AIMessage:
         if self._execution_disabled():
             raise LLMConfigurationError("LLM execution is disabled for this deterministic run")
         last_error: Exception | None = None
         retry_override = max(1, int(max_retries)) if max_retries is not None else None
 
-        for model_attempt, profile in enumerate(self._profile_chain(), start=1):
+        for model_attempt, profile in enumerate(self._profile_chain(allow_fallback=allow_fallback), start=1):
             self._validate_messages(messages, profile)
             attempts = retry_override if retry_override is not None else profile.max_attempts
             for model_retry in range(attempts):
@@ -243,12 +260,12 @@ class ManagedChatModel:
         detail = str(last_error) if last_error is not None else "LLM request failed"
         raise LLMUnavailableError(detail) from last_error
 
-    def stream_text(self, messages: Any, **kwargs: Any) -> Iterator[str]:
+    def stream_text(self, messages: Any, *, allow_fallback: bool = True, **kwargs: Any) -> Iterator[str]:
         if self._execution_disabled():
             raise LLMConfigurationError("LLM execution is disabled for this deterministic run")
         last_error: Exception | None = None
 
-        for model_attempt, profile in enumerate(self._profile_chain(), start=1):
+        for model_attempt, profile in enumerate(self._profile_chain(allow_fallback=allow_fallback), start=1):
             self._validate_messages(messages, profile)
             metadata = self._trace_metadata(profile, model_attempt, 0, "stream", True)
             generation = start_generation(

@@ -20,6 +20,12 @@ LLM_MODEL_MULTIMODAL=qwen3.5-omni-flash
 LLM_MODEL_MULTIMODAL_QUALITY=qwen3.5-omni-plus
 LLM_REQUEST_TIMEOUT_SECONDS=60
 LLM_MAX_ATTEMPTS=2
+EDU_AGENT_IMAGE_DIGEST=sha256:<immutable-image-digest>
+EDU_AGENT_LLM_CAPABILITY_MANIFEST_PATH=/run/evidence/llm-capabilities.json
+EDU_AGENT_LLM_CAPABILITY_MANIFEST_SHA256=sha256:<manifest-digest>
+EDU_AGENT_REQUIRE_LLM_EVIDENCE_V2=true
+# v1.45 safe default: keep optional capabilities disabled.
+EDU_AGENT_LLM_ENABLED_CAPABILITIES=
 ```
 
 运行时只支持 `bailian`；`dashscope` 作为兼容别名会归一化为 `bailian`。未知 Provider 会在加载 LLM 配置时失败。
@@ -36,10 +42,17 @@ PYTHONPATH=backend .venv/bin/python eval/run_core_evals.py --no-report
 
 ```bash
 EDU_AGENT_REAL_LLM=1 \
+EDU_AGENT_DEPLOYED_COMMIT="$DEPLOYED_COMMIT" \
+EDU_AGENT_IMAGE_DIGEST="$IMAGE_DIGEST" \
+EDU_AGENT_RUNTIME_V2_CONFIG_VERSION="$CONFIG_VERSION" \
+EDU_AGENT_ENVIRONMENT="$TARGET_ENVIRONMENT" \
 PYTHONPATH=backend \
 .venv/bin/python eval/llm_provider_live_probe.py \
-  --output /tmp/edu-agent-llm-capabilities.json
+  --output /tmp/edu-agent-llm-probe.json \
+  --manifest-output /tmp/edu-agent-llm-capabilities.json
 ```
+
+Manifest 必须覆盖 `fast/quality/fallback/reasoning/multimodal/multimodal_quality/material/card_pool`。Probe 对目标 profile 禁用 fallback；fallback 成功不能证明主 profile 通过。
 
 多模态 profile 的 `vision_base64` 必须通过后才能发布材料图片理解。`tool_calling` 和 `native_structured_output` 是探测项，未通过不影响普通 chat 发布，但不得启用对应高级能力。
 
@@ -52,7 +65,7 @@ curl -s -H "Authorization: Bearer $API_TOKEN" \
   "$API_BASE/api/debug/llm/health"
 ```
 
-深检查：
+深检查（只证明 fast profile 基础连通性）：
 
 ```bash
 curl -s -H "Authorization: Bearer $API_TOKEN" \
@@ -66,6 +79,17 @@ curl -s -H "Authorization: Bearer $API_TOKEN" \
 - `credentials_configured=true`
 - `profiles.fast.model` 与发布配置一致
 - 深检查 `ok=true`
+- `scope=fast_connectivity_only`
+- `does_not_prove` 明确包含 `all_profiles/vision/tool_calling/native_structured_output/business_quality`
+
+管理员查看当前部署能力证据：
+
+```bash
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "$API_BASE/api/admin/llm/capabilities"
+```
+
+重点确认 manifest 为 `pass`、deployment provenance 匹配，并区分每个 profile 的 `configured_capabilities`、`validated_capabilities` 和 `enabled_capabilities`。
 
 ## 4. Langfuse 排障
 
@@ -95,6 +119,8 @@ curl -s -H "Authorization: Bearer $API_TOKEN" \
 3. 关闭对应 Agent 增强能力，走产品现有确定性 fallback/degraded 路径。
 4. 必要时设置 `EDU_AGENT_LLM_DISABLED=true` 暂停真实模型调用。
 5. 回滚到最近一个通过核心 eval 和 live probe 的无旧代理镜像。
+
+当 `EDU_AGENT_REQUIRE_LLM_EVIDENCE_V2=true` 时，发布证据还必须绑定当前 image digest 与 capability manifest hash；schema v1 仅用于历史读取，不能证明 v1.45 rollout。
 
 不得把旧代理、旧 Node helper 或隐式跨 Provider fallback 作为常规回滚方案。
 

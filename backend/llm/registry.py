@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from threading import Lock
 
 from .contracts import LLMConfigurationError, LLMProfile
+from .capability_manifest import capability_status, optional_capability_enabled
 from .managed_model import ManagedChatModel
 from .providers import provider_configuration_errors
 
@@ -120,11 +121,18 @@ class LLMRegistry:
     def get_model(self, name: str) -> ManagedChatModel:
         if name not in self._models:
             kwargs = {"client_factory": self._client_factory} if self._client_factory is not None else {}
+            kwargs["capability_enabled"] = lambda capability, profile_key=name: optional_capability_enabled(
+                self, profile_key, capability
+            )
             self._models[name] = ManagedChatModel(self.get_profile(name), self.profiles, **kwargs)
         return self._models[name]
 
+    def capability_status(self) -> dict:
+        return capability_status(self)
+
     def configuration_status(self) -> dict:
         errors = provider_configuration_errors("bailian_openai")
+        capabilities = self.capability_status()
         return {
             "ok": not errors,
             "provider": self.provider,
@@ -139,6 +147,10 @@ class LLMRegistry:
                     "fallback_profiles": list(profile.fallback_profiles),
                 }
                 for key, profile in self.profiles.items()
+            },
+            "capability_manifest": {
+                key: capabilities.get(key)
+                for key in ("status", "manifest_sha256", "generated_at", "expires_at", "deployment_provenance_match", "reasons")
             },
         }
 

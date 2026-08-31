@@ -22,6 +22,8 @@ PY_COMPILE_TARGETS = [
     "scripts/verify_core.py",
     "scripts/release_gate.py",
     "backend/api/main.py",
+    "backend/llm/capability_manifest.py",
+    "backend/llm/capability_probe.py",
     "backend/db/schema.py",
     "backend/agent_ops.py",
     "backend/agent_runtime/rollout_gate.py",
@@ -81,6 +83,8 @@ PY_COMPILE_TARGETS = [
     "eval/learning_assistant_dataset_schema.py",
     "eval/learning_assistant_blind_eval.py",
     "eval/learning_assistant_semantic_router_eval.py",
+    "eval/llm_capability_manifest_smoke.py",
+    "eval/llm_capability_api_smoke.py",
     "eval/learning_assistant_external_ood_eval.py",
     "eval/production_rag_health_smoke.py",
 ]
@@ -98,6 +102,8 @@ PY_COMPILE_TARGETS.extend(
 )
 
 FAST_SUITES = [
+    "llm_capability_manifest_smoke",
+    "llm_capability_api_smoke",
     "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
     "backend_startup_migration_failure_smoke",

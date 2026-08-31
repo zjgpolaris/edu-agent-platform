@@ -65,6 +65,7 @@ jobs:
         env:
           BAILIAN_API_KEY: ${{ secrets.BAILIAN_API_KEY }}
           LLM_PROVIDER: bailian
+          EDU_AGENT_REAL_LLM: '1'
           PYTHONPATH: backend
         run: |
           if [ -z "$BAILIAN_API_KEY" ]; then

@@ -119,11 +119,22 @@ def _evidence_reasons(
     minimum_terminal_runs: int,
 ) -> tuple[list[str], dict[str, Any] | None, dict[str, Any]]:
     reasons: list[str] = []
-    profiles = {"offline": "unknown", "real_llm": "unknown", "production_rag": "unknown"}
+    schema_version = int((evidence or {}).get("schema_version") or 1)
+    profile_names = (
+        ("offline", "real_llm", "production_rag")
+        if schema_version == 1
+        else ("offline", "real_llm_business_eval", "production_rag", "llm_capabilities")
+    )
+    profiles = {name: "unknown" for name in profile_names}
     if evidence is None:
         return ["rollout_evidence_missing"], None, profiles
     if evidence.get("evidence_sha256") != evidence_sha256(evidence):
         reasons.append("rollout_evidence_hash_mismatch")
+    if schema_version not in {1, 2}:
+        reasons.append("rollout_evidence_schema_unsupported")
+    require_v2 = os.getenv("EDU_AGENT_REQUIRE_LLM_EVIDENCE_V2", "").strip().lower() in {"1", "true", "yes", "on"}
+    if require_v2 and schema_version != 2:
+        reasons.append("rollout_evidence_schema_v2_required")
     for field, expected in (
         ("agent_type", agent_type),
         ("config_version", config_version),
@@ -154,6 +165,23 @@ def _evidence_reasons(
                 reasons.append(f"{name}_profile_not_passed")
         else:
             reasons.append(f"{name}_profile_not_run")
+    if schema_version == 2:
+        image_digest = str(evidence.get("image_digest") or "")
+        configured_image = os.getenv("EDU_AGENT_IMAGE_DIGEST", "").strip()
+        if not image_digest:
+            reasons.append("evidence_image_digest_missing")
+        elif configured_image and image_digest != configured_image:
+            reasons.append("evidence_image_digest_mismatch")
+        capability = raw_profiles.get("llm_capabilities")
+        if isinstance(capability, dict):
+            if capability.get("image_digest") != image_digest:
+                reasons.append("llm_capabilities_image_digest_mismatch")
+            if capability.get("runtime_config_version") != config_version:
+                reasons.append("llm_capabilities_config_mismatch")
+            if capability.get("environment") != environment:
+                reasons.append("llm_capabilities_environment_mismatch")
+            if not str(capability.get("manifest_sha256") or "").startswith("sha256:"):
+                reasons.append("llm_capabilities_manifest_missing")
     baseline = evidence.get("control_baseline")
     if not isinstance(baseline, dict):
         reasons.append("control_baseline_missing")

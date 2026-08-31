@@ -36,14 +36,32 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     if not now - timedelta(days=7) <= generated.astimezone(timezone.utc) <= now + timedelta(minutes=5):
         raise ValueError("release evidence is stale or generated in the future")
+    schema_version = int(payload.get("schema_version") or 1)
+    if schema_version not in {1, 2}:
+        raise ValueError("release evidence schema is unsupported")
+    if schema_version == 2 and not str(payload.get("image_digest") or "").strip():
+        raise ValueError("release evidence image digest is required for schema v2")
     profiles = payload.get("profiles")
-    required_profiles = ("offline", "real_llm", "production_rag")
+    required_profiles = (
+        ("offline", "real_llm", "production_rag")
+        if schema_version == 1
+        else ("offline", "real_llm_business_eval", "production_rag", "llm_capabilities")
+    )
     if not isinstance(profiles, dict) or any(
         not isinstance(profiles.get(name), dict) or profiles[name].get("status") != "pass"
         or profiles[name].get("commit") != payload.get("deployed_commit")
         for name in required_profiles
     ):
         raise ValueError("release evidence profiles are incomplete or not passed")
+    if schema_version == 2:
+        capability = profiles["llm_capabilities"]
+        if (
+            capability.get("image_digest") != payload.get("image_digest")
+            or capability.get("runtime_config_version") != payload.get("config_version")
+            or capability.get("environment") != payload.get("environment")
+            or not str(capability.get("manifest_sha256") or "").startswith("sha256:")
+        ):
+            raise ValueError("release evidence LLM capability provenance is invalid")
     baseline = payload.get("control_baseline")
     if (
         not isinstance(baseline, dict)

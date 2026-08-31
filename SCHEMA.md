@@ -195,7 +195,7 @@ backend/
 │
 ├── agent_ops.py               # Agent 运维
 ├── game_store.py              # 游戏状态存储
-├── llm/                       # LangChain Provider、Profile Registry、能力探测
+├── llm/                       # LangChain Provider、Profile Registry、能力探测与 hash-bound Capability Manifest
 ├── llm_config.py              # LLM 兼容 facade
 ├── mcp_server.py              # stdio MCP 工具协议适配
 ├── session_store.py           # 会话存储

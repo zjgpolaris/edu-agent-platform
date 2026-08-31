@@ -14,6 +14,7 @@ from .contracts import (
     LLMUnavailableError,
 )
 from .managed_model import ManagedChatModel
+from .capability_manifest import capability_status, load_capability_manifest
 from .registry import LLMRegistry, get_default_registry
 
 __all__ = [
@@ -30,5 +31,7 @@ __all__ = [
     "LLMTimeoutError",
     "LLMUnavailableError",
     "ManagedChatModel",
+    "capability_status",
     "get_default_registry",
+    "load_capability_manifest",
 ]

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from tracing import current_trace_id, trace_context
 
 from .registry import LLMRegistry, get_default_registry
+from .providers import provider_request_metadata
 
 
 _ONE_PIXEL_RED_PNG = base64.b64encode(
@@ -27,8 +28,12 @@ class _ProbeSchema(BaseModel):
 def _run_check(callback: Callable[[], Any]) -> dict[str, Any]:
     started = time.perf_counter()
     try:
-        callback()
-        return {"ok": True, "latency_ms": int((time.perf_counter() - started) * 1000)}
+        result = callback()
+        return {
+            "ok": True,
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            **provider_request_metadata(result),
+        }
     except Exception as exc:
         return {
             "ok": False,
@@ -49,31 +54,37 @@ def _probe_profile(registry: LLMRegistry, profile_key: str) -> dict[str, Any]:
                 {"role": "user", "content": "只回复 pong"},
             ],
             max_retries=1,
+            allow_fallback=False,
         )
     )
     checks["stream"] = _run_check(
-        lambda: "".join(managed.stream_text([{"role": "user", "content": "只回复 stream-ok"}]))
+        lambda: "".join(managed.stream_text(
+            [{"role": "user", "content": "只回复 stream-ok"}], allow_fallback=False
+        ))
     )
 
-    def json_prompt() -> None:
+    def json_prompt() -> Any:
         response = managed.invoke(
             [{"role": "user", "content": '只返回严格 JSON：{"ok":true,"message":"json-ok"}'}],
             max_retries=1,
+            allow_fallback=False,
         )
         payload = json.loads(response.content)
         _ProbeSchema.model_validate(payload)
+        return response
 
     checks["json_prompt"] = _run_check(json_prompt)
 
-    def native_structured() -> None:
+    def native_structured() -> Any:
         result = native.with_structured_output(_ProbeSchema).invoke(
             "返回 ok=true，message=structured-ok。"
         )
         _ProbeSchema.model_validate(result)
+        return result
 
     checks["native_structured_output"] = _run_check(native_structured)
 
-    def tool_calling() -> None:
+    def tool_calling() -> Any:
         tool = {
             "type": "function",
             "function": {
@@ -89,6 +100,7 @@ def _probe_profile(registry: LLMRegistry, profile_key: str) -> dict[str, Any]:
         response = native.bind_tools([tool], tool_choice="probe_weather").invoke("查询北京天气")
         if not getattr(response, "tool_calls", None):
             raise RuntimeError("tool_call_not_returned")
+        return response
 
     checks["tool_calling"] = _run_check(tool_calling)
 
@@ -108,18 +120,29 @@ def _probe_profile(registry: LLMRegistry, profile_key: str) -> dict[str, Any]:
                     }
                 ],
                 max_retries=1,
+                allow_fallback=False,
             )
         )
+
+    if profile_key in {"material", "card_pool"}:
+        checks["configured_max_tokens"] = {
+            "ok": managed.max_tokens == managed.profile.max_tokens and managed.max_tokens > 0,
+            "latency_ms": 0,
+        }
 
     required = ["invoke", "json_prompt"]
     if "stream" in managed.profile.capabilities:
         required.append("stream")
     if "vision" in managed.profile.capabilities:
         required.append("vision_base64")
+    if profile_key in {"material", "card_pool"}:
+        required.append("configured_max_tokens")
     return {
         "profile": profile_key,
         "name": managed.name,
         "model": managed.model,
+        "max_tokens": managed.max_tokens,
+        "fallback_profiles": list(managed.profile.fallback_profiles),
         "provider": registry.provider,
         "transport": "langchain_openai",
         "tested_at": datetime.now(timezone.utc).isoformat(),
@@ -138,7 +161,7 @@ def probe_profile(registry: LLMRegistry, profile_key: str) -> dict[str, Any]:
 
 def run_live_probe(profile_keys: list[str] | None = None) -> dict[str, Any]:
     registry = get_default_registry()
-    selected = profile_keys or ["fast", "quality", "reasoning", "multimodal", "multimodal_quality"]
+    selected = profile_keys or list(registry.profiles)
     profiles = [probe_profile(registry, key) for key in selected]
     return {
         "provider": registry.provider,

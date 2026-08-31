@@ -26,6 +26,15 @@ def runtime_config_version() -> str:
     return os.getenv("EDU_AGENT_RUNTIME_V2_CONFIG_VERSION", "").strip()[:120]
 
 
+def deployment_image_digest() -> str:
+    """Return the immutable deployment image digest when the platform exposes it."""
+    for name in ("EDU_AGENT_IMAGE_DIGEST", "RENDER_IMAGE_DIGEST", "CONTAINER_IMAGE_DIGEST"):
+        value = os.getenv(name, "").strip()
+        if value:
+            return value[:200]
+    return ""
+
+
 def runtime_configuration_errors(*, enabled: bool | None = None, config_version: str | None = None) -> list[str]:
     if enabled is None:
         enabled = _enabled("EDU_AGENT_RUNTIME_V2_ENABLED")

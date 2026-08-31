@@ -46,6 +46,10 @@ on:
         description: Target backend /api/ready URL
         required: true
         type: string
+      image_digest:
+        description: Immutable sha256 digest of the deployed backend image
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -72,12 +76,14 @@ jobs:
           BASELINE_COMMIT: ${{ inputs.baseline_commit }}
           MINIMUM_SAMPLES: ${{ inputs.minimum_samples }}
           TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
         run: |
           [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$BASELINE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$MINIMUM_SAMPLES" =~ ^[0-9]+$ ]]
           test "$MINIMUM_SAMPLES" -ge 100
           test "$TARGET_ENVIRONMENT" = "production"
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           test "$GITHUB_SHA" = "$EXPECTED_COMMIT"
           test -z "$(git status --porcelain)"
 
@@ -99,7 +105,8 @@ jobs:
       - name: Verify deployed commit
         env:
           READY_URL: ${{ inputs.ready_url }}
-        run: python3 scripts/verify_deployed_commit.py --ready-url "$READY_URL" --expected-commit "$GITHUB_SHA"
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+        run: python3 scripts/verify_deployed_commit.py --ready-url "$READY_URL" --expected-commit "$GITHUB_SHA" --expected-image-digest "$IMAGE_DIGEST"
 
       - name: Run complete offline profile
         env:
@@ -114,7 +121,13 @@ jobs:
         env:
           BAILIAN_API_KEY: ${{ secrets.BAILIAN_API_KEY }}
           LLM_PROVIDER: bailian
+          EDU_AGENT_REAL_LLM: '1'
           PYTHONPATH: backend
+          EDU_AGENT_DEPLOYED_COMMIT: ${{ inputs.deployed_commit }}
+          EDU_AGENT_IMAGE_DIGEST: ${{ inputs.image_digest }}
+          EDU_AGENT_RUNTIME_V2_CONFIG_VERSION: ${{ inputs.target_config_version }}
+          EDU_AGENT_ENVIRONMENT: ${{ inputs.target_environment }}
+          EDU_AGENT_LLM_MANIFEST_OUTPUT: /tmp/runtime-evidence/llm-capabilities.json
         run: |
           test -n "$BAILIAN_API_KEY"
           python3 eval/run_core_evals.py --profile real_llm --require-real-llm --require-clean-revision --json
@@ -149,6 +162,7 @@ jobs:
           BASELINE_CONFIG_VERSION: ${{ inputs.baseline_config_version }}
           BASELINE_COMMIT: ${{ inputs.baseline_commit }}
           MINIMUM_SAMPLES: ${{ inputs.minimum_samples }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
           PYTHONPATH: backend
         run: |
           test -n "$DATABASE_URL"
@@ -164,6 +178,9 @@ jobs:
             --offline-report /tmp/runtime-evidence/offline.json \
             --real-llm-report /tmp/runtime-evidence/real-llm.json \
             --production-rag-report /tmp/runtime-evidence/production-rag.json \
+            --llm-capability-manifest /tmp/runtime-evidence/llm-capabilities.json \
+            --image-digest "$IMAGE_DIGEST" \
+            --require-schema-v2 \
             --output /tmp/runtime-evidence/rollout-evidence.json \
             --persist | tee /tmp/runtime-evidence/persist-status.json
 
@@ -199,6 +216,7 @@ jobs:
             /tmp/runtime-evidence/offline.md
             /tmp/runtime-evidence/real-llm.json
             /tmp/runtime-evidence/real-llm.md
+            /tmp/runtime-evidence/llm-capabilities.json
             /tmp/runtime-evidence/production-rag.json
             /tmp/runtime-evidence/production-rag.md
             /tmp/runtime-evidence/rollout-evidence.json

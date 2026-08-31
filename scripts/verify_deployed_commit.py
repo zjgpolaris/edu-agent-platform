@@ -11,6 +11,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Verify that a deployed EduAgent instance serves the expected commit.")
     parser.add_argument("--ready-url", required=True)
     parser.add_argument("--expected-commit", required=True)
+    parser.add_argument("--expected-image-digest")
     args = parser.parse_args()
     parsed = urllib.parse.urlparse(args.ready_url)
     query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
@@ -23,9 +24,15 @@ def main() -> None:
     actual = str(deployment.get("deployed_commit") or "")
     if actual != args.expected_commit:
         raise SystemExit(f"deployed commit mismatch: expected={args.expected_commit} actual={actual or 'missing'}")
+    actual_image = str(deployment.get("image_digest") or "")
+    if args.expected_image_digest and actual_image != args.expected_image_digest:
+        raise SystemExit(
+            f"deployed image mismatch: expected={args.expected_image_digest} actual={actual_image or 'missing'}"
+        )
     print(json.dumps({
         "status": "pass",
         "deployed_commit": actual,
+        "image_digest": actual_image or None,
         "environment": deployment.get("environment"),
         "runtime_config_version": deployment.get("runtime_config_version"),
     }, sort_keys=True))

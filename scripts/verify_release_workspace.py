@@ -36,6 +36,8 @@ def main() -> None:
 
     config_version = os.getenv("EDU_AGENT_RUNTIME_V2_CONFIG_VERSION", "").strip()
     deployed_commit = os.getenv("EDU_AGENT_DEPLOYED_COMMIT", "").strip()
+    image_digest = os.getenv("EDU_AGENT_IMAGE_DIGEST", "").strip()
+    require_evidence_v2 = os.getenv("EDU_AGENT_REQUIRE_LLM_EVIDENCE_V2", "").strip().lower() in {"1", "true", "yes", "on"}
     if not config_version:
         reasons.append("runtime_config_version_missing")
     if deployed_commit != head:
@@ -62,16 +64,47 @@ def main() -> None:
             reasons.append("rollout_evidence_revision_does_not_match_head")
         if evidence.get("config_version") != config_version:
             reasons.append("rollout_evidence_config_does_not_match_instance")
+        schema_version = int(evidence.get("schema_version") or 1)
+        if require_evidence_v2 and schema_version != 2:
+            reasons.append("rollout_evidence_schema_v2_required")
+        if schema_version == 2:
+            if not image_digest:
+                reasons.append("image_digest_missing")
+            elif evidence.get("image_digest") != image_digest:
+                reasons.append("rollout_evidence_image_does_not_match_instance")
         profiles = evidence.get("profiles") if isinstance(evidence.get("profiles"), dict) else {}
-        for profile_name in ("real_llm", "production_rag"):
+        profile_names = (
+            ("real_llm", "production_rag")
+            if schema_version == 1
+            else ("real_llm_business_eval", "production_rag", "llm_capabilities")
+        )
+        for profile_name in profile_names:
             profile = profiles.get(profile_name)
             if not isinstance(profile, dict) or profile.get("status") != "pass" or profile.get("commit") != head:
                 reasons.append(f"{profile_name}_profile_not_passed_for_head")
+        if schema_version == 2:
+            manifest_path_raw = os.getenv("EDU_AGENT_LLM_CAPABILITY_MANIFEST_PATH", "").strip()
+            manifest = _read_json(Path(manifest_path_raw)) if manifest_path_raw else None
+            if manifest is None:
+                reasons.append("llm_capability_manifest_missing_or_invalid")
+            else:
+                from llm.capability_manifest import validate_capability_manifest
+                from llm.registry import get_default_registry
+
+                manifest_reasons = validate_capability_manifest(
+                    manifest, get_default_registry(), require_expected_provenance=True
+                )
+                reasons.extend(manifest_reasons)
+                capability = profiles.get("llm_capabilities") or {}
+                if capability.get("manifest_sha256") != manifest.get("manifest_sha256"):
+                    reasons.append("llm_capability_manifest_evidence_mismatch")
 
     payload = {
         "status": "pass" if not reasons else "fail",
         "head": head,
         "config_version": config_version or None,
+        "image_digest": image_digest or None,
+        "required_evidence_schema": 2 if require_evidence_v2 else 1,
         "dirty_entry_count": len(dirty_lines),
         "eval_report_revision": report_revision,
         "evidence_path": str(evidence_path) if evidence_path else None,
