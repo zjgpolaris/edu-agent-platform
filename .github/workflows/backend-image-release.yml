@@ -1,6 +1,9 @@
 name: Backend Immutable Image Release
 
 on:
+  push:
+    tags:
+      - 'backend-v*'
   workflow_dispatch:
     inputs:
       commit:
@@ -29,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.commit }}
+          ref: ${{ inputs.commit || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -60,10 +63,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.commit }}
+          ref: ${{ inputs.commit || github.sha }}
       - name: Refuse mutable source
         env:
-          EXPECTED_COMMIT: ${{ inputs.commit }}
+          EXPECTED_COMMIT: ${{ inputs.commit || github.sha }}
         run: |
           [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
@@ -80,20 +83,77 @@ jobs:
           context: .
           file: backend/Dockerfile
           platforms: linux/amd64
-          build-args: EDU_AGENT_BUILD_COMMIT=${{ inputs.commit }}
+          build-args: EDU_AGENT_BUILD_COMMIT=${{ inputs.commit || github.sha }}
           push: true
-          tags: ghcr.io/${{ github.repository }}/backend:sha-${{ inputs.commit }}
+          tags: ghcr.io/${{ github.repository }}/backend:sha-${{ inputs.commit || github.sha }}
           provenance: mode=max
           sbom: true
       - name: Record immutable artifact
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
-          COMMIT: ${{ inputs.commit }}
+          COMMIT: ${{ inputs.commit || github.sha }}
         run: |
           [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           python3 -c 'import hashlib,json,os,pathlib; h=lambda p:"sha256:"+hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest(); pathlib.Path("backend-image.json").write_text(json.dumps({"schema_version":1,"source_commit":os.environ["COMMIT"],"image_repository":"ghcr.io/${{ github.repository }}/backend","image_digest":os.environ["IMAGE_DIGEST"],"platform":"linux/amd64","dockerfile_sha256":h("backend/Dockerfile"),"runtime_requirements_sha256":h("backend/requirements-runtime.txt")},sort_keys=True)+"\n")'
       - uses: actions/upload-artifact@v4
         with:
-          name: backend-image-${{ inputs.commit }}
+          name: backend-image-${{ inputs.commit || github.sha }}
           path: backend-image.json
           retention-days: 30
+
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+      - name: Update staging provenance and shadow configuration
+        env:
+          RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          COMMIT: ${{ inputs.commit || github.sha }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+          CONFIG_VERSION: ${{ vars.RUNTIME_CONFIG_VERSION }}
+        run: |
+          test -n "$RENDER_API_TOKEN"
+          test -n "$RENDER_SERVICE_ID"
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$CONFIG_VERSION" =~ ^[A-Za-z0-9._-]{1,120}$ ]]
+          update_env() {
+            curl --fail --silent --show-error --request PUT \
+              --header "Authorization: Bearer $RENDER_API_TOKEN" --header "Content-Type: application/json" \
+              --data "{\"value\":\"$2\"}" "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/$1" >/dev/null
+          }
+          update_env EDU_AGENT_DEPLOYED_COMMIT "$COMMIT"
+          update_env EDU_AGENT_IMAGE_DIGEST "$DIGEST"
+          update_env EDU_AGENT_RUNTIME_V2_CONFIG_VERSION "$CONFIG_VERSION"
+          update_env EDU_AGENT_ENVIRONMENT staging
+          update_env EDU_AGENT_RUNTIME_V2_ENABLED true
+          update_env EDU_AGENT_RUNTIME_V2_KILL_SWITCH false
+          update_env EDU_AGENT_RUNTIME_V2_PERCENT_BPS 10000
+          update_env EDU_AGENT_RUNTIME_V2_HISTORY_CHARACTER_BPS 10000
+          update_env EDU_AGENT_RUNTIME_V2_SHADOW_MODE true
+          update_env EDU_AGENT_RUNTIME_V2_ACTIVE_ENABLED false
+      - name: Deploy exact image digest to staging
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          IMAGE_BASE: ${{ vars.BACKEND_IMAGE_BASE }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          test -n "$DEPLOY_HOOK_URL"
+          test -n "$IMAGE_BASE"
+          curl --fail --silent --show-error --get --data-urlencode "imgURL=${IMAGE_BASE}@${DIGEST}" "$DEPLOY_HOOK_URL"
+      - name: Verify staging deployment provenance
+        env:
+          READY_URL: ${{ vars.READY_URL }}
+          COMMIT: ${{ inputs.commit || github.sha }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+          CONFIG_VERSION: ${{ vars.RUNTIME_CONFIG_VERSION }}
+        run: |
+          test -n "$READY_URL"
+          python3 scripts/verify_deployed_commit.py --ready-url "$READY_URL" --expected-commit "$COMMIT" \
+            --expected-image-digest "$DIGEST" --expected-config-version "$CONFIG_VERSION" \
+            --attempts 30 --interval-seconds 10

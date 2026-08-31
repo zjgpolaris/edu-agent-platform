@@ -10,7 +10,9 @@ def main() -> None:
     assert "platforms: linux/amd64" in workflow
     assert "docker/build-push-action@v6" in workflow
     assert "steps.build.outputs.digest" in workflow
-    assert "build-args: EDU_AGENT_BUILD_COMMIT=${{ inputs.commit }}" in workflow
+    assert "build-args: EDU_AGENT_BUILD_COMMIT=${{ inputs.commit || github.sha }}" in workflow
+    assert "environment: staging" in workflow
+    assert "deploy-staging:" in workflow
     assert "imgURL=${IMAGE_BASE}@${DIGEST}" in deploy
     assert "api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/$1" in deploy
     assert "update_env EDU_AGENT_IMAGE_DIGEST \"$DIGEST\"" in deploy
