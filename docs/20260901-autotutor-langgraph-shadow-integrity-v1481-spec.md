@@ -1,6 +1,6 @@
 # EduAgent AutoTutor LangGraph Shadow 可信性闭环 v1.48.1 Spec
 
-**状态：** Implementation Complete · Cutover Evidence Unsealed（工作区未提交）
+**状态：** Development Complete · Cutover Evidence Sealed
 **日期：** 2026-09-01
 **优先级：** P0 独立状态转移、无副作用实证、可复核 parity 证据；P1 延迟基线与迁移决策材料
 **前置版本：** v1.48 LangChain 契约收口与 AutoTutor LangGraph Shadow 基线
@@ -534,7 +534,7 @@ Development Complete 必须全部满足：
 - [x] exception、timeout、mismatch 不影响 active；
 - [x] mismatch 仅输出安全 reason codes；
 - [x] 专用 JSON/Markdown 报告生成并通过敏感字段扫描；
-- [ ] 报告绑定 clean commit、schema、dataset 和 Graph config；
+- [x] 报告绑定 clean commit、schema、dataset 和 Graph config；
 - [x] Graph p50/p95 与 active added latency p50/p95 已记录；
 - [x] 现有 provenance、Demo Journey、Teacher Evidence 无回归；
 - [x] frontend unit、lint、build 和完整 E2E 通过；
@@ -555,7 +555,7 @@ Development Complete 必须全部满足：
 - Shadow 外部调用：0；业务/Runtime 写入：0；
 - 最近一次 Graph p50/p95：以 `eval/reports/autotutor_shadow_latest.*` 为准，均低于 20ms 决策阈值。
 
-当前 `NO_GO` 的唯一 blocker 是 `workspace_dirty_commit_evidence_not_sealed`。这是 clean commit 证据供应链门禁，不是代码或行为回归；提交后必须在目标 commit 上重新生成报告，才可将最后一项勾选并讨论 v1.49。
+已在 clean code commit `229ecacf1fc9b6ef9e3f9563f71da2492b7fe1fd` 上重新生成证据：29/29 transition parity、外部调用 0、副作用 0、无 blocker，结论为 `GO`。该结论只允许开始编写 v1.49 Active Cutover Spec，不代表已经允许生产切流。
 
 ---
 
