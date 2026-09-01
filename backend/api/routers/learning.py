@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from security.auth import Actor, assert_student_access, require_auth
+from security.auth import Actor, assert_student_access, assert_teacher_student_access, require_auth
 from security.audit_log import record_audit_event
 from security.rate_limit import check_rate_limit
 from tools.registry import list_tools
@@ -689,6 +689,36 @@ async def autotutor_get_demo_trace(session_id: str, actor: Actor = Depends(requi
         resource_type="autotutor_session",
         resource_id=session_id,
         metadata={"event_count": len(payload["events"]), "session_status": payload["status"]},
+    )
+    return payload
+
+
+@router.get("/api/autotutor/session/{session_id}/evidence")
+async def autotutor_get_evidence(session_id: str, actor: Actor = Depends(require_auth)):
+    from agents.auto_tutor import get_session as autotutor_get
+    from agents.autotutor_evidence import project_autotutor_evidence
+
+    try:
+        state = await run_in_threadpool(autotutor_get, session_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="辅导会话不存在或已过期")
+
+    student_id = str(state.get("student_id") or "")
+    if actor.role == "student":
+        if actor.actor_id != student_id:
+            raise HTTPException(status_code=403, detail="insufficient_role")
+    elif actor.role == "teacher":
+        assert_teacher_student_access(actor, student_id)
+    elif actor.role != "admin":
+        raise HTTPException(status_code=403, detail="insufficient_role")
+
+    payload = project_autotutor_evidence(state)
+    record_audit_event(
+        actor_id=actor.actor_id,
+        action="autotutor.evidence_viewed",
+        resource_type="autotutor_session",
+        resource_id=session_id,
+        metadata={"viewer_role": actor.role, "session_status": payload["status"]},
     )
     return payload
 

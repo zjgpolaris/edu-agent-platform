@@ -336,7 +336,7 @@ export default function MemoryCenterPage() {
                 <div className="material-empty-state">
                   <strong>还没有长期记忆</strong>
                   <p>学习助手、历史人物对话和测验会逐步沉淀可解释的 typed memory。</p>
-                  <Link className="primary-link" href="/learning-assistant">打开学习助手</Link>
+                  <Link className="primary-link" href="/student/assistant">打开学习助手</Link>
                 </div>
               ) : (
                 <div className="memory-entry-grid">
@@ -385,7 +385,7 @@ export default function MemoryCenterPage() {
                 <div className="material-empty-state">
                   <strong>还没有学习记录</strong>
                   <p>开始使用学习助手、练习测验或历史对话后，学习事件会自动记录在这里。</p>
-                  <Link className="primary-link" href="/learning-assistant">打开学习助手</Link>
+                  <Link className="primary-link" href="/student/assistant">打开学习助手</Link>
                 </div>
               ) : (
                 <div className="memory-events-list">

@@ -45,26 +45,49 @@ test("Pilot 主线完成答错、反思重规划与退出票证据", async ({ pa
   test.setTimeout(90_000);
   await enterStudent(page);
 
+  await expect(page).toHaveURL(/session_id=at_[^&]+/, { timeout: 30_000 });
+  const firstSessionId = new URL(page.url()).searchParams.get("session_id");
+  expect(firstSessionId).toBeTruthy();
+  expect(new URL(page.url()).searchParams.has("fresh")).toBe(false);
+
   await expect(page.getByRole("complementary", { name: "Agent 演示旅程" })).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".quiz-option-btn")).toHaveCount(4, { timeout: 30_000 });
 
-  await page.locator(".quiz-option-btn").nth(1).click();
+  const correctMeaning = /维护.*统治|清政府.*统治|巩固.*统治/;
+  await page.locator(".quiz-option-btn").filter({ hasNotText: correctMeaning }).first().click();
   await expect(page.getByText("根据本次作答调整讲解")).toBeVisible({ timeout: 30_000 });
   const journey = page.getByRole("complementary", { name: "Agent 演示旅程" });
   await expect(journey.getByText(/反思当前教学策略/)).toBeVisible({ timeout: 30_000 });
   await expect(journey.getByText(/调整后续教学计划/)).toBeVisible({ timeout: 30_000 });
 
-  await page.locator(".quiz-option-btn").first().click();
-  await expect(page.getByText("退出票检验", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
-  await page.locator(".quiz-option-btn").first().click();
+  await page.locator(".quiz-option-btn").filter({ hasText: correctMeaning }).first().click();
+  const dialog = page.getByRole("region", { name: "辅导对话" });
+  await expect(dialog.getByText("退出票检验", { exact: true }).last()).toBeVisible({ timeout: 30_000 });
+  await dialog.locator(".quiz-option-btn").filter({ hasText: correctMeaning }).first().click();
 
   await expect(page.getByRole("heading", { name: "本节课小结" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("学习事件已记录")).toBeVisible();
   await expect(journey.getByText(/写入学习证据/)).toBeVisible({ timeout: 30_000 });
+  const teacherEvidenceHref = await page.getByRole("link", { name: "切换教师视角查看证据" }).getAttribute("href");
+  expect(teacherEvidenceHref).toContain(encodeURIComponent(`/teacher/evidence?session_id=${firstSessionId}`));
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "本节课小结" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("已恢复最近一节已完成课程")).toBeVisible();
+  await expect(page.getByText("已恢复当前演示课程")).toBeVisible();
+
+  await page.getByRole("button", { name: "重新演示" }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("session_id"), { timeout: 30_000 }).not.toBe(firstSessionId);
+  await expect(page.locator(".quiz-option-btn")).toHaveCount(4, { timeout: 30_000 });
+
+  await page.goto(teacherEvidenceHref!);
+  await expect(page.getByRole("tab", { name: "教师" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: /教师体验/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/teacher/evidence\\?session_id=${firstSessionId}`));
+  await expect(page.getByRole("heading", { name: "本次 Agent 辅导证据" })).toBeVisible();
+  const evidence = page.getByLabel("AutoTutor 会话证据");
+  await expect(evidence).toContainText(firstSessionId!);
+  await expect(evidence).toContainText("1 / 1");
+  await expect(evidence).toContainText("已验证");
 });
 
 test("AutoTutor 默认展示可信内容并隐藏开发轨迹", async ({ page }) => {

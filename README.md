@@ -37,12 +37,14 @@ PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 
 学生主线：
 
-1. 在首页点击「Pilot 学生A · 体验 Agent 自主辅导」，系统使用 `pilot-student / pilot123` 登录并直达「洋务运动目的」。
+1. 在首页点击「Pilot 学生A · 体验 Agent 自主辅导」，系统使用 `pilot-student / pilot123` 登录并开始一节全新的「洋务运动目的」课程。
 2. 查看本节目标、可信内容与右侧脱敏的 Agent 决策旅程。
 3. 故意答错一次，观察 `judge → reflect → re-plan → reteach`。
 4. 完成调整后的练习与不同题目的「退出票检验」。
-5. 查看掌握层级、错题/复习回流与教师端可见的学习证据。
-6. 如需展示 Eval / AgentOps，使用 `scripts/bootstrap_admin.py` 创建的管理员单独登录 `/eval`；学生账号不能访问管理员数据。
+5. 查看掌握层级、错题/复习回流与教师端可见的学习证据；刷新页面会恢复同一会话。
+6. 点击「切换教师视角查看证据」，使用 Pilot 教师一键登录，按同一 session 查看反思、重规划和退出票证据。
+7. 点击「重新演示」或重新从首页进入，可创建新会话，不需要重新执行 seed。
+8. 如需展示 Eval / AgentOps，使用 `scripts/bootstrap_admin.py` 创建的管理员单独登录 `/eval`；学生账号不能访问管理员数据。
 
 教师补充：
 
@@ -58,7 +60,7 @@ PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 | 功能 | 路径 | 说明 |
 |------|------|------|
 | **自主辅导 AutoTutor** | `/student/auto-tutor` | 自主 plan→reflect→re_plan 闭环 |
-| 历史人物对话 | `/history-character` | RAG 取材 + 流式 SSE + 来源引用 |
+| 历史人物对话 | `/student/history/chat` | RAG 取材 + 流式 SSE + 来源引用 |
 | **随问 · 学习助手** | `/student/assistant` | 混合语义路由 + 主动澄清 + 最多 3 步受限计划 + RAG / 工具确认治理 |
 | 今日复习 | `/student/review` | SM-2 间隔复习调度 |
 | 错题本 | `/student/weakpoints` | 薄弱点管理 |
@@ -91,7 +93,7 @@ PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 ## 技术架构
 
 ```
-浏览器 ──> Vercel (Next.js 14) ──fetch──> Render (FastAPI / Docker)
+浏览器 ──> Vercel (Next.js 16 / React 19) ──fetch──> Render (FastAPI / Docker)
                                                    ├──> Supabase Postgres + pgvector (RAG)
                                                    ├──> Bailian / DashScope (LLM)
                                                    └──> Jina Embeddings v3 (向量化)
@@ -99,7 +101,7 @@ PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 
 | 层 | 技术 |
 |----|------|
-| 前端 | Next.js 14 App Router, TypeScript strict, SSE 流式输出 |
+| 前端 | Next.js 16 App Router、React 19、TypeScript strict、SSE 流式输出 |
 | 后端 | FastAPI, Python 3.12, LangGraph 风格状态图 |
 | 数据库 | Supabase Postgres + pgvector（RAG 向量索引） |
 | LLM | 阿里云百炼（qwen3.7-plus / deepseek-v4-flash） |

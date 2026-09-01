@@ -41,7 +41,7 @@ export default function WeakpointCloud() {
       </div>
       <div className="weakpoint-tags">
         {weakpoints.slice(0, 8).map((item) => (
-          <a key={item.knowledge_tag} href={`/history-character?message=${encodeURIComponent(`请帮我复习${item.knowledge_tag}`)}`}>
+          <a key={item.knowledge_tag} href={`/student/history/chat?message=${encodeURIComponent(`请帮我复习${item.knowledge_tag}`)}`}>
             {item.knowledge_tag}<em>×{item.wrong_count}</em>
           </a>
         ))}

@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { homeForRole } from "@/lib/auth";
+import { safeNextForRole } from "@/lib/auth";
 
 type Role = "student" | "teacher";
 
@@ -14,9 +14,9 @@ const DEMO: Record<Role, { username: string; password: string; displayName: stri
 };
 
 const PROOF = [
-  { title: "史料可追溯", desc: "RAG 检索，每个结论都有出处" },
-  { title: "即时反馈", desc: "练习、作文、辩论实时复盘" },
-  { title: "教师协同", desc: "高风险评分由人工确认" },
+  { title: "自主规划", desc: "根据学情决定本节目标和教学顺序" },
+  { title: "答错后调整", desc: "Judge、Reflect、Re-plan 改变后续讲解" },
+  { title: "独立验证", desc: "退出票验证掌握并把证据回流教师端" },
 ];
 
 const COPY: Record<Role, { heading: string; sub: string; placeholder: string; cta: string }> = {
@@ -34,14 +34,19 @@ const COPY: Record<Role, { heading: string; sub: string; placeholder: string; ct
   },
 };
 
-export default function Home() {
+function HomeInner() {
   const { login } = useAuth();
   const router = useRouter();
-  const [role, setRole] = useState<Role>("student");
+  const searchParams = useSearchParams();
+  const requestedRole = searchParams.get("role") === "teacher" ? "teacher" : "student";
+  const requestedNext = searchParams.get("next");
+  const [role, setRole] = useState<Role>(requestedRole);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => setRole(requestedRole), [requestedRole]);
 
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
@@ -50,7 +55,7 @@ export default function Home() {
     try {
       await login(username, password);
       const auth = JSON.parse(localStorage.getItem("edu_auth") || "{}");
-      router.push(homeForRole(auth.role));
+      router.push(safeNextForRole(requestedNext, auth.role));
     } catch {
       setError("用户名或密码错误，请重试");
     } finally {
@@ -66,7 +71,11 @@ export default function Home() {
     setLoading(true);
     try {
       await login(account.username, account.password);
-      router.push(role === "teacher" ? "/teacher" : `/student/auto-tutor?focus=${encodeURIComponent("洋务运动目的")}&demo=1`);
+      if (requestedNext) {
+        router.push(safeNextForRole(requestedNext, role));
+      } else {
+        router.push(role === "teacher" ? "/teacher" : `/student/auto-tutor?focus=${encodeURIComponent("洋务运动目的")}&demo=1&fresh=1`);
+      }
     } catch {
       setError("Pilot 体验账号暂不可用，请先运行 seed_pilot_demo.py");
     } finally {
@@ -90,14 +99,14 @@ export default function Home() {
             </span>
           </Link>
 
-          <p className="home-kicker">多 Agent 协作 · 即时反馈 · 个性化路径</p>
+          <p className="home-kicker">Plan · Judge · Reflect · Re-plan · Evidence</p>
           <h1 className="home-title">
-            陪伴式
+            看得见决策的
             <br />
-            AI 学习伙伴
+            AutoTutor Agent
           </h1>
           <p className="home-subtitle">
-            面向历史与语文学习，把史料检索、写作反馈、辩论训练与学情规划，组织成一个可持续成长的学习工作台。
+            Agent 读取学情后自主规划教学；答错时反思并调整策略，最后用独立退出票验证掌握，把证据回流到复习与教师端。
           </p>
 
           <ul className="home-proof">
@@ -197,5 +206,13 @@ export default function Home() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<main className="home" aria-busy="true" />}>
+      <HomeInner />
+    </Suspense>
   );
 }

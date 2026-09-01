@@ -18,6 +18,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
+def _ensure_project_python() -> None:
+    """Use the configured/project virtualenv locally while preserving CI Python."""
+    configured = os.getenv("PYTHON_BIN", "").strip()
+    candidate = Path(configured).expanduser() if configured else ROOT / ".venv" / "bin" / "python"
+    if configured and not candidate.is_file():
+        raise SystemExit(f"PYTHON_BIN does not exist: {candidate}")
+    if not candidate.is_file() or candidate.absolute() == Path(sys.executable).absolute():
+        return
+    os.execve(str(candidate), [str(candidate), str(Path(__file__).resolve()), *sys.argv[1:]], os.environ.copy())
+
 PY_COMPILE_TARGETS = [
     "scripts/verify_core.py",
     "scripts/release_gate.py",
@@ -99,7 +110,9 @@ PY_COMPILE_TARGETS = [
     "eval/demo_contract_smoke.py",
     "eval/demo_trace_projection_smoke.py",
     "eval/demo_trace_authorization_smoke.py",
+    "eval/demo_evidence_authorization_smoke.py",
     "backend/agents/autotutor_demo_trace.py",
+    "backend/agents/autotutor_evidence.py",
 ]
 PY_COMPILE_TARGETS.extend(
     str(path.relative_to(ROOT))
@@ -156,6 +169,7 @@ FAST_SUITES = [
     "demo_contract_smoke",
     "demo_trace_projection_smoke",
     "demo_trace_authorization_smoke",
+    "demo_evidence_authorization_smoke",
     "agent_runtime_contract_smoke",
     "agent_runtime_checkpoint_smoke",
     "agent_runtime_concurrency_smoke",
@@ -267,6 +281,7 @@ def run_ready_check(
 
 
 def main() -> None:
+    _ensure_project_python()
     parser = argparse.ArgumentParser(description="Run EduAgent release readiness checks.")
     parser.add_argument("--fast", action="store_true", help="Run a smaller critical smoke subset instead of full smoke.")
     parser.add_argument("--production", action="store_true", help="Also run production RAG health smoke with strict API_BASE requirements.")

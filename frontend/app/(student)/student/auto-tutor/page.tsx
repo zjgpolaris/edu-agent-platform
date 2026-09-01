@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import { DemoAgentJourney } from "@/components/DemoAgentJourney";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -172,6 +172,7 @@ function formatMeta(value: unknown): string {
 
 function AutoTutorInner() {
   const { user } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const studentId = user?.actorId ?? "";
   const [session, setSession] = useState<SessionState | null>(null);
@@ -187,13 +188,23 @@ function AutoTutorInner() {
 
   // 从 URL ?focus=知识点 读取作业/错题本跳转带来的聚焦知识点
   const focusTag = searchParams?.get("focus") ?? null;
+  const requestedSessionId = searchParams?.get("session_id") ?? null;
   const showDebugTrace = process.env.NODE_ENV === "development" && searchParams?.get("debug") === "1";
   const showDemoJourney = searchParams?.get("demo") === "1" && user?.demoMode === true;
+  const freshDemo = showDemoJourney && searchParams?.get("fresh") === "1";
 
   const headers = useMemo(
     () => ({ "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) }),
     [user?.token]
   );
+
+  const bindDemoSessionToUrl = useCallback((sessionId: string) => {
+    if (!showDemoJourney) return;
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    params.delete("fresh");
+    params.set("session_id", sessionId);
+    router.replace(`/student/auto-tutor?${params.toString()}`, { scroll: false });
+  }, [router, searchParams, showDemoJourney]);
 
   // 若带 focus 知识点，拉取该点的根因诊断，用于让 agent 针对真实错因规划
   useEffect(() => {
@@ -250,6 +261,7 @@ function AutoTutorInner() {
       if (!res.ok) throw new Error(`启动失败：${res.status}`);
       const data = (await res.json()) as SessionState;
       setSession(data);
+      bindDemoSessionToUrl(data.session_id);
       setStatus(data.status === "needs_content" ? "当前内容需要补充" : data.current_question ? "请作答当前题目" : "本节课已完成");
     } catch (e) {
       setError(e instanceof Error ? e.message : "启动失败");
@@ -257,7 +269,7 @@ function AutoTutorInner() {
     } finally {
       setLoading(false);
     }
-  }, [studentId, loading, headers, focusTag, rootCause]);
+  }, [studentId, loading, headers, focusTag, rootCause, bindDemoSessionToUrl]);
 
   // 从错题库/学习路径带 focus 进入时，自动开始本节针对性辅导，避免用户二次点击。
   useEffect(() => {
@@ -267,6 +279,51 @@ function AutoTutorInner() {
     autoStartedFocusRef.current = focusTag;
     void start();
   }, [focusTag, studentId, session, loading, rootCauseChecked, restored, showDemoJourney, start]);
+
+  useEffect(() => {
+    if (freshDemo && !requestedSessionId) setRestored(true);
+  }, [freshDemo, requestedSessionId]);
+
+  useEffect(() => {
+    if (!requestedSessionId || !studentId || !user?.token || session || loading) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiBaseUrl}/api/autotutor/session/${encodeURIComponent(requestedSessionId)}`,
+          { headers, cache: "no-store" },
+        );
+        if (res.status === 403) {
+          if (!cancelled) {
+            setError("无权访问该辅导会话");
+            if (focusTag) autoStartedFocusRef.current = focusTag;
+          }
+          return;
+        }
+        if (res.status === 404) {
+          if (!cancelled) {
+            const params = new URLSearchParams(searchParams?.toString() || "");
+            params.delete("session_id");
+            router.replace(`/student/auto-tutor${params.size ? `?${params.toString()}` : ""}`, { scroll: false });
+          }
+          return;
+        }
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as SessionState;
+        if (cancelled) return;
+        if (focusTag) autoStartedFocusRef.current = focusTag;
+        setSession(data);
+        setStatus(data.status === "completed" ? "已恢复当前演示课程" : data.status === "needs_content" ? "已恢复等待补充内容的课程" : "已恢复当前演示课程");
+      } catch {
+        if (!cancelled) setError("恢复指定辅导会话失败，请重新开始");
+      } finally {
+        if (!cancelled) setRestored(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedSessionId, studentId, user?.token, session, loading, headers, focusTag, router, searchParams]);
 
   async function answer(letter: string) {
     if (!session || loading || session.status !== "awaiting_answer") return;
@@ -309,12 +366,12 @@ function AutoTutorInner() {
   }, [session?.runtime_steps.length]);
 
   useEffect(() => {
-    if (!studentId || !user?.token || (focusTag && !showDemoJourney) || session || loading || restored) return;
+    if (!studentId || !user?.token || freshDemo || requestedSessionId || (focusTag && !showDemoJourney) || session || loading || restored) return;
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(
-          `${apiBaseUrl}/api/autotutor/student/${studentId}/latest-session?include_completed=${showDemoJourney ? "true" : "false"}`,
+          `${apiBaseUrl}/api/autotutor/student/${studentId}/latest-session?include_completed=false`,
           { headers },
         );
         if (!res.ok) return;
@@ -336,7 +393,7 @@ function AutoTutorInner() {
     return () => {
       cancelled = true;
     };
-  }, [studentId, user?.token, focusTag, showDemoJourney, session, loading, restored, headers]);
+  }, [studentId, user?.token, focusTag, showDemoJourney, freshDemo, requestedSessionId, session, loading, restored, headers]);
 
   const plan = session?.lesson_plan ?? [];
   const q = session?.current_question ?? null;
@@ -480,7 +537,11 @@ function AutoTutorInner() {
               <div className="learning-suggestion-row" style={{ marginTop: 16 }}>
                 <Link href="/student/review" className="learning-tool-action">去今日复习</Link>
                 <Link href="/student/memory" className="learning-tool-action">查看记忆中心</Link>
-                <button type="button" onClick={() => void start()} disabled={loading}>再上一节</button>
+                <Link
+                  href={`/?role=teacher&next=${encodeURIComponent(`/teacher/evidence?session_id=${session.session_id}`)}`}
+                  className="learning-tool-action"
+                >切换教师视角查看证据</Link>
+                <button type="button" onClick={() => void start()} disabled={loading}>重新演示</button>
               </div>
             </div>
           ) : session?.status === "needs_content" && session.content_blocked ? (

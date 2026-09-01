@@ -28,6 +28,23 @@ export function homeForRole(role: AuthUser["role"]): string {
   return "/student";
 }
 
+export function safeNextForRole(next: string | null | undefined, role: AuthUser["role"]): string {
+  const fallback = homeForRole(role);
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return fallback;
+  try {
+    const parsed = new URL(next, "https://edu-agent.local");
+    if (parsed.origin !== "https://edu-agent.local") return fallback;
+    const allowed = role === "admin"
+      ? parsed.pathname === "/eval"
+      : role === "teacher"
+        ? parsed.pathname === "/teacher" || parsed.pathname.startsWith("/teacher/")
+        : parsed.pathname === "/student" || parsed.pathname.startsWith("/student/");
+    return allowed ? `${parsed.pathname}${parsed.search}` : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function clearAuth() {
   localStorage.removeItem(KEY);
 }

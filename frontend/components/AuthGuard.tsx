@@ -17,7 +17,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace("/");
       return;
     }
-    if (pathname === "/" && auth) {
+    const explicitRoleSwitch = pathname === "/" && new URLSearchParams(window.location.search).has("role");
+    if (pathname === "/" && auth && !explicitRoleSwitch) {
       router.replace(homeForRole(auth.role));
     }
   }, [pathname, router]);

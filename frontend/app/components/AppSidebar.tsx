@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
+import { DEMO_NAVIGATION, demoMoreDestinations, demoPrimaryDestinations, type DemoNavNode } from "@/lib/demoNavigation";
 import {
   Home, Bot, BookOpen, MessageSquare, Sword, Gamepad2, Map,
   ClipboardList, RotateCcw, BrainCircuit, BarChart3, Route,
@@ -12,7 +13,6 @@ import {
   ChevronDown, ChevronRight, LayoutDashboard, CalendarDays,
   Pencil, Database, Star, Bell, Layers
 } from "lucide-react";
-import { useAuth as _useAuth } from "@/contexts/AuthContext";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -84,6 +84,37 @@ const teacherNav: NavItem[] = [
     ],
   },
 ];
+
+const DEMO_ICON_MAP: Record<string, React.ElementType> = {
+  home: Home,
+  bot: Bot,
+  evidence: BarChart3,
+  more: Layers,
+  assistant: HelpCircle,
+  assignment: ClipboardList,
+  materials: Library,
+  showcase: Sparkles,
+  dashboard: LayoutDashboard,
+  grading: Pencil,
+  quality: Star,
+  resources: BookMarked,
+};
+
+function toNavItem(item: DemoNavNode): NavItem {
+  return {
+    label: item.label,
+    href: item.href,
+    LucideIcon: DEMO_ICON_MAP[item.icon] || Layers,
+    badgeKey: item.badgeKey,
+    badgeKeys: item.badgeKeys,
+    children: item.children?.map(toNavItem),
+  };
+}
+
+const demoDesktopNav = {
+  student: DEMO_NAVIGATION.student.map(toNavItem),
+  teacher: DEMO_NAVIGATION.teacher.map(toNavItem),
+};
 
 function navBadgeCount(item: NavItem, badges: Badges): number {
   let n = item.badgeKey ? (badges[item.badgeKey] || 0) : 0;
@@ -255,7 +286,7 @@ export default function AppSidebar({ role }: { role: "student" | "teacher" }) {
     router.push("/");
   }
 
-  const nav = role === "teacher" ? teacherNav : studentNav;
+  const nav = user?.demoMode ? demoDesktopNav[role] : role === "teacher" ? teacherNav : studentNav;
   const roleLabel = role === "teacher" ? "教师工作台" : "学生学习舱";
   const displayName = user?.displayName || user?.actorId || "";
   const initial = displayName.charAt(0).toUpperCase();
@@ -359,8 +390,19 @@ function MobileBottomNavInner({ role }: { role: "student" | "teacher" }) {
   const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [badges, setBadges] = useState<Badges>({});
-  const items = role === "teacher" ? TEACHER_MOBILE_NAV : STUDENT_MOBILE_NAV;
-  const moreItems = role === "teacher" ? TEACHER_MORE_NAV : STUDENT_MORE_NAV;
+  const toMobileItem = (item: DemoNavNode): MobileNavItem => ({
+    href: item.href!,
+    LucideIcon: DEMO_ICON_MAP[item.icon] || Layers,
+    label: item.label,
+    badgeKey: item.badgeKey,
+    badgeKeys: item.badgeKeys,
+  });
+  const items = user?.demoMode
+    ? demoPrimaryDestinations(role).map(toMobileItem)
+    : role === "teacher" ? TEACHER_MOBILE_NAV : STUDENT_MOBILE_NAV;
+  const moreItems = user?.demoMode
+    ? demoMoreDestinations(role).map(toMobileItem)
+    : role === "teacher" ? TEACHER_MORE_NAV : STUDENT_MORE_NAV;
   const allItems = [...items, ...moreItems];
 
   useEffect(() => {
