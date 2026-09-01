@@ -24,7 +24,7 @@ test.beforeEach(async ({ context }) => {
     delete headers["content-length"];
     const response = await fetch(
       request.url().replace(new RegExp(`^http://(localhost|127[.]0[.]0[.]1):${backendPort}`), `http://127.0.0.1:${backendPort}`),
-      { method: request.method(), headers, body: request.postDataBuffer() || undefined },
+      { method: request.method(), headers, body: request.postData() ?? undefined },
     );
     await route.fulfill({
       status: response.status,
@@ -37,9 +37,35 @@ test.beforeEach(async ({ context }) => {
 async function enterStudent(page: Page) {
   await page.goto("/");
   await page.getByRole("tab", { name: "学生" }).click();
-  await page.getByRole("button", { name: /学生体验/ }).click();
-  await expect(page).toHaveURL(/\/student$/);
+  await page.getByRole("button", { name: /体验 Agent 自主辅导/ }).click();
+  await expect(page).toHaveURL(/\/student\/auto-tutor\?.*demo=1/);
 }
+
+test("Pilot 主线完成答错、反思重规划与退出票证据", async ({ page }) => {
+  test.setTimeout(90_000);
+  await enterStudent(page);
+
+  await expect(page.getByRole("complementary", { name: "Agent 演示旅程" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".quiz-option-btn")).toHaveCount(4, { timeout: 30_000 });
+
+  await page.locator(".quiz-option-btn").nth(1).click();
+  await expect(page.getByText("根据本次作答调整讲解")).toBeVisible({ timeout: 30_000 });
+  const journey = page.getByRole("complementary", { name: "Agent 演示旅程" });
+  await expect(journey.getByText(/反思当前教学策略/)).toBeVisible({ timeout: 30_000 });
+  await expect(journey.getByText(/调整后续教学计划/)).toBeVisible({ timeout: 30_000 });
+
+  await page.locator(".quiz-option-btn").first().click();
+  await expect(page.getByText("退出票检验", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await page.locator(".quiz-option-btn").first().click();
+
+  await expect(page.getByRole("heading", { name: "本节课小结" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("学习事件已记录")).toBeVisible();
+  await expect(journey.getByText(/写入学习证据/)).toBeVisible({ timeout: 30_000 });
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "本节课小结" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("已恢复最近一节已完成课程")).toBeVisible();
+});
 
 test("AutoTutor 默认展示可信内容并隐藏开发轨迹", async ({ page }) => {
   await enterStudent(page);

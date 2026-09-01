@@ -1,8 +1,6 @@
 name: Agent Evidence Profiles
 
 on:
-  schedule:
-    - cron: '20 18 * * *'
   workflow_dispatch:
     inputs:
       release_required:

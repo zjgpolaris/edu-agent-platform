@@ -28,6 +28,7 @@ def auth_login(req: LoginRequest):
         "role": user["role"],
         "actor_id": user["actor_id"],
         "display_name": user["display_name"],
+        "demo_mode": user.get("traffic_cohort") == "demo",
     }
 
 
@@ -38,4 +39,9 @@ def auth_register(req: RegisterRequest):
         create_account(req.student_id, req.student_id, req.password, "student", req.display_name)
     except Exception:
         raise HTTPException(status_code=409, detail="该学号已注册")
-    return {"token": create_token(req.student_id, "student"), "role": "student", "actor_id": req.student_id}
+    return {
+        "token": create_token(req.student_id, "student"),
+        "role": "student",
+        "actor_id": req.student_id,
+        "demo_mode": False,
+    }

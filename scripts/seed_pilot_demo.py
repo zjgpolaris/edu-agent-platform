@@ -40,7 +40,7 @@ from services.assignment_service import (  # noqa: E402
 from services.notification_service import get_student_notifications, send_urge_notification  # noqa: E402
 from services.review_service import _ensure_table as ensure_review_table  # noqa: E402
 from services.weakpoint_service import get_weakpoints, record_weakpoint  # noqa: E402
-from sqlalchemy import text  # noqa: E402
+from sqlalchemy import inspect, text  # noqa: E402
 from student_profile import LearningEvent, now_iso, try_record_learning_event  # noqa: E402
 
 TEACHER_ID = "pilot-teacher"
@@ -316,6 +316,12 @@ def ensure_autotutor_evidence(today: str, *, verbose: bool = True) -> None:
         ("pilot-student-c", "洋务运动目的", True),
     ]
     with get_connection() as conn:
+        if "autotutor_sessions" in set(inspect(conn).get_table_names()):
+            for student_id in STUDENTS:
+                conn.execute(
+                    text("DELETE FROM autotutor_sessions WHERE student_id=:sid"),
+                    {"sid": student_id},
+                )
         for student_id in STUDENTS:
             conn.execute(
                 text("""DELETE FROM learning_events

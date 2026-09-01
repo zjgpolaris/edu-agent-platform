@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { loadAuth } from "@/lib/auth";
+import { homeForRole, loadAuth } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/", "/register"];
 
@@ -18,7 +18,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
     if (pathname === "/" && auth) {
-      router.replace(auth.role === "teacher" ? "/teacher" : "/student");
+      router.replace(homeForRole(auth.role));
     }
   }, [pathname, router]);
 

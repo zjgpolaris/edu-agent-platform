@@ -96,6 +96,10 @@ PY_COMPILE_TARGETS = [
     "eval/llm_capability_runtime_resolution_smoke.py",
     "eval/learning_assistant_external_ood_eval.py",
     "eval/production_rag_health_smoke.py",
+    "eval/demo_contract_smoke.py",
+    "eval/demo_trace_projection_smoke.py",
+    "eval/demo_trace_authorization_smoke.py",
+    "backend/agents/autotutor_demo_trace.py",
 ]
 PY_COMPILE_TARGETS.extend(
     str(path.relative_to(ROOT))
@@ -149,6 +153,9 @@ FAST_SUITES = [
     "quality_dashboard_smoke",
     "weakpoints_smoke",
     "readiness_smoke",
+    "demo_contract_smoke",
+    "demo_trace_projection_smoke",
+    "demo_trace_authorization_smoke",
     "agent_runtime_contract_smoke",
     "agent_runtime_checkpoint_smoke",
     "agent_runtime_concurrency_smoke",

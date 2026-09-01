@@ -46,7 +46,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) throw new Error("用户名或密码错误");
     const data = await res.json();
-    const auth: AuthUser = { actorId: data.actor_id, role: data.role, displayName: data.display_name, token: data.token };
+    const auth: AuthUser = {
+      actorId: data.actor_id,
+      role: data.role,
+      displayName: data.display_name,
+      demoMode: data.demo_mode === true,
+      token: data.token,
+    };
     saveAuth(auth);
     setUser(auth);
   }
@@ -59,7 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) throw new Error((await res.json()).detail || "注册失败");
     const data = await res.json();
-    const auth: AuthUser = { actorId: data.actor_id, role: data.role, displayName: displayName || studentId, token: data.token };
+    const auth: AuthUser = {
+      actorId: data.actor_id,
+      role: data.role,
+      displayName: displayName || studentId,
+      demoMode: false,
+      token: data.token,
+    };
     saveAuth(auth);
     setUser(auth);
   }

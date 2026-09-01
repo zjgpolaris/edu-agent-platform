@@ -89,8 +89,11 @@ async def api_ready(
             deployment_errors.append("image_digest_invalid")
         if not re.fullmatch(r"[0-9a-f]{40}", deployed_commit):
             deployment_errors.append("deployed_commit_not_full_sha")
+    deployment_applicable = runtime_enabled or require_runtime
     checks["deployment"] = {
-        "ok": bool(deployed_commit and runtime_config_version) and not deployment_errors,
+        "ok": (not deployment_applicable) or (bool(deployed_commit and runtime_config_version) and not deployment_errors),
+        "applicable": deployment_applicable,
+        "status": "not_applicable" if not deployment_applicable else ("pass" if bool(deployed_commit and runtime_config_version) and not deployment_errors else "fail"),
         "deployed_commit": deployed_commit or None,
         "image_digest": image_digest or None,
         "runtime_config_version": runtime_config_version or None,
@@ -123,10 +126,16 @@ async def api_ready(
         "capability_manifest": llm_status.get("capability_manifest", {}),
     }
     capability_manifest = checks["llm_config"]["capability_manifest"]
+    capability_status = capability_manifest.get("status") if isinstance(capability_manifest, dict) else "unavailable"
+    capability_applicable = require_runtime or capability_status not in {"missing", "unavailable", None}
     checks["llm_capabilities"] = {
-        "ok": isinstance(capability_manifest, dict) and capability_manifest.get("status") == "pass",
+        "ok": (not capability_applicable) or (isinstance(capability_manifest, dict) and capability_status == "pass"),
+        "applicable": capability_applicable,
         **(capability_manifest if isinstance(capability_manifest, dict) else {"status": "unavailable"}),
     }
+    if not capability_applicable:
+        checks["llm_capabilities"]["status"] = "not_applicable"
+        checks["llm_capabilities"]["reason"] = "runtime_and_optional_capabilities_disabled"
 
     try:
         rag_payload = await run_in_threadpool(lambda: check_rag_health(collection, deep=False))
@@ -160,6 +169,7 @@ async def api_ready(
         fresh = age_hours is not None and 0 <= age_hours <= 168
         checks["latest_eval"] = {
             "ok": bool(latest.get("ok")) and revision_matches and fresh,
+            "applicable": False,
             "generated_at": generated_at,
             "age_hours": age_hours,
             "report_commit": report_commit or None,
@@ -170,9 +180,21 @@ async def api_ready(
             "source": "eval_report",
         }
     except FileNotFoundError:
-        checks["latest_eval"] = {"ok": False, "missing": True, "reason": "eval report not found"}
+        checks["latest_eval"] = {
+            "ok": True,
+            "applicable": False,
+            "status": "not_available",
+            "missing": True,
+            "reason": "eval report not bundled with demo runtime",
+        }
     except Exception as exc:
-        checks["latest_eval"] = {"ok": False, "error_type": exc.__class__.__name__, "reason": str(exc)[:300]}
+        checks["latest_eval"] = {
+            "ok": False,
+            "applicable": False,
+            "status": "not_available",
+            "error_type": exc.__class__.__name__,
+            "reason": str(exc)[:300],
+        }
 
     try:
         from agent_runtime.evidence_store import load_release_evidence
@@ -180,11 +202,21 @@ async def api_ready(
         from agent_runtime.rollout_gate import evidence_sha256
 
         schema = runtime_schema_readiness()
-        checks["runtime_schema"] = {"ok": bool(schema.get("schema_ready")), **schema}
+        runtime_checks_applicable = runtime_enabled or require_runtime
+        checks["runtime_schema"] = {
+            "ok": bool(schema.get("schema_ready")) if runtime_checks_applicable else True,
+            "applicable": runtime_checks_applicable,
+            **schema,
+        }
         from agent_runtime.rollout_observations import observation_write_health
 
         observation_health = observation_write_health()
-        checks["rollout_observations"] = observation_health
+        checks["rollout_observations"] = {
+            **observation_health,
+            "ok": bool(observation_health.get("ok")) if runtime_checks_applicable else True,
+            "applicable": runtime_checks_applicable,
+            "status": observation_health.get("status") if runtime_checks_applicable else "not_applicable",
+        }
         evidence = load_release_evidence(
             agent_type=rollout_agent_type or None,
             config_version=runtime_config_version or None,
@@ -223,9 +255,11 @@ async def api_ready(
             )
             and all((profiles.get(name) or {}).get("status") == "pass" for name in required_profile_names)
         )
+        rollout_evidence_applicable = runtime_enabled or require_runtime
         checks["rollout_evidence"] = {
-            "ok": evidence_ok,
-            "status": "pass" if evidence_ok else ("missing" if runtime_enabled else "disabled"),
+            "ok": evidence_ok if rollout_evidence_applicable else True,
+            "applicable": rollout_evidence_applicable,
+            "status": "pass" if evidence_ok else ("missing" if rollout_evidence_applicable else "not_applicable"),
             "runtime_enabled": runtime_enabled,
             "runtime_mode": runtime_mode,
             "agent_type": rollout_agent_type or None,
@@ -246,16 +280,25 @@ async def api_ready(
                 "profiles": profiles,
             }
     except Exception as exc:
-        checks["runtime_schema"] = {"ok": False, "error_type": exc.__class__.__name__}
+        runtime_checks_applicable = runtime_enabled or require_runtime
+        checks["runtime_schema"] = {
+            "ok": False if runtime_checks_applicable else True,
+            "applicable": runtime_checks_applicable,
+            "status": "unavailable" if runtime_checks_applicable else "not_applicable",
+            "error_type": exc.__class__.__name__,
+        }
+        rollout_evidence_applicable = runtime_enabled or require_runtime
         checks["rollout_evidence"] = {
-            "ok": False,
-            "status": "unavailable" if runtime_enabled else "disabled",
+            "ok": False if rollout_evidence_applicable else True,
+            "applicable": rollout_evidence_applicable,
+            "status": "unavailable" if rollout_evidence_applicable else "not_applicable",
             "runtime_enabled": runtime_enabled,
             "error_type": exc.__class__.__name__,
         }
         checks["rollout_observations"] = {
-            "ok": False,
-            "status": "unavailable",
+            "ok": False if runtime_checks_applicable else True,
+            "applicable": runtime_checks_applicable,
+            "status": "unavailable" if runtime_checks_applicable else "not_applicable",
             "error_type": exc.__class__.__name__,
         }
 
@@ -263,6 +306,7 @@ async def api_ready(
     embedding_config = rag_config.get("embedding") if isinstance(rag_config, dict) else {}
     checks["external_dependencies"] = {
         "ok": bool(checks["llm_config"].get("credentials_configured")) and bool(isinstance(embedding_config, dict) and embedding_config.get("api_key_configured")),
+        "applicable": require_external,
         "mode": "config-only",
         "llm_provider": checks["llm_config"].get("provider"),
         "llm_credentials_configured": bool(checks["llm_config"].get("credentials_configured")),
@@ -278,7 +322,12 @@ async def api_ready(
         required.extend(["deployment", "runtime_schema", "llm_capabilities", "rollout_evidence", "rollout_observations"])
     ok = all(bool(checks.get(name, {}).get("ok")) for name in required)
     failed_required_checks = [name for name in required if not bool(checks.get(name, {}).get("ok"))]
-    warnings = [name for name, payload in checks.items() if name not in required and not payload.get("ok")]
+    warnings = [
+        name
+        for name, payload in checks.items()
+        if name not in required and payload.get("applicable", True) is not False and not payload.get("ok")
+    ]
+    not_applicable = [name for name, payload in checks.items() if payload.get("applicable") is False]
     return {
         "ok": ok,
         "status": "ok" if ok and not warnings else ("degraded" if ok else "failed"),
@@ -289,6 +338,7 @@ async def api_ready(
         "required_checks": required,
         "failed_required_checks": failed_required_checks,
         "warning_checks": warnings,
+        "not_applicable_checks": not_applicable,
         "checks": checks,
         "warnings": warnings,
     }

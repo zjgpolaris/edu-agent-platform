@@ -550,7 +550,7 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
         trace_id = current_trace_id()
         record_audit_event(actor_id=actor.actor_id, action="autotutor.start", resource_type="student", resource_id=req.student_id, metadata={"grade": req.grade})
         try:
-            return await run_in_threadpool(
+            result = await run_in_threadpool(
                 autotutor_start,
                 req.student_id,
                 grade=req.grade,
@@ -563,6 +563,23 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
                 max_minutes=req.max_minutes,
                 idempotency_key=req.idempotency_key,
             )
+            if actor.traffic_cohort == "demo" and not result.get("idempotent_replay"):
+                record_audit_event(
+                    actor_id=actor.actor_id,
+                    action="demo.entry",
+                    resource_type="autotutor_session",
+                    resource_id=result.get("session_id"),
+                    metadata={"focus_tags": (req.focus_tags or [])[:2], "status": result.get("status")},
+                )
+                if result.get("status") == "needs_content":
+                    record_audit_event(
+                        actor_id=actor.actor_id,
+                        action="demo.flow_blocked",
+                        resource_type="autotutor_session",
+                        resource_id=result.get("session_id"),
+                        metadata={"phase": result.get("phase"), "source": "start"},
+                    )
+            return result
         except AutoTutorUnavailableError as exc:
             raise HTTPException(status_code=503, detail=str(exc))
 
@@ -586,7 +603,7 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
     actor_role = "student" if not auth_required() else actor.role
     record_audit_event(actor_id=actor.actor_id, action="autotutor.answer", resource_type="student", resource_id=session_student_id, metadata={"session_id": req.session_id})
     try:
-        return await run_in_threadpool(
+        result = await run_in_threadpool(
             autotutor_answer,
             req.session_id,
             req.answer,
@@ -595,6 +612,31 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
             expected_revision=req.expected_revision,
             idempotency_key=req.idempotency_key,
         )
+        if (
+            actor.traffic_cohort == "demo"
+            and not result.get("idempotent_replay")
+            and result.get("status") == "completed"
+        ):
+            record_audit_event(
+                actor_id=actor.actor_id,
+                action="demo.flow_completed",
+                resource_type="autotutor_session",
+                resource_id=req.session_id,
+                metadata={
+                    "replans": int(result.get("replans") or 0),
+                    "verified_mastery": (result.get("mastery") or {}).get("status") == "verified",
+                    "exit_ticket_recorded": bool((result.get("evidence") or {}).get("exit_ticket_recorded")),
+                },
+            )
+        elif actor.traffic_cohort == "demo" and result.get("status") == "needs_content":
+            record_audit_event(
+                actor_id=actor.actor_id,
+                action="demo.flow_blocked",
+                resource_type="autotutor_session",
+                resource_id=req.session_id,
+                metadata={"phase": result.get("phase")},
+            )
+        return result
     except LookupError:
         raise HTTPException(status_code=404, detail="辅导会话不存在或已过期，请重新开始")
     except AutoTutorIdempotencyConflict:
@@ -611,6 +653,44 @@ async def autotutor_get_session(session_id: str, actor: Actor = Depends(require_
     if req_student := state.get("student_id"):
         assert_student_access(actor, req_student)
     return state
+
+
+@router.get("/api/autotutor/session/{session_id}/demo-trace")
+async def autotutor_get_demo_trace(session_id: str, actor: Actor = Depends(require_auth)):
+    from agents.auto_tutor import get_session as autotutor_get
+    from agents.autotutor_demo_trace import project_demo_trace
+
+    try:
+        state = await run_in_threadpool(autotutor_get, session_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="辅导会话不存在或已过期")
+    if actor.role != "admin":
+        if actor.role != "student" or state.get("student_id") != actor.actor_id:
+            raise HTTPException(status_code=403, detail="insufficient_role")
+        is_demo_actor = actor.traffic_cohort == "demo"
+        if not is_demo_actor and actor.actor_id:
+            # In local/demo deployments JWT verification may intentionally skip
+            # database authority. Resolve only this feature flag from the active
+            # account so the one-click Pilot journey still works there.
+            from security.accounts import get_account
+
+            account = get_account(actor.actor_id)
+            is_demo_actor = bool(
+                account
+                and account.get("account_status") == "active"
+                and account.get("traffic_cohort") == "demo"
+            )
+        if not is_demo_actor:
+            raise HTTPException(status_code=403, detail="demo_trace_not_available")
+    payload = project_demo_trace(state)
+    record_audit_event(
+        actor_id=actor.actor_id,
+        action="demo.trace_viewed",
+        resource_type="autotutor_session",
+        resource_id=session_id,
+        metadata={"event_count": len(payload["events"]), "session_status": payload["status"]},
+    )
+    return payload
 
 
 @router.get("/api/autotutor/student/{student_id}/latest-session")

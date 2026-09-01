@@ -89,6 +89,15 @@ type AgentOpsSummary = {
   };
   audit?: { total: number; failure: number; success_rate?: number; by_action?: Record<string, number> };
   learning?: { total: number; failure: number; success_rate?: number; by_feature?: Record<string, number> };
+  autotutor?: {
+    session_total?: number;
+    exit_ticket_total?: number;
+    completion_rate?: number;
+    verified_mastery_total?: number;
+    verified_mastery_rate?: number;
+    content_blocked_total?: number;
+    replan_total?: number;
+  };
   learning_assistant?: {
     feedback_total?: number;
     resolved?: number;
@@ -1010,6 +1019,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
   const cost = production?.cost;
   const runtime = production?.runtime;
   const assistantFeedback = summary?.learning_assistant;
+  const autotutor = summary?.autotutor;
   return (
     <div style={{
       border: "1px solid var(--border)", borderRadius: "var(--radius-sm)",
@@ -1023,6 +1033,18 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
         <div style={{ color: "var(--cinnabar)", fontSize: "0.82rem" }}>{error}</div>
       ) : (
         <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem", marginBottom: "0.85rem" }}>
+            <OpsCard label="Agent 任务状态" value={summary?.status || "--"} hint={`${summary?.learning?.total ?? 0} learning events`} />
+            <OpsCard label="AutoTutor 完成率" value={autotutor?.session_total ? `${Math.round((autotutor.completion_rate ?? 0) * 100)}%` : "暂无样本"} hint={`${autotutor?.exit_ticket_total ?? 0}/${autotutor?.session_total ?? 0} sessions`} />
+            <OpsCard label="反思重规划" value={autotutor?.session_total ? String(autotutor?.replan_total ?? 0) : "暂无样本"} hint="demo completed flows" />
+            <OpsCard label="退出票" value={autotutor?.session_total ? String(autotutor?.exit_ticket_total ?? 0) : "暂无样本"} hint="independent checks" />
+            <OpsCard label="验证掌握" value={autotutor?.exit_ticket_total ? `${Math.round((autotutor.verified_mastery_rate ?? 0) * 100)}%` : "暂无样本"} hint={`${autotutor?.verified_mastery_total ?? 0} verified`} />
+            <OpsCard label="Tool 成功率" value={summary?.tools?.total ? `${Math.round((summary.tools.success_rate ?? 0) * 100)}%` : "暂无样本"} hint={`${summary?.tools?.total ?? 0} calls`} />
+            <OpsCard label="Trace 覆盖率" value={trace && total ? `${coverage}%` : "暂无样本"} hint={coverageHint} />
+            <OpsCard label="p95 latency" value={latency?.p95_ms != null ? `${Math.round(latency.p95_ms)}ms` : "暂无样本"} hint={`${latency?.sample_count ?? 0} trace steps`} />
+          </div>
+          <details style={{ borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
+            <summary style={{ cursor: "pointer", color: "var(--jade-dark)", fontWeight: 700, marginBottom: "0.75rem" }}>高级诊断</summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem", marginBottom: "0.85rem" }}>
             <OpsCard label="Readiness" value={readiness?.status || "--"} hint={readinessHint} />
             <OpsCard label="数据口径" value={summary?.data_scope?.active || "runtime"} hint={`${summary?.data_scope?.learning?.eval ?? 0} eval events excluded`} />
@@ -1057,7 +1079,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="受限计划步骤" value={String(runtime?.plan_step_count ?? "--")} hint={`${runtime?.routing_count ?? 0} routed requests`} />
             <OpsCard label="Repair 成功率" value={runtime?.repair_count ? `${Math.round((runtime.repair_success_rate ?? 0) * 100)}%` : "--"} hint={`${runtime?.repair_success_count ?? 0}/${runtime?.repair_count ?? 0} repairs · rate ${Math.round((runtime?.repair_rate ?? 0) * 100)}%`} />
           </div>
-          <RuntimeRolloutPanel rollout={summary?.runtime_rollout} />
+          {summary?.runtime_rollout?.deployment?.runtime_enabled ? <RuntimeRolloutPanel rollout={summary.runtime_rollout} /> : null}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
             <Rollup title="Top actions" items={summary?.audit?.by_action} />
             <Rollup title="Top features" items={summary?.learning?.by_feature} />
@@ -1067,6 +1089,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <Rollup title="RAG diagnosis" items={rag?.diagnosis} />
             <Rollup title="RAG failure stage" items={rag?.failure_stage} />
           </div>
+          </details>
           <div style={{ marginTop: "0.75rem", fontSize: "0.78rem", color: coverage >= 80 ? "var(--jade-dark)" : coverage >= 30 ? "#7a5524" : "var(--cinnabar-dark)" }}>
             Trace coverage 是 Agent 工程质量信号：{coverageHealth}。
           </div>

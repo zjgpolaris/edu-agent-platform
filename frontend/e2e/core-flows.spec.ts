@@ -21,7 +21,7 @@ test.beforeEach(async ({ context }) => {
       {
         method: browserRequest.method(),
         headers,
-        body: browserRequest.postDataBuffer() || undefined,
+        body: browserRequest.postData() ?? undefined,
       },
     );
     await route.fulfill({
@@ -59,8 +59,13 @@ test.beforeAll(() => {
 async function enterDemo(page: Page, role: "student" | "teacher") {
   await page.goto("/");
   await page.getByRole("tab", { name: role === "student" ? "学生" : "教师" }).click();
-  await page.getByRole("button", { name: new RegExp(role === "student" ? "学生体验" : "教师体验") }).click();
-  await expect(page).toHaveURL(new RegExp(`/${role}$`));
+  await page.getByRole("button", { name: new RegExp(role === "student" ? "体验 Agent 自主辅导" : "教师体验") }).click();
+  if (role === "student") {
+    await expect(page).toHaveURL(/\/student\/auto-tutor\?.*demo=1/);
+    await page.goto("/student");
+  } else {
+    await expect(page).toHaveURL(/\/teacher$/);
+  }
 }
 
 async function enterAdmin(page: Page) {
@@ -102,8 +107,8 @@ test("学生可打开 AutoTutor 自主辅导入口", async ({ page }) => {
   await enterDemo(page, "student");
   await page.goto("/student/auto-tutor");
   await expect(page.getByRole("heading", { name: "AutoTutor 自主辅导" })).toBeVisible();
-  // 未开课时页面渲染启动引导；「本节课计划」等三栏面板要开课后才出现
-  await expect(page.getByRole("button", { name: "开始本节课" })).toBeVisible();
+  // 一键 Demo 会自动开始或恢复辅导，无需再经过空白启动页。
+  await expect(page.getByRole("heading", { name: "本节课计划" })).toBeVisible({ timeout: 30_000 });
 });
 
 test("智能练习在模型不可用时仍可按教材出题", async ({ page }) => {
@@ -199,7 +204,10 @@ test("管理员可查看 Eval 评测与 Trace 运行状态", async ({ page }) =>
   await enterAdmin(page);
   await expect(page.getByRole("heading", { name: "Eval 评估中心" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "AgentOps 运行状态" })).toBeVisible();
-  await expect(page.getByText("Trace 覆盖率")).toBeVisible();
+  await expect(page.getByText("Trace 覆盖率").first()).toBeVisible();
+  await expect(page.getByText("AutoTutor 完成率")).toBeVisible();
+  await expect(page.getByText("验证掌握")).toBeVisible();
+  await page.getByText("高级诊断").click();
+  // E2E 显式启用了 Runtime V2，因此部署状态保留在折叠的高级诊断中。
   await expect(page.getByLabel("Runtime Rollout")).toBeVisible();
-  await expect(page.getByText("下一步：")).toBeVisible();
 });

@@ -4,7 +4,7 @@
 [![Backend](https://img.shields.io/badge/backend-render-blue)](https://edu-agent-backend-1e5x.onrender.com/api/debug/llm/health)
 
 **Live Demo：** [edu-agent-platform.vercel.app](https://edu-agent-platform.vercel.app)
-> 演示账号：`demo-student` / `demo123`（进入「自主辅导」可直接看 AutoTutor 运行）
+> 一键体验账号：`pilot-student` / `pilot123`（首页按钮会直达 AutoTutor Agent 主线）
 
 ---
 
@@ -21,7 +21,7 @@ plan ──> act ──> observe ──> judge ──┬── pass ──> next
 
 - **Plan**：读学生画像 + 错题本，自主生成本节课知识点顺序与教学策略
 - **Reflect / Re-plan**：答错时诊断原因（讲得不对 / 题超纲），动态改变后续计划
-- **全程 Trace**：每个 node 写入 trace_store，右侧 TraceTimeline 实时可见
+- **全程可观测**：每个 node 写入 trace_store；Demo 账号在线上看到会话级授权、脱敏后的 Agent 决策旅程
 - **退出票证据**：教学结束前必须完成 exit ticket，结果写入 learning_events、错题/掌握度、复习与教师端辅导效果看板
 - **课后自适应**：掌握的知识点移出错题本，薄弱点进入 SM-2 复习排期
 
@@ -32,23 +32,23 @@ plan ──> act ──> observe ──> judge ──┬── pass ──> next
 先灌入稳定演示数据：
 
 ```bash
-PYTHONPATH=backend python3 scripts/seed_demo_student.py
+PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 ```
 
 学生主线：
 
-1. 登录 `demo-student` / `demo123`，进入 `/student` 查看今日计划和薄弱点。
-2. 打开 `/student/learning-path` 或 `/student/review?tab=weakpoints`，确认错题本已预置「鸦片战争」等知识点。
-3. 打开 `/student/auto-tutor?focus=鸦片战争`，让 AutoTutor 围绕指定薄弱点启动教学。
-4. 故意答错一次，观察 Agent 进入 `reflect` / `re_plan`，并在右侧 TraceTimeline 看到节点轨迹。
-5. 答完教学步骤后完成「退出票检验」，确认学习证据写入错题/复习与教师端分析。
-6. 打开 `/eval`，展示 Eval / AgentOps 的 readiness、成功率、trace 与工具调用统计。
+1. 在首页点击「Pilot 学生A · 体验 Agent 自主辅导」，系统使用 `pilot-student / pilot123` 登录并直达「洋务运动目的」。
+2. 查看本节目标、可信内容与右侧脱敏的 Agent 决策旅程。
+3. 故意答错一次，观察 `judge → reflect → re-plan → reteach`。
+4. 完成调整后的练习与不同题目的「退出票检验」。
+5. 查看掌握层级、错题/复习回流与教师端可见的学习证据。
+6. 如需展示 Eval / AgentOps，使用 `scripts/bootstrap_admin.py` 创建的管理员单独登录 `/eval`；学生账号不能访问管理员数据。
 
 教师补充：
 
-1. 登录 `teacher_zhang` / `teacher123`。
+1. 登录 `pilot-teacher` / `pilot123`。
 2. 打开 `/teacher` 或 `/teacher/assignments`，展示教师端布置作业与班级工作流入口。
-3. 如需完整 pilot 教师工作流，可运行 `PYTHONPATH=backend python3 scripts/seed_pilot_demo.py` 后使用脚本输出的 pilot 账号。
+3. 查看 Pilot 作业、欠交队列、质检盲区与 AutoTutor 辅导效果。
 
 ---
 
@@ -339,8 +339,9 @@ npm run test:mcp
 灌入 demo 种子数据：
 
 ```bash
-PYTHONPATH=backend python3 scripts/seed_demo_student.py
-# 账号：demo-student / demo123
+PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
+# 学生：pilot-student / pilot123
+# 教师：pilot-teacher / pilot123
 ```
 
 ---

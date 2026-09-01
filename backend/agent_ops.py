@@ -707,6 +707,28 @@ def build_agent_ops_summary(
         str((event.get("metadata") or {}).get("assistant_session_id")) for event in learning_events
         if event.get("feature") == "auto_tutor" and event.get("event_type") == "autotutor_question_returned" and (event.get("metadata") or {}).get("assistant_session_id")
     }
+    autotutor_events = [event for event in learning_events if event.get("feature") == "auto_tutor"]
+    autotutor_sessions = {str(event.get("session_id")) for event in autotutor_events if event.get("session_id")}
+    autotutor_exit_sessions = {
+        str(event.get("session_id"))
+        for event in autotutor_events
+        if event.get("event_type") in {"auto_tutor_exit_ticket", "auto_tutor_exit_ticket_answered"} and event.get("session_id")
+    }
+    autotutor_mastery_sessions = {
+        str(event.get("session_id"))
+        for event in autotutor_events
+        if event.get("event_type") == "auto_tutor_verified_mastery" and event.get("session_id")
+    }
+    autotutor_blocked_sessions = {
+        str(event.get("session_id"))
+        for event in autotutor_events
+        if event.get("event_type") == "auto_tutor_content_blocked" and event.get("session_id")
+    }
+    demo_replans = sum(
+        max(0, int((event.get("metadata") or {}).get("replans") or 0))
+        for event in audit_events
+        if event.get("action") == "demo.flow_completed"
+    )
     audit_success = sum(1 for event in audit_events if _outcome_class(event) == "success")
     audit_failure = sum(1 for event in audit_events if _outcome_class(event) == "unexpected_failure")
     audit_expected_control = sum(1 for event in audit_events if _outcome_class(event) == "expected_control")
@@ -855,6 +877,15 @@ def build_agent_ops_summary(
             "autotutor_question_total": len(autotutor_question_sessions),
             "autotutor_return_total": len(autotutor_question_sessions & autotutor_return_sessions),
             "autotutor_return_rate": _rate(len(autotutor_question_sessions & autotutor_return_sessions), len(autotutor_question_sessions)),
+        },
+        "autotutor": {
+            "session_total": len(autotutor_sessions),
+            "exit_ticket_total": len(autotutor_exit_sessions),
+            "completion_rate": _rate(len(autotutor_exit_sessions), len(autotutor_sessions)),
+            "verified_mastery_total": len(autotutor_mastery_sessions),
+            "verified_mastery_rate": _rate(len(autotutor_mastery_sessions), len(autotutor_exit_sessions)),
+            "content_blocked_total": len(autotutor_blocked_sessions),
+            "replan_total": demo_replans,
         },
         "tools": {
             "total": total_tool_calls,

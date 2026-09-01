@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { homeForRole } from "@/lib/auth";
 
 type Role = "student" | "teacher";
 
@@ -49,7 +50,7 @@ export default function Home() {
     try {
       await login(username, password);
       const auth = JSON.parse(localStorage.getItem("edu_auth") || "{}");
-      router.push(auth.role === "admin" ? "/eval" : auth.role === "teacher" ? "/teacher" : "/student");
+      router.push(homeForRole(auth.role));
     } catch {
       setError("用户名或密码错误，请重试");
     } finally {
@@ -65,7 +66,7 @@ export default function Home() {
     setLoading(true);
     try {
       await login(account.username, account.password);
-      router.push(role === "teacher" ? "/teacher" : "/student");
+      router.push(role === "teacher" ? "/teacher" : `/student/auto-tutor?focus=${encodeURIComponent("洋务运动目的")}&demo=1`);
     } catch {
       setError("Pilot 体验账号暂不可用，请先运行 seed_pilot_demo.py");
     } finally {
@@ -181,7 +182,7 @@ export default function Home() {
             <span className="home-demo-ava">{DEMO[role].avatar}</span>
             <span className="home-demo-meta">
               <strong>
-                {DEMO[role].displayName} · {role === "student" ? "学生体验" : "教师体验"}
+                {DEMO[role].displayName} · {role === "student" ? "体验 Agent 自主辅导" : "教师体验"}
               </strong>
               <small>{DEMO[role].hint}</small>
             </span>

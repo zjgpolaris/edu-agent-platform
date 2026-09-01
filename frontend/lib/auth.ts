@@ -2,6 +2,7 @@ export interface AuthUser {
   actorId: string;
   role: "student" | "teacher" | "admin";
   displayName?: string;
+  demoMode?: boolean;
   token: string;
 }
 
@@ -19,6 +20,12 @@ export function loadAuth(): AuthUser | null {
   } catch {
     return null;
   }
+}
+
+export function homeForRole(role: AuthUser["role"]): string {
+  if (role === "admin") return "/eval";
+  if (role === "teacher") return "/teacher";
+  return "/student";
 }
 
 export function clearAuth() {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "rea
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { TraceTimeline } from "@/components/TraceTimeline";
+import { DemoAgentJourney } from "@/components/DemoAgentJourney";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -187,6 +188,7 @@ function AutoTutorInner() {
   // 从 URL ?focus=知识点 读取作业/错题本跳转带来的聚焦知识点
   const focusTag = searchParams?.get("focus") ?? null;
   const showDebugTrace = process.env.NODE_ENV === "development" && searchParams?.get("debug") === "1";
+  const showDemoJourney = searchParams?.get("demo") === "1" && user?.demoMode === true;
 
   const headers = useMemo(
     () => ({ "Content-Type": "application/json", ...(user?.token ? authHeaders(user.token) : {}) }),
@@ -201,6 +203,7 @@ function AutoTutorInner() {
       setSession(null);
       setSelected(null);
       setError("");
+      setRestored(false);
       setStatus("正在准备针对性辅导……");
     }
     if (!focusTag || !studentId || !user?.token) {
@@ -259,10 +262,11 @@ function AutoTutorInner() {
   // 从错题库/学习路径带 focus 进入时，自动开始本节针对性辅导，避免用户二次点击。
   useEffect(() => {
     if (!focusTag || !studentId || session || loading || !rootCauseChecked) return;
+    if (showDemoJourney && !restored) return;
     if (autoStartedFocusRef.current === focusTag) return;
     autoStartedFocusRef.current = focusTag;
     void start();
-  }, [focusTag, studentId, session, loading, rootCauseChecked, start]);
+  }, [focusTag, studentId, session, loading, rootCauseChecked, restored, showDemoJourney, start]);
 
   async function answer(letter: string) {
     if (!session || loading || session.status !== "awaiting_answer") return;
@@ -305,25 +309,34 @@ function AutoTutorInner() {
   }, [session?.runtime_steps.length]);
 
   useEffect(() => {
-    if (!studentId || !user?.token || focusTag || session || loading || restored) return;
+    if (!studentId || !user?.token || (focusTag && !showDemoJourney) || session || loading || restored) return;
     let cancelled = false;
-    setRestored(true);
     (async () => {
       try {
-        const res = await fetch(`${apiBaseUrl}/api/autotutor/student/${studentId}/latest-session`, { headers });
+        const res = await fetch(
+          `${apiBaseUrl}/api/autotutor/student/${studentId}/latest-session?include_completed=${showDemoJourney ? "true" : "false"}`,
+          { headers },
+        );
         if (!res.ok) return;
         const data = (await res.json()) as SessionState;
         if (cancelled) return;
+        if (focusTag) {
+          const restoredFocus = data.lesson_plan[0]?.source_tag || data.lesson_plan[0]?.knowledge_point;
+          if (restoredFocus !== focusTag) return;
+          autoStartedFocusRef.current = focusTag;
+        }
         setSession(data);
         setStatus(data.status === "completed" ? "已恢复最近一节已完成课程" : data.status === "needs_content" ? "已恢复等待补充内容的课程" : "已恢复最近一节未完成课程");
       } catch {
         /* 无可恢复会话时静默跳过 */
+      } finally {
+        if (!cancelled) setRestored(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [studentId, user?.token, focusTag, session, loading, restored, headers]);
+  }, [studentId, user?.token, focusTag, showDemoJourney, session, loading, restored, headers]);
 
   const plan = session?.lesson_plan ?? [];
   const q = session?.current_question ?? null;
@@ -405,7 +418,7 @@ function AutoTutorInner() {
           </ol>
         </section>
       ) : (
-      <section className={`learning-command-grid${showDebugTrace ? "" : " student-focused"}`}>
+      <section className={`learning-command-grid${showDebugTrace || showDemoJourney ? "" : " student-focused"}`}>
         {/* 左：课程计划 */}
         <aside className="panel learning-control-panel">
           <div className="panel-kicker">Lesson Plan</div>
@@ -569,6 +582,9 @@ function AutoTutorInner() {
         </section>
 
         {/* 右：运行时轨迹 */}
+        {showDemoJourney && session && user?.token ? (
+          <DemoAgentJourney sessionId={session.session_id} revision={session.revision} token={user.token} />
+        ) : null}
         {showDebugTrace && <aside className="panel learning-observation-panel" aria-label="开发调试轨迹">
           <div className="panel-kicker">Agent Trace</div>
           <h2>规划 / 反思轨迹</h2>

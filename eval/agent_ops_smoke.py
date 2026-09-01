@@ -89,6 +89,21 @@ def main() -> None:
         event_type="autotutor_question_returned",
         metadata={"assistant_session_id": "la_handoff_1"},
     ))
+    for event_type in ("auto_tutor_practice_answered", "auto_tutor_exit_ticket_answered", "auto_tutor_verified_mastery"):
+        assert try_record_learning_event(LearningEvent(
+            student_id="agent-ops-student",
+            session_id="at_demo_complete",
+            feature="auto_tutor",
+            event_type=event_type,
+            success=True,
+        ))
+    assert record_audit_event(
+        actor_id="agent-ops-student",
+        action="demo.flow_completed",
+        resource_type="autotutor_session",
+        resource_id="at_demo_complete",
+        metadata={"replans": 1, "verified_mastery": True},
+    )
     assert try_record_learning_event(LearningEvent(
         student_id="agent-ops-student",
         session_id="eval-only",
@@ -188,6 +203,7 @@ def main() -> None:
     cost = production.get("cost") or {}
     runtime = production.get("runtime") or {}
     assistant_feedback = summary.get("learning_assistant") or {}
+    autotutor = summary.get("autotutor") or {}
     data_scope = summary.get("data_scope") or {}
     runtime_v2 = summary.get("runtime_v2") or {}
 
@@ -222,6 +238,10 @@ def main() -> None:
     assert assistant_feedback.get("partial_completion_rate") == 0.5
     assert assistant_feedback.get("session_resume_rate") == 0.5
     assert assistant_feedback.get("autotutor_return_rate") == 0.5
+    assert autotutor.get("exit_ticket_total") == 1
+    assert autotutor.get("verified_mastery_total") == 1
+    assert autotutor.get("verified_mastery_rate") == 1.0
+    assert autotutor.get("replan_total") == 1
     assert runtime_v2.get("status") == "ok"
     assert (runtime_v2.get("by_agent") or {}).get("learning_assistant") == 1
     assert (runtime_v2.get("by_config_version") or {}).get("agent-ops-runtime-test") == 1
