@@ -111,8 +111,16 @@ PY_COMPILE_TARGETS = [
     "eval/demo_trace_projection_smoke.py",
     "eval/demo_trace_authorization_smoke.py",
     "eval/demo_evidence_authorization_smoke.py",
+    "eval/autotutor_langchain_provenance_smoke.py",
+    "eval/autotutor_langgraph_shadow_parity_smoke.py",
     "backend/agents/autotutor_demo_trace.py",
     "backend/agents/autotutor_evidence.py",
+    "backend/agents/autotutor_domain.py",
+    "backend/agents/autotutor_graph.py",
+    "backend/agents/autotutor_provenance.py",
+    "backend/agents/autotutor_shadow.py",
+    "backend/llm/managed_model.py",
+    "backend/structured_output.py",
 ]
 PY_COMPILE_TARGETS.extend(
     str(path.relative_to(ROOT))
@@ -129,6 +137,9 @@ PY_COMPILE_TARGETS.extend(
 )
 
 FAST_SUITES = [
+    "llm_provider_contract_smoke",
+    "autotutor_langchain_provenance_smoke",
+    "autotutor_langgraph_shadow_parity_smoke",
     "llm_capability_manifest_smoke",
     "llm_capability_manifest_provenance_smoke",
     "llm_capability_gate_smoke",

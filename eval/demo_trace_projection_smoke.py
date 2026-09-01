@@ -35,6 +35,11 @@ def main() -> None:
                     "diagnosis": "raw model diagnosis",
                     "password": "secret",
                     "chain_of_thought": "hidden",
+                    "decision_provenance": {
+                        "decision_source": "deterministic_fallback",
+                        "provider": None,
+                        "request_id": "secret-request",
+                    },
                 },
             },
             {
@@ -50,8 +55,10 @@ def main() -> None:
     assert [event["phase"] for event in payload["events"]] == ["plan", "reflect", "re_plan"], payload
     assert payload["events"][0]["duration_ms"] == 12.4, payload
     assert "补讲核心概念" in payload["events"][2]["summary"], payload
+    assert payload["events"][0]["decision_source"] == "policy", payload
+    assert payload["events"][1]["decision_source"] == "deterministic_fallback", payload
     serialized = json.dumps(payload, ensure_ascii=False).lower()
-    for secret in ("secret", "authorization", "password", "database_url", "chain_of_thought", "raw model diagnosis"):
+    for secret in ("secret", "authorization", "password", "database_url", "chain_of_thought", "raw model diagnosis", "request_id"):
         assert secret not in serialized, serialized
     print("demo_trace_projection_smoke=PASS")
 

@@ -29,7 +29,7 @@ from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
 from llm_config import llm_quality
-from structured_output import invoke_structured
+from structured_output import StructuredInvocationProvenance, invoke_structured_with_provenance
 from student_profile import LearningEvent, MemoryEntryUpsert, get_student_profile, try_record_learning_event
 from services.autotutor_transition_service import (
     AutoTutorTransitionEffects,
@@ -59,6 +59,8 @@ from agents.autotutor_public import (
     AutoTutorAssistantHandoff,
     PublicTeachingContext,
 )
+from agents.autotutor_provenance import public_decision_provenance
+from agents.autotutor_domain import judge_answer, replan_policy
 
 AGENT_NAME = "auto_tutor"
 
@@ -69,6 +71,16 @@ class AutoTutorUnavailableError(RuntimeError):
 
 class AutoTutorIdempotencyConflict(RuntimeError):
     """Raised when one idempotency key is reused for a different answer."""
+
+
+def _maybe_run_langgraph_shadow(state: "AutoTutorState") -> None:
+    try:
+        from agents.autotutor_shadow import maybe_run_autotutor_shadow
+
+        maybe_run_autotutor_shadow(state)
+    except Exception:
+        # Shadow is diagnostic only and must never alter the active transition.
+        return
 
 # 防死循环 / 防失控护栏
 MAX_STEPS = 2
@@ -126,6 +138,7 @@ class ReflectionRecord(BaseModel):
     diagnosis: str
     adjustment: AdjustmentAction
     explanation: str
+    decision_provenance: dict[str, Any] | None = None
 
 
 class ExitTicket(BaseModel):
@@ -837,14 +850,12 @@ def _act(state: AutoTutorState, step: LessonStep, ctx: ToolExecutionContext) -> 
 # --------------------------------------------------------------------------- #
 def _judge(step: LessonStep, answer: str) -> tuple[bool, str]:
     question = step.question or {}
-    if not step.content_validation or step.content_validation.status != "verified":
-        raise RuntimeError("invalid content cannot enter judge")
-    correct_letter = str(question.get("answer") or "").strip()[:1].upper()
-    if correct_letter not in {"A", "B", "C", "D"}:
-        raise RuntimeError("verified assessment has no valid answer")
-    given = (answer or "").strip()[:1].upper()
-    is_correct = bool(given) and given == correct_letter
-    return is_correct, correct_letter
+    judgement = judge_answer(
+        answer=answer,
+        correct_answer=str(question.get("answer") or ""),
+        content_verified=bool(step.content_validation and step.content_validation.status == "verified"),
+    )
+    return judgement.is_correct, judgement.correct_option
 
 
 def _assessment_from_question(question: dict[str, Any]) -> AssessmentItem:
@@ -869,9 +880,6 @@ class _Reflection(BaseModel):
     diagnosis: str
     adjustment: AdjustmentAction
     explanation: str
-
-
-_DOWNGRADE = {"hard": "medium", "medium": "easy", "easy": "easy"}
 
 
 def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ctx: ToolExecutionContext) -> ReflectionRecord:
@@ -912,9 +920,24 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
         explanation=feedback["correction"],
     )
     try:
-        reflection = invoke_structured(llm_quality, prompt, model=_Reflection, fallback=fallback)
+        invocation = invoke_structured_with_provenance(
+            llm_quality,
+            prompt,
+            model=_Reflection,
+            fallback=fallback,
+        )
+        reflection = invocation.value
+        provenance = invocation.provenance.model_dump(mode="json")
     except Exception:
         reflection = fallback
+        provenance = StructuredInvocationProvenance(
+            decision_source="deterministic_fallback",
+            configured_profile=getattr(llm_quality, "name", None),
+            configured_model=getattr(llm_quality, "model", None),
+            fallback_used=True,
+        ).model_dump(mode="json")
+
+    public_provenance = public_decision_provenance(provenance)
 
     _emit(
         state,
@@ -926,6 +949,7 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
             "knowledge_point": step.knowledge_point,
             "diagnosis": reflection.diagnosis,
             "adjustment": reflection.adjustment,
+            "decision_provenance": public_provenance,
             "result_summary": f"诊断：{reflection.diagnosis} → 调整：{reflection.adjustment}",
         },
     )
@@ -934,27 +958,19 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
     replan_started = perf_counter()
     state.replans += 1
     step.replanned = True
-    changes: list[str] = []
-
-    if reflection.adjustment in ("lower_difficulty", "reteach"):
-        old = step.difficulty
-        step.difficulty = _DOWNGRADE.get(step.difficulty, "easy")  # type: ignore[assignment]
-        if step.difficulty != old:
-            changes.append(f"当前步难度 {old}→{step.difficulty}")
-        # 后续步骤同步降难度，体现"计划真实改变"
-        for later in state.lesson_plan[state.current_step_index + 1:]:
-            if later.difficulty == "hard":
-                later.difficulty = "medium"
-                changes.append(f"后续「{later.knowledge_point}」难度 hard→medium")
-
-    if reflection.adjustment == "reteach":
-        step.strategy = f"先补讲：{reflection.explanation}"
-    elif reflection.adjustment == "change_example":
-        step.strategy = f"换一个生活化例子重新解释：{reflection.explanation}"
-    elif reflection.adjustment == "lower_difficulty":
-        step.strategy = f"降低认知负担，先讲最基础史实：{reflection.explanation}"
-    if not changes:
-        changes.append("保持难度，换一道同知识点的题重新检验")
+    later_steps = state.lesson_plan[state.current_step_index + 1:]
+    replan = replan_policy(
+        current_difficulty=step.difficulty,
+        later_difficulties=[later.difficulty for later in later_steps],
+        adjustment=reflection.adjustment,
+        explanation=reflection.explanation,
+        later_labels=[later.knowledge_point for later in later_steps],
+    )
+    step.difficulty = replan.current_difficulty
+    step.strategy = replan.strategy
+    for later, difficulty in zip(later_steps, replan.later_difficulties, strict=True):
+        later.difficulty = difficulty
+    changes = list(replan.changes)
 
     _emit(
         state,
@@ -979,6 +995,7 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
         diagnosis=reflection.diagnosis,
         adjustment=reflection.adjustment,
         explanation=reflection.explanation,
+        decision_provenance=provenance,
     )
     state.reflect_log.append(record)
     return record
@@ -1336,6 +1353,17 @@ def _finalize(state: AutoTutorState) -> None:
 # --------------------------------------------------------------------------- #
 # 对外 API：start / answer / get
 # --------------------------------------------------------------------------- #
+def _public_reflection(reflection: ReflectionRecord) -> dict[str, Any]:
+    return {
+        "step_index": reflection.step_index,
+        "knowledge_point": reflection.knowledge_point,
+        "diagnosis": reflection.diagnosis,
+        "adjustment": reflection.adjustment,
+        "explanation": reflection.explanation,
+        "decision_provenance": public_decision_provenance(reflection.decision_provenance),
+    }
+
+
 def _public_state(state: AutoTutorState) -> dict[str, Any]:
     current = state.lesson_plan[state.current_step_index] if state.current_step_index < len(state.lesson_plan) else None
     current_question = None
@@ -1428,7 +1456,7 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         ],
         "current_step_index": state.current_step_index,
         "current_question": current_question,
-        "reflect_log": [r.model_dump() for r in state.reflect_log],
+        "reflect_log": [_public_reflection(reflection) for reflection in state.reflect_log],
         "replans": state.replans,
         "summary": state.summary,
         "exit_ticket_result": state.exit_ticket_result.model_dump() if state.exit_ticket_result else None,
@@ -1763,6 +1791,7 @@ def start_session(
     else:
         state.run_id = None
     _store.cache(state)
+    _maybe_run_langgraph_shadow(state)
     try:
         _persist_session(state, start_idempotency_key=idempotency_key)
     except Exception:
@@ -1951,6 +1980,7 @@ def _submit_answer_locked(
             is_correct, _correct_letter = _submit_exit_ticket_answer(state, answer)
             _finalize(state)
             state.revision = claimed_revision + 1
+            _maybe_run_langgraph_shadow(state)
             result = _public_state(state)
             result["last_answer_correct"] = is_correct
             return _commit_claimed_answer_transition(
@@ -2038,9 +2068,10 @@ def _submit_answer_locked(
                 _advance(state, ctx)
 
         state.revision = claimed_revision + 1
+        _maybe_run_langgraph_shadow(state)
         result = _public_state(state)
         if last_reflection is not None:
-            result["reflection"] = last_reflection.model_dump()
+            result["reflection"] = _public_reflection(last_reflection)
         result["last_answer_correct"] = is_correct
         return _commit_claimed_answer_transition(
             state,

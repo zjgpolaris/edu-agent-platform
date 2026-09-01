@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from agents.autotutor_provenance import public_decision_provenance
+
 _STATUS = {
     "success": "completed",
     "failed": "failed",
@@ -35,6 +37,11 @@ _ADJUSTMENTS = {
     "lower_difficulty": "降低题目难度",
     "change_example": "更换讲解例子",
     "advance": "继续下一学习步骤",
+}
+
+_DECISION_SOURCES = {
+    "tool_result": "tool",
+    "memory": "evidence_store",
 }
 
 
@@ -91,6 +98,16 @@ def project_demo_trace(state: dict[str, Any]) -> dict[str, Any]:
         raw_status = _text(item.get("status"), limit=30)
         status = _STATUS.get(raw_status, "completed")
         summary = _summary(event_type, metadata, raw_status)
+        if event_type == "reflect":
+            provenance = public_decision_provenance(metadata.get("decision_provenance"))
+        else:
+            source = _DECISION_SOURCES.get(event_type, "policy")
+            provenance = {
+                "decision_source": source,
+                "fallback_used": False,
+                "structured_repair_used": False,
+                "model": None,
+            }
         projected.append({
             "sequence": len(projected) + 1,
             "phase": mapping[0],
@@ -98,6 +115,8 @@ def project_demo_trace(state: dict[str, Any]) -> dict[str, Any]:
             "status": status,
             "summary": summary,
             "duration_ms": max(0, round(float(item["latency_ms"]), 2)) if isinstance(item.get("latency_ms"), (int, float)) else None,
+            "decision_source": (provenance or {}).get("decision_source"),
+            "model": (provenance or {}).get("model"),
         })
     return {
         "enabled": True,

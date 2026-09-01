@@ -12,6 +12,13 @@ export type DemoJourneyEvent = {
   status: "completed" | "waiting" | "failed" | "degraded" | "blocked";
   summary: string;
   duration_ms?: number | null;
+  decision_source?: "policy" | "tool" | "langchain_primary" | "langchain_fallback_profile" | "deterministic_fallback" | "evidence_store" | null;
+  model?: {
+    provider?: string | null;
+    profile?: string | null;
+    name?: string | null;
+    fallback_used?: boolean;
+  } | null;
 };
 
 type DemoJourneyResponse = {
@@ -28,6 +35,19 @@ const STATUS_LABEL: Record<DemoJourneyEvent["status"], string> = {
   degraded: "已降级",
   blocked: "已阻断",
 };
+
+const DECISION_SOURCE_LABEL: Record<NonNullable<DemoJourneyEvent["decision_source"]>, string> = {
+  policy: "受限策略执行",
+  tool: "工具检索与核验",
+  langchain_primary: "真实模型决策",
+  langchain_fallback_profile: "备用模型完成",
+  deterministic_fallback: "确定性安全降级",
+  evidence_store: "学习证据写入",
+};
+
+function decisionSourceLabel(source: DemoJourneyEvent["decision_source"]): string {
+  return source ? DECISION_SOURCE_LABEL[source] || "来源未记录" : "来源未记录";
+}
 
 export function DemoAgentJourney({ sessionId, revision, token }: { sessionId: string; revision: number; token: string }) {
   const [data, setData] = useState<DemoJourneyResponse | null>(null);
@@ -69,6 +89,10 @@ export function DemoAgentJourney({ sessionId, revision, token }: { sessionId: st
               <div className="learning-runtime-step-head">
                 <span>{event.sequence}. {event.label}</span>
                 <strong>{STATUS_LABEL[event.status]}</strong>
+              </div>
+              <div className="learning-runtime-chips" aria-label="决策来源">
+                <small>{decisionSourceLabel(event.decision_source)}</small>
+                {event.model?.name ? <small>{event.model.profile || event.model.provider || "模型"} · {event.model.name}</small> : null}
               </div>
               {event.summary ? <p className="learning-runtime-summary">{event.summary}</p> : null}
               {event.duration_ms != null ? <em>{Math.round(event.duration_ms)}ms</em> : null}

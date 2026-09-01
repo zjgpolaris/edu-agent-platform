@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from agents.autotutor_provenance import public_session_decision_summary
+
 
 def _text(value: Any, *, limit: int = 160) -> str:
     return str(value or "").strip()[:limit]
@@ -45,4 +47,5 @@ def project_autotutor_evidence(state: dict[str, Any]) -> dict[str, Any]:
             "weakpoint_action": _text(evidence.get("weakpoint_action"), limit=80),
             "tutor_effectiveness_ready": bool(evidence.get("tutor_effectiveness_ready")),
         },
+        "decision_provenance": public_session_decision_summary(state),
     }

@@ -76,6 +76,10 @@ def main() -> None:
         assert model.name == "primary"
         assert model.model == "model-a"
         assert model.fallback_models == ["model-b"]
+        provenance = response.response_metadata["edu_agent_provenance"]
+        assert provenance["configured_profile"] == "primary", provenance
+        assert provenance["executed_profile"] == "primary", provenance
+        assert provenance["model_attempt"] == 1, provenance
 
         empty_primary = FakeClient(invokes=[AIMessage(content="")])
         good_fallback = FakeClient(invokes=[AIMessage(content=[{"type": "text", "text": "block-ok"}])])
@@ -85,7 +89,11 @@ def main() -> None:
             client_factory=lambda item: empty_primary if item.name == "primary" else good_fallback,
             sleep=lambda _delay: None,
         )
-        assert model.invoke("hello").content == "block-ok"
+        fallback_response = model.invoke("hello")
+        assert fallback_response.content == "block-ok"
+        fallback_provenance = fallback_response.response_metadata["edu_agent_provenance"]
+        assert fallback_provenance["executed_profile"] == "fallback", fallback_provenance
+        assert fallback_provenance["model_attempt"] == 2, fallback_provenance
         assert empty_primary.invoke_calls == 1 and good_fallback.invoke_calls == 1
 
         before_emit_primary = FakeClient(streams=[[TimeoutError("timeout")]])

@@ -22,6 +22,7 @@ plan ──> act ──> observe ──> judge ──┬── pass ──> next
 - **Plan**：读学生画像 + 错题本，自主生成本节课知识点顺序与教学策略
 - **Reflect / Re-plan**：答错时诊断原因（讲得不对 / 题超纲），动态改变后续计划
 - **全程可观测**：每个 node 写入 trace_store；Demo 账号在线上看到会话级授权、脱敏后的 Agent 决策旅程
+- **来源可解释**：决策旅程与教师证据明确区分主模型、备用模型和确定性安全降级，不把 fallback 包装成模型结果
 - **退出票证据**：教学结束前必须完成 exit ticket，结果写入 learning_events、错题/掌握度、复习与教师端辅导效果看板
 - **课后自适应**：掌握的知识点移出错题本，薄弱点进入 SM-2 复习排期
 
@@ -102,12 +103,14 @@ PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 | 层 | 技术 |
 |----|------|
 | 前端 | Next.js 16 App Router、React 19、TypeScript strict、SSE 流式输出 |
-| 后端 | FastAPI, Python 3.12, LangGraph 风格状态图 |
+| 后端 | FastAPI、Python 3.12；LangChain 模型集成与结构化输出；局部 LangGraph 状态图 |
 | 数据库 | Supabase Postgres + pgvector（RAG 向量索引） |
 | LLM | 阿里云百炼（qwen3.7-plus / deepseek-v4-flash） |
 | Embedding | Jina Embeddings v3（1024维，2850文档） |
 | 会话存储 | Redis（本地）/ 进程内存兜底（生产） |
 | CI/CD | GitHub Actions：frontend lint + release gate + quick-eval；Docker build 在 main/manual 验证 |
+
+AutoTutor 当前仍以自研领域事务和持久化路径作为唯一 active runtime。v1.48 抽出了可测试的纯领域边界，并可通过 `EDU_AGENT_AUTOTUTOR_LANGGRAPH_SHADOW_ENABLED=true` 启用无 LLM、无工具、无网络、无数据库写入的 LangGraph Shadow 重放；Shadow 只比较脱敏的编排投影，失败不会改变用户响应，默认关闭。LangSmith 尚未接入：本地 trace_store/Langfuse 与确定性 eval 继续承担观测和门禁，避免 Demo 数据中的提示词或学生答案被默认上传。
 
 ---
 

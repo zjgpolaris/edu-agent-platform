@@ -31,7 +31,15 @@ STATE = {
     "status": "completed",
     "lesson_plan": [{"knowledge_point": "洋务运动目的", "correct_answer": "A"}],
     "replans": 1,
-    "reflect_log": [{"diagnosis": "raw private diagnosis", "prompt": "secret"}],
+    "reflect_log": [{
+        "diagnosis": "raw private diagnosis",
+        "prompt": "secret",
+        "decision_provenance": {
+            "decision_source": "deterministic_fallback",
+            "fallback_used": True,
+            "request_id": "request-secret",
+        },
+    }],
     "exit_ticket_result": {
         "knowledge_point": "洋务运动目的",
         "is_correct": True,
@@ -65,10 +73,12 @@ async def run() -> None:
     assert projected["replans"] == 1 and projected["reflection_count"] == 1, projected
     assert projected["exit_ticket"]["passed"] is True, projected
     assert projected["mastery"]["status"] == "verified", projected
+    assert projected["decision_provenance"]["deterministic_fallback_used"] is True, projected
+    assert projected["decision_provenance"]["llm_decision_succeeded"] is False, projected
     serialized = json.dumps(projected, ensure_ascii=False).lower()
     for forbidden in (
         "correct_answer", "selected_answer", "private answer", "raw private",
-        "prompt", "database_url", "postgres://", "trace-secret", "run-secret",
+        "prompt", "database_url", "postgres://", "trace-secret", "run-secret", "request_id", "request-secret",
     ):
         assert forbidden not in serialized, serialized
 

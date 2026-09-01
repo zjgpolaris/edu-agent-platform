@@ -41,13 +41,14 @@ def _content_text(content: Any) -> str:
     return str(content or "")
 
 
-def _ai_message(message: Any, content: str) -> AIMessage:
-    if isinstance(message, AIMessage) and isinstance(message.content, str) and message.content == content:
-        return message
+def _ai_message(message: Any, content: str, *, provenance: Mapping[str, Any] | None = None) -> AIMessage:
+    response_metadata = dict(getattr(message, "response_metadata", {}) or {})
+    if provenance:
+        response_metadata["edu_agent_provenance"] = dict(provenance)
     return AIMessage(
         content=content,
         additional_kwargs=dict(getattr(message, "additional_kwargs", {}) or {}),
-        response_metadata=dict(getattr(message, "response_metadata", {}) or {}),
+        response_metadata=response_metadata,
         id=getattr(message, "id", None),
         usage_metadata=getattr(message, "usage_metadata", None),
     )
@@ -232,7 +233,19 @@ class ManagedChatModel:
                         model_retry,
                         len(content),
                     )
-                    return _ai_message(response, content)
+                    return _ai_message(
+                        response,
+                        content,
+                        provenance={
+                            "provider": "bailian",
+                            "transport": profile.provider,
+                            "configured_profile": self.profile.name,
+                            "executed_profile": profile.name,
+                            "configured_model": self.profile.model,
+                            "executed_model": profile.model,
+                            "model_attempt": model_attempt,
+                        },
+                    )
                 except LLMEmptyResponseError:
                     raise
                 except Exception as exc:
