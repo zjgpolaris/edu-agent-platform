@@ -73,11 +73,28 @@ class AutoTutorIdempotencyConflict(RuntimeError):
     """Raised when one idempotency key is reused for a different answer."""
 
 
-def _maybe_run_langgraph_shadow(state: "AutoTutorState") -> None:
+def _maybe_run_langgraph_shadow_transition(
+    transition_kind: Literal["start", "lesson_answer", "exit_ticket_answer", "recovery_resume"],
+    *,
+    before: Any,
+    after: "AutoTutorState",
+    command: dict[str, Any] | None = None,
+) -> None:
     try:
-        from agents.autotutor_shadow import maybe_run_autotutor_shadow
+        from agents.autotutor_shadow import (
+            build_transition_envelope,
+            capture_transition_observations,
+            maybe_run_autotutor_shadow_transition,
+        )
 
-        maybe_run_autotutor_shadow(state)
+        observations = capture_transition_observations(transition_kind, before, after)
+        envelope = build_transition_envelope(
+            transition_kind=transition_kind,
+            before=before,
+            command=command,
+            observations=observations,
+        )
+        maybe_run_autotutor_shadow_transition(envelope, after)
     except Exception:
         # Shadow is diagnostic only and must never alter the active transition.
         return
@@ -1751,6 +1768,7 @@ def start_session(
         created_at=now,
         updated_at=now,
     )
+    shadow_before = state.model_dump(mode="json")
 
     # plan
     plan_started = perf_counter()
@@ -1791,7 +1809,6 @@ def start_session(
     else:
         state.run_id = None
     _store.cache(state)
-    _maybe_run_langgraph_shadow(state)
     try:
         _persist_session(state, start_idempotency_key=idempotency_key)
     except Exception:
@@ -1803,6 +1820,7 @@ def start_session(
                 replay["idempotent_replay"] = True
                 return replay
         raise
+    _maybe_run_langgraph_shadow_transition("start", before=shadow_before, after=state)
     return _public_state(state)
 
 
@@ -1974,22 +1992,30 @@ def _submit_answer_locked(
     state._pending_weakpoint_evidence.clear()
     state._pending_review_memory = None
     set_trace_id(state.trace_id)
+    shadow_before = state.model_dump(mode="json")
     ctx = _tool_context(state.student_id, actor_id, actor_role)
     try:
         if state.phase == "exit_ticket":
             is_correct, _correct_letter = _submit_exit_ticket_answer(state, answer)
             _finalize(state)
             state.revision = claimed_revision + 1
-            _maybe_run_langgraph_shadow(state)
             result = _public_state(state)
             result["last_answer_correct"] = is_correct
-            return _commit_claimed_answer_transition(
+            committed_result = _commit_claimed_answer_transition(
                 state,
                 claimed_revision=claimed_revision,
                 transition_key=transition_key,
                 request_hash=request_hash,
                 result=result,
             )
+            if not committed_result.get("stale_answer_ignored") and not committed_result.get("idempotent_replay"):
+                _maybe_run_langgraph_shadow_transition(
+                    "exit_ticket_answer",
+                    before=shadow_before,
+                    after=state,
+                    command={"answer": (answer or "")[:1].upper()},
+                )
+            return committed_result
 
         step = state.lesson_plan[state.current_step_index]
         step.attempts += 1
@@ -2068,18 +2094,25 @@ def _submit_answer_locked(
                 _advance(state, ctx)
 
         state.revision = claimed_revision + 1
-        _maybe_run_langgraph_shadow(state)
         result = _public_state(state)
         if last_reflection is not None:
             result["reflection"] = _public_reflection(last_reflection)
         result["last_answer_correct"] = is_correct
-        return _commit_claimed_answer_transition(
+        committed_result = _commit_claimed_answer_transition(
             state,
             claimed_revision=claimed_revision,
             transition_key=transition_key,
             request_hash=request_hash,
             result=result,
         )
+        if not committed_result.get("stale_answer_ignored") and not committed_result.get("idempotent_replay"):
+            _maybe_run_langgraph_shadow_transition(
+                "lesson_answer",
+                before=shadow_before,
+                after=state,
+                command={"answer": (answer or "")[:1].upper()},
+            )
+        return committed_result
     except Exception:
         _release_answer_transition(
             session_id,

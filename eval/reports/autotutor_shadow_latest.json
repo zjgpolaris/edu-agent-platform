@@ -1,0 +1,137 @@
+{
+  "blockers": [
+    "workspace_dirty_commit_evidence_not_sealed"
+  ],
+  "case_results": [
+    {
+      "case": "plan_targets_weakpoints",
+      "matched": 2,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 2
+    },
+    {
+      "case": "wrong_answer_triggers_replan",
+      "matched": 2,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 2
+    },
+    {
+      "case": "correct_answer_no_spurious_replan",
+      "matched": 2,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 2
+    },
+    {
+      "case": "closure_writes_memory_and_review",
+      "matched": 3,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 3
+    },
+    {
+      "case": "focus_tags_prioritized_in_plan",
+      "matched": 1,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 1
+    },
+    {
+      "case": "repeated_wrong_downgrades_difficulty",
+      "matched": 3,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 3
+    },
+    {
+      "case": "empty_weakpoints_still_plans",
+      "matched": 1,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 1
+    },
+    {
+      "case": "exit_ticket_runs_before_finalize",
+      "matched": 2,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 2
+    },
+    {
+      "case": "exit_ticket_answer_finalizes_session",
+      "matched": 3,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 3
+    },
+    {
+      "case": "exit_ticket_result_written_to_learning_events",
+      "matched": 3,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 3
+    },
+    {
+      "case": "exit_ticket_wrong_records_weakpoint",
+      "matched": 3,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 3
+    },
+    {
+      "case": "practice_event_uses_judgement_result",
+      "matched": 4,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 4
+    },
+    {
+      "case": "legacy_session_restores_unverified",
+      "matched": 0,
+      "passed": true,
+      "reason_code": "ok",
+      "transitions": 0
+    }
+  ],
+  "cases_passed": 13,
+  "cases_total": 13,
+  "dataset_version": "sha256:d9c8ea509b68a194e6c190d0ff43b2219c86921fd9ca8aeaf9d34a3b3e224fc9",
+  "decision": "NO_GO",
+  "dirty": true,
+  "exact_parity_rate": 1.0,
+  "exception_or_timeout_count": 0,
+  "external_call_attempts": 0,
+  "generated_at": "2026-09-01T11:33:17.073506+00:00",
+  "git_commit": "d818e7da06fada6a500784a1427294af241d6166",
+  "graph_config_version": "v1.48.1-shadow",
+  "latency_ms": {
+    "active_added_p50": 1.12,
+    "active_added_p95": 1.592,
+    "mean": 1.161,
+    "p50": 1.12,
+    "p95": 1.592
+  },
+  "reason_code_counts": {},
+  "schema_version": 1,
+  "sensitive_field_scan": "passed",
+  "side_effect_attempts": 0,
+  "transition_coverage": {
+    "exit_ticket_answer": {
+      "matched": 4,
+      "total": 4
+    },
+    "lesson_answer": {
+      "matched": 11,
+      "total": 11
+    },
+    "start": {
+      "matched": 14,
+      "total": 14
+    }
+  },
+  "transition_schema_version": "v1.48.1-transition",
+  "transitions_matched": 29,
+  "transitions_total": 29
+}

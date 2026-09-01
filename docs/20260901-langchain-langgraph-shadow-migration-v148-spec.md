@@ -1,6 +1,6 @@
 # EduAgent LangChain 契约收口与 AutoTutor LangGraph Shadow 迁移 v1.48 Spec
 
-**状态：** In Progress · Shadow 基线已实现 · Active Cutover NOT_RUN
+**状态：** Development Complete · Shadow Integrity Verified · Active Cutover NOT_RUN
 **日期：** 2026-09-01
 **优先级：** P0 调用来源可信、Shadow 无副作用、轨迹一致性；P1 Demo 可解释性与迁移文档
 **前置版本：** v1.47 可重复 Agent Demo 与作品集导航收敛
@@ -785,11 +785,11 @@ Development Complete 必须全部满足：
 - [x] Legacy structured output 调用行为保持兼容；
 - [x] AutoTutor 核心编排存在可测试的纯领域边界；
 - [x] AutoTutor LangGraph Shadow 图可执行；
-- [ ] Shadow 不调用真实 LLM、工具或网络；
-- [ ] Shadow 不写 session、学习事件、错题、复习、审计或 Runtime 表；
+- [x] Shadow 不调用真实 LLM、工具或网络；
+- [x] Shadow 不写 session、学习事件、错题、复习、审计或 Runtime 表；
 - [x] Shadow 失败不改变 active response；
-- [ ] 确定性核心 trajectory parity 100%；
-- [ ] false mastery、content blocked 和 recovery parity 100%；
+- [x] 确定性核心 trajectory parity 100%；
+- [x] false mastery、content blocked 和 recovery parity 100%；
 - [x] mismatch 只输出安全 reason codes；
 - [x] Demo trace 正确区分真实模型和确定性降级；
 - [x] Teacher evidence 显示会话级模型参与状态；

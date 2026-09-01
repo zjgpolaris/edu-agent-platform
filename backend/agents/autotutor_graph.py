@@ -1,135 +1,93 @@
-"""Side-effect-free LangGraph replay for AutoTutor shadow parity."""
+"""Side-effect-free LangGraph executor for AutoTutor transition parity."""
 from __future__ import annotations
 
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from agents.autotutor_domain import canonical_autotutor_projection
+from agents.autotutor_domain import apply_autotutor_transition, canonical_autotutor_projection
 
 
 class AutoTutorShadowGraphState(TypedDict, total=False):
     schema_version: str
-    legacy_state: dict[str, Any]
-    remaining_nodes: list[str]
+    envelope: dict[str, Any]
+    ports: Any
+    candidate: dict[str, Any]
+    canonical: dict[str, Any]
+    effect_intents: list[dict[str, Any]]
     visited_nodes: list[str]
     diagnostics: list[str]
-    canonical: dict[str, Any]
-
-
-_PHASE_NODES = (
-    "plan",
-    "retrieve",
-    "content_gate",
-    "teach",
-    "prepare_assessment",
-    "wait_answer",
-    "judge",
-    "reflect",
-    "re_plan",
-    "reteach",
-    "prepare_exit_ticket",
-    "verify_exit_ticket",
-    "build_evidence_intent",
-    "finalize",
-)
-
-_EVENT_NODE = {
-    "plan": "plan",
-    "tool_result": "retrieve",
-    "content_gate": "content_gate",
-    "teach": "teach",
-    "act": "prepare_assessment",
-    "observe": "wait_answer",
-    "judge": "judge",
-    "reflect": "reflect",
-    "re_plan": "re_plan",
-    "reteach": "reteach",
-    "memory": "build_evidence_intent",
-}
-
-
-def _trace_nodes(legacy_state: dict[str, Any]) -> list[str]:
-    nodes: list[str] = []
-    steps = legacy_state.get("runtime_steps") if isinstance(legacy_state.get("runtime_steps"), list) else []
-    for item in steps:
-        if not isinstance(item, dict):
-            continue
-        event_type = str(item.get("event_type") or "")
-        if event_type == "exit_ticket":
-            node = "verify_exit_ticket" if str(item.get("step_id") or "") == "exit_ticket_judge" else "prepare_exit_ticket"
-        else:
-            node = _EVENT_NODE.get(event_type)
-        if node and (not nodes or nodes[-1] != node):
-            nodes.append(node)
-    status = str(legacy_state.get("status") or "")
-    phase = str(legacy_state.get("phase") or "")
-    if status == "completed" or phase == "completed":
-        if not nodes or nodes[-1] != "finalize":
-            nodes.append("finalize")
-    elif status == "needs_content" or phase == "content_blocked":
-        if not nodes or nodes[-1] != "content_gate":
-            nodes.append("content_gate")
-    elif phase == "exit_ticket":
-        if not nodes or nodes[-1] != "wait_answer":
-            nodes.append("wait_answer")
-    elif status == "awaiting_answer" and (not nodes or nodes[-1] != "wait_answer"):
-        nodes.append("wait_answer")
-    return nodes
 
 
 def _load_context(state: AutoTutorShadowGraphState) -> dict[str, Any]:
-    legacy_state = state.get("legacy_state") if isinstance(state.get("legacy_state"), dict) else {}
+    envelope = state.get("envelope") if isinstance(state.get("envelope"), dict) else {}
     diagnostics = list(state.get("diagnostics") or [])
-    if not legacy_state:
+    ports = state.get("ports")
+    if not envelope or envelope.get("schema_version") != "v1.48.1-transition":
         diagnostics.append("shadow_input_incomplete")
+    if ports is None or not getattr(ports, "fail_closed", False):
+        diagnostics.append("shadow_ports_missing")
+    elif getattr(ports, "attempts", None):
+        attempts = getattr(ports, "attempts", {})
+        if any(attempts.get(key, 0) for key in ("model", "retrieval", "tool", "network")):
+            diagnostics.append("shadow_external_call_attempted")
+        if any(value for key, value in attempts.items() if key not in {"model", "retrieval", "tool", "network"}):
+            diagnostics.append("shadow_side_effect_attempted")
     return {
-        "schema_version": "v1.48-shadow",
-        "remaining_nodes": _trace_nodes(legacy_state),
-        "visited_nodes": [],
+        "schema_version": "v1.48.1-transition",
         "diagnostics": diagnostics,
+        "visited_nodes": [],
+        "effect_intents": [],
     }
 
 
 def _route(state: AutoTutorShadowGraphState) -> str:
-    remaining = state.get("remaining_nodes") or []
-    return remaining[0] if remaining else "project"
+    return "fail" if state.get("diagnostics") else "transition"
 
 
-def _consume(expected: str):
-    def consume(state: AutoTutorShadowGraphState) -> dict[str, Any]:
-        remaining = list(state.get("remaining_nodes") or [])
-        diagnostics = list(state.get("diagnostics") or [])
-        if not remaining or remaining[0] != expected:
-            diagnostics.append("shadow_execution_failed")
-        elif remaining:
-            remaining.pop(0)
-        return {
-            "remaining_nodes": remaining,
-            "visited_nodes": [*(state.get("visited_nodes") or []), expected],
-            "diagnostics": diagnostics,
-        }
-
-    return consume
+def _transition(state: AutoTutorShadowGraphState) -> dict[str, Any]:
+    try:
+        candidate = apply_autotutor_transition(state.get("envelope") or {})
+    except ValueError as exc:
+        code = str(exc)
+        if code not in {"shadow_input_incomplete", "shadow_expected_state_forbidden"}:
+            code = "shadow_execution_failed"
+        return {"diagnostics": [*(state.get("diagnostics") or []), code]}
+    except Exception:
+        return {"diagnostics": [*(state.get("diagnostics") or []), "shadow_execution_failed"]}
+    return {
+        "candidate": candidate.after,
+        "effect_intents": list(candidate.effect_intents),
+        "visited_nodes": list(candidate.visited_nodes),
+    }
 
 
 def _project(state: AutoTutorShadowGraphState) -> dict[str, Any]:
-    return {"canonical": canonical_autotutor_projection(state.get("legacy_state") or {})}
+    candidate = state.get("candidate") if isinstance(state.get("candidate"), dict) else {}
+    if not candidate:
+        return {"diagnostics": [*(state.get("diagnostics") or []), "shadow_execution_failed"]}
+    return {"canonical": canonical_autotutor_projection(candidate)}
+
+
+def _fail(_state: AutoTutorShadowGraphState) -> dict[str, Any]:
+    return {"canonical": {}}
 
 
 def build_autotutor_shadow_graph():
     graph = StateGraph(AutoTutorShadowGraphState)
     graph.add_node("load_context", _load_context)
+    graph.add_node("transition", _transition)
     graph.add_node("project", _project)
-    for node in _PHASE_NODES:
-        graph.add_node(node, _consume(node))
+    graph.add_node("fail", _fail)
     graph.add_edge(START, "load_context")
-    routes = {node: node for node in _PHASE_NODES}
-    routes["project"] = "project"
-    graph.add_conditional_edges("load_context", _route, routes)
-    for node in _PHASE_NODES:
-        graph.add_conditional_edges(node, _route, routes)
+    graph.add_conditional_edges(
+        "load_context",
+        _route,
+        {"transition": "transition", "fail": "fail"},
+    )
+    graph.add_edge("transition", "project")
     graph.add_edge("project", END)
+    graph.add_edge("fail", END)
     return graph.compile()
 
 

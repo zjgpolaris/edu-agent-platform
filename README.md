@@ -110,7 +110,7 @@ PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 | 会话存储 | Redis（本地）/ 进程内存兜底（生产） |
 | CI/CD | GitHub Actions：frontend lint + release gate + quick-eval；Docker build 在 main/manual 验证 |
 
-AutoTutor 当前仍以自研领域事务和持久化路径作为唯一 active runtime。v1.48 抽出了可测试的纯领域边界，并可通过 `EDU_AGENT_AUTOTUTOR_LANGGRAPH_SHADOW_ENABLED=true` 启用无 LLM、无工具、无网络、无数据库写入的 LangGraph Shadow 重放；Shadow 只比较脱敏的编排投影，失败不会改变用户响应，默认关闭。LangSmith 尚未接入：本地 trace_store/Langfuse 与确定性 eval 继续承担观测和门禁，避免 Demo 数据中的提示词或学生答案被默认上传。
+AutoTutor 当前仍以自研领域事务和持久化路径作为唯一 active runtime。v1.48.1 将 LangGraph Shadow 从终态 trace replay 收敛为独立状态转移：Graph 只接收 Legacy 转移前状态、命令和已捕获的非确定性观察值，在 active commit 成功后计算候选终态，再比较脱敏投影。可通过 `EDU_AGENT_AUTOTUTOR_LANGGRAPH_SHADOW_ENABLED=true` 启用；Shadow 使用 fail-closed ports，禁止重复调用 LLM、检索、工具、网络或数据库写入，失败不会改变用户响应，默认关闭。`eval/autotutor_langgraph_transition_parity_eval.py` 会生成绑定 commit/schema/dataset 的专用证据报告。LangSmith 尚未接入：本地 trace_store/Langfuse 与确定性 eval 继续承担观测和门禁，避免 Demo 数据中的提示词或学生答案被默认上传。
 
 ---
 
