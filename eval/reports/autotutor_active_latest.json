@@ -1,15 +1,13 @@
 {
-  "blockers": [
-    "workspace_dirty_commit_evidence_not_sealed"
-  ],
-  "decision": "NO_GO",
-  "dirty": true,
+  "blockers": [],
+  "decision": "GO",
+  "dirty": false,
   "duplicate_effect_count": 0,
   "exact_parity_rate": 1.0,
   "executor_config_version": "v1.49-active",
   "external_call_attempts": 0,
-  "generated_at": "2026-09-02T01:21:34.841067+00:00",
-  "git_commit": "623f97fe6150b2028b77e9b85a8a7b0ff2f3460a",
+  "generated_at": "2026-09-02T01:45:09.716833+00:00",
+  "git_commit": "4b76ad011a5af86e0a9a026730c18e3bcc82654a",
   "observation_schema": "v1.49-observation",
   "outcome_schema": "v1.49-outcome",
   "schema_version": 1,
