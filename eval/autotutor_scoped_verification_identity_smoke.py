@@ -44,12 +44,20 @@ from fastapi.testclient import TestClient  # noqa: E402
 from api.main import app  # noqa: E402
 from agent_runtime.autotutor_canary_verification import build_autotutor_canary_verification  # noqa: E402
 from security.accounts import create_account  # noqa: E402
+from security.audit_log import list_audit_events  # noqa: E402
 from security.auth import create_token  # noqa: E402
 from security.autotutor_verification_auth import AutoTutorVerificationIdentitySettings  # noqa: E402
 
 
 def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _machine_headers(token: str, bootstrap_sha256: str = "b" * 64) -> dict[str, str]:
+    return {
+        **_bearer(token),
+        "X-AutoTutor-Bootstrap-SHA256": bootstrap_sha256,
+    }
 
 
 def main() -> None:
@@ -103,17 +111,21 @@ def main() -> None:
          patch("agent_runtime.autotutor_canary_verification.build_autotutor_canary_snapshot", return_value=snapshot), \
          patch("agent_runtime.evidence_store.load_release_evidence", return_value=None), \
          patch("agent_runtime.evidence_store.save_release_evidence", return_value=evidence):
-        for token in (CURRENT_TOKEN, NEXT_TOKEN, admin_jwt):
+        for token, headers in (
+            (CURRENT_TOKEN, _machine_headers(CURRENT_TOKEN)),
+            (NEXT_TOKEN, _machine_headers(NEXT_TOKEN)),
+            (admin_jwt, _bearer(admin_jwt)),
+        ):
             response = client.get(
                 "/api/admin/agent-runtime/autotutor-canary/verification",
-                headers=_bearer(token),
+                headers=headers,
                 params={"expected_commit": COMMIT, "expected_config_version": CONFIG},
             )
             assert response.status_code == 200, response.text
 
         snapshot_response = client.post(
             "/api/admin/agent-runtime/autotutor-canary/snapshots",
-            headers=_bearer(CURRENT_TOKEN),
+            headers=_machine_headers(CURRENT_TOKEN),
             json={
                 "expected_commit": COMMIT,
                 "expected_config_version": CONFIG,
@@ -124,12 +136,12 @@ def main() -> None:
         assert snapshot_response.status_code == 200, snapshot_response.text
         evidence_get = client.get(
             "/api/admin/agent-runtime/autotutor-canary/evidence",
-            headers=_bearer(CURRENT_TOKEN),
+            headers=_machine_headers(CURRENT_TOKEN),
         )
         assert evidence_get.status_code == 200, evidence_get.text
         evidence_post = client.post(
             "/api/admin/agent-runtime/autotutor-canary/evidence",
-            headers=_bearer(CURRENT_TOKEN),
+            headers=_machine_headers(CURRENT_TOKEN),
             json={"evidence": evidence},
         )
         assert evidence_post.status_code == 200, evidence_post.text
@@ -139,6 +151,16 @@ def main() -> None:
             headers=_bearer(CURRENT_TOKEN),
         )
         assert unrelated.status_code == 401, unrelated.text
+        for invalid_headers in (
+            _bearer(CURRENT_TOKEN),
+            _machine_headers(CURRENT_TOKEN, "malformed"),
+            _machine_headers(CURRENT_TOKEN, "c" * 64),
+        ):
+            rejected = client.get(
+                "/api/admin/agent-runtime/autotutor-canary/verification",
+                headers=invalid_headers,
+            )
+            assert rejected.status_code == 403, rejected.text
         retired = client.get(
             "/api/admin/agent-runtime/autotutor-canary/verification",
             headers=_bearer(RETIRED_TOKEN),
@@ -149,6 +171,11 @@ def main() -> None:
             headers=_bearer(teacher_jwt),
         )
         assert teacher.status_code == 403, teacher.text
+
+    auth_failures = list_audit_events(action="autotutor.verification.auth_failed", limit=20)
+    assert any(event["metadata"].get("reason") == "bootstrap_attestation_invalid" for event in auth_failures)
+    serialized_audit = str(auth_failures)
+    assert CURRENT_TOKEN not in serialized_audit and ("b" * 64) not in serialized_audit
 
     aggregate = {
         "status": "NOT_READY", "decision": "NO_GO", "blockers": ["insufficient_graph_samples"],

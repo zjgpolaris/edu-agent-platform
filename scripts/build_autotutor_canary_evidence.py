@@ -39,13 +39,28 @@ def _snapshot_hash(snapshot: dict) -> str:
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def persist_remote_evidence(url: str, evidence: dict, *, token: str) -> dict:
+def persist_remote_evidence(
+    url: str,
+    evidence: dict,
+    *,
+    token: str,
+    bootstrap_sha256: str = "",
+) -> dict:
     if not token:
         raise ValueError("API_TOKEN is required to persist evidence remotely")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if bootstrap_sha256:
+        if not re.fullmatch(r"[0-9a-f]{64}", bootstrap_sha256):
+            raise ValueError("API_BOOTSTRAP_SHA256 is invalid")
+        headers["X-AutoTutor-Bootstrap-SHA256"] = bootstrap_sha256
     request = urllib.request.Request(
         url,
         data=json.dumps({"evidence": evidence}).encode("utf-8"),
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=30) as response:
@@ -301,7 +316,12 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if args.persist_url:
-        persist_remote_evidence(args.persist_url, evidence, token=os.getenv("API_TOKEN", "").strip())
+        persist_remote_evidence(
+            args.persist_url,
+            evidence,
+            token=os.getenv("API_TOKEN", "").strip(),
+            bootstrap_sha256=os.getenv("API_BOOTSTRAP_SHA256", "").strip(),
+        )
     print(json.dumps({"decision": evidence["decision"], "blockers": evidence["blockers"], "evidence_sha256": evidence["evidence_sha256"]}))
     if args.require_go and evidence.get("decision") not in {"CANDIDATE_GO", "GO"}:
         raise SystemExit(3)

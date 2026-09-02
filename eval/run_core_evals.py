@@ -98,6 +98,7 @@ CORE_SUITES = [
     "autotutor_production_verification_api_smoke",
     "autotutor_production_workflow_contract_smoke",
     "autotutor_production_rollback_verification_smoke",
+    "autotutor_attestation_binding_smoke",
     "autotutor_scoped_verification_identity_smoke",
     "autotutor_verification_environment_bootstrap_smoke",
     "autotutor_canary_writer_failure_smoke",

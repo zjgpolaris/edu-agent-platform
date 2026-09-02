@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Mapping
 
-from fastapi import HTTPException, Security
+from fastapi import Header, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from security.audit_log import record_audit_event
@@ -110,6 +110,11 @@ class AutoTutorVerificationIdentitySettings:
             return self.next_key_id
         return None
 
+    def match_bootstrap_attestation(self, candidate: str) -> bool:
+        if not self.bootstrap_attested or not _SHA256_RE.fullmatch(candidate):
+            return False
+        return hmac.compare_digest(candidate, self.bootstrap_sha256)
+
 
 def is_autotutor_verification_principal(actor: Actor) -> bool:
     return bool(actor.actor_id and actor.actor_id.startswith(_MACHINE_ACTOR_PREFIX))
@@ -121,6 +126,7 @@ def autotutor_verification_principal_kind(actor: Actor) -> str:
 
 def require_autotutor_verifier(
     creds: HTTPAuthorizationCredentials | None = Security(_bearer),
+    bootstrap_sha256: str | None = Header(default=None, alias="X-AutoTutor-Bootstrap-SHA256"),
 ) -> Actor:
     """Accept the scoped machine token or a normal admin JWT."""
     if not auth_required():
@@ -130,6 +136,15 @@ def require_autotutor_verifier(
     settings = AutoTutorVerificationIdentitySettings.from_env()
     key_id = settings.match_token(token)
     if key_id:
+        if settings.required and not settings.match_bootstrap_attestation((bootstrap_sha256 or "").strip()):
+            record_audit_event(
+                actor_id=f"{_MACHINE_ACTOR_PREFIX}{key_id}",
+                action="autotutor.verification.auth_failed",
+                resource_type="autotutor_production_verification",
+                success=False,
+                metadata={"reason": "bootstrap_attestation_invalid", "principal_kind": "machine"},
+            )
+            raise HTTPException(status_code=403, detail="bootstrap_attestation_invalid")
         return Actor(
             actor_id=f"{_MACHINE_ACTOR_PREFIX}{key_id}",
             role="admin",

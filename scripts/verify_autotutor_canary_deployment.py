@@ -19,6 +19,7 @@ from typing import Any, Callable
 UrlOpen = Callable[..., Any]
 PHASES = {"preflight", "control_snapshot", "canary_snapshot", "rollback_verify"}
 CONFIG_VERSION_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
+BOOTSTRAP_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 FORBIDDEN_KEYS = {
     "token", "authorization", "password", "secret", "bucket_salt", "cookie", "email", "student_id", "actor_id", "account_id",
     "session_id", "trace_id", "effect_id", "transition_id", "question", "answer", "prompt", "response", "raw_prompt",
@@ -37,10 +38,19 @@ def _assert_pii_free(value: Any) -> None:
             _assert_pii_free(item)
 
 
+def require_bootstrap_attestation(value: str) -> str:
+    if not value:
+        raise PermissionError("bootstrap_attestation_missing")
+    if not BOOTSTRAP_SHA256_PATTERN.fullmatch(value):
+        raise PermissionError("bootstrap_attestation_invalid")
+    return value
+
+
 def _request_json(
     url: str,
     *,
     token: str,
+    bootstrap_sha256: str = "",
     method: str = "GET",
     payload: dict[str, Any] | None = None,
     timeout: int = 30,
@@ -52,6 +62,8 @@ def _request_json(
         headers["Content-Type"] = "application/json"
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    if bootstrap_sha256:
+        headers["X-AutoTutor-Bootstrap-SHA256"] = bootstrap_sha256
     request = urllib.request.Request(url, data=body, headers=headers, method=method)
     with urlopen(request, timeout=timeout) as response:
         content_type = str(response.headers.get("Content-Type") or "")
@@ -127,6 +139,7 @@ def verify_remote(
     expected_commit: str,
     expected_config_version: str,
     phase: str,
+    bootstrap_sha256: str = "",
     window_start: str | None = None,
     window_end: str | None = None,
     minimum_control: int = 100,
@@ -146,6 +159,8 @@ def verify_remote(
         raise ValueError("expected_commit_invalid")
     if not CONFIG_VERSION_PATTERN.fullmatch(expected_config_version):
         raise ValueError("expected_config_version_invalid")
+    if bootstrap_sha256 and not BOOTSTRAP_SHA256_PATTERN.fullmatch(bootstrap_sha256):
+        raise ValueError("bootstrap_attestation_invalid")
     parsed_api_base = urllib.parse.urlparse(api_base)
     if parsed_api_base.scheme != "https" or not parsed_api_base.netloc:
         raise ValueError("api_base_invalid")
@@ -176,6 +191,7 @@ def verify_remote(
             return _request_json(
                 base + "/verification?" + urllib.parse.urlencode(params),
                 token=token,
+                bootstrap_sha256=bootstrap_sha256,
                 timeout=30,
                 urlopen=urlopen,
             )
@@ -184,6 +200,7 @@ def verify_remote(
         return _request_json(
             base + "/snapshots",
             token=token,
+            bootstrap_sha256=bootstrap_sha256,
             method="POST",
             payload={
                 "expected_commit": expected_commit,
@@ -266,6 +283,7 @@ def build_workflow_receipt(
     expected_commit: str,
     expected_config_version: str,
     phase: str,
+    bootstrap_sha256: str | None = None,
     ci_provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     fact = _fact(artifact.get("result") or {})
@@ -280,7 +298,7 @@ def build_workflow_receipt(
     safe_expected_commit = expected_commit if re.fullmatch(r"[0-9a-f]{40}", expected_commit) else None
     safe_config_version = expected_config_version if CONFIG_VERSION_PATTERN.fullmatch(expected_config_version) else None
     receipt = {
-        "schema_version": 1,
+        "schema_version": 2,
         "receipt_type": "autotutor_production_verification",
         "repository": os.getenv("GITHUB_REPOSITORY", "unknown"),
         "workflow_run_id": os.getenv("GITHUB_RUN_ID", "unknown"),
@@ -291,6 +309,9 @@ def build_workflow_receipt(
         "deployed_commit": deployment.get("deployed_commit"),
         "config_version": safe_config_version,
         "environment": deployment.get("environment") or "production",
+        "bootstrap_attestation_sha256": (
+            bootstrap_sha256 if bootstrap_sha256 and BOOTSTRAP_SHA256_PATTERN.fullmatch(bootstrap_sha256) else None
+        ),
         "ci": safe_ci or {"status": "unknown"},
         "window": fact.get("window") or {"start": None, "end": None},
         "result": {
@@ -362,6 +383,7 @@ def main() -> None:
     parser.add_argument("--output-receipt", type=Path)
     args = parser.parse_args()
     token = os.getenv("API_TOKEN", "").strip()
+    bootstrap_sha256 = os.getenv("API_BOOTSTRAP_SHA256", "").strip()
     ci_provenance = None
     try:
         if args.require_ci_provenance and not args.ci_receipt_path:
@@ -375,11 +397,13 @@ def main() -> None:
             raise PermissionError("production_api_token_missing")
         if len(token) < 32:
             raise PermissionError("production_api_token_too_short")
+        require_bootstrap_attestation(bootstrap_sha256)
         if not args.api_base.strip():
             raise PermissionError("production_api_base_missing")
         artifact = verify_remote(
             api_base=args.api_base,
             token=token,
+            bootstrap_sha256=bootstrap_sha256,
             expected_commit=args.expected_commit,
             expected_config_version=args.expected_config_version,
             phase=args.phase,
@@ -428,6 +452,7 @@ def main() -> None:
         expected_commit=args.expected_commit,
         expected_config_version=args.expected_config_version,
         phase=args.phase,
+        bootstrap_sha256=bootstrap_sha256,
         ci_provenance=ci_provenance,
     )
     args.output_json.parent.mkdir(parents=True, exist_ok=True)

@@ -120,6 +120,8 @@ v1.49.6 将生产验证从代码合同推进到可执行运维合同：workflow 
 
 v1.49.7 为上述 workflow 增加最小权限机器身份：原始 token（至少 32 字符）只保存在 GitHub Environment，Render 仅配置 `sha256sum` 生成的 64 位小写 digest，并支持 current/next 双槽轮换；该身份只可访问四个 AutoTutor verification/snapshot/evidence 接口，其他 admin 接口仍拒绝。首次执行前运行 `python scripts/verify_autotutor_verification_environment.py --repository OWNER/REPO --output autotutor-bootstrap.json --require-go`，审核 PII-free sealed attestation 后，仅将其 `attestation_sha256` 配置到 Render。生产 blueprint 默认要求 credential 与 bootstrap attestation 均就绪，但不会自动创建 Environment、写 secret 或扩大 Canary。详见 `docs/20260902-autotutor-scoped-verification-identity-v1497-spec.md`。
 
+v1.49.8 将机器调用与已审核 bootstrap attestation 绑定：同一份 `attestation_sha256` 必须同时配置为 GitHub Environment variable `AUTOTUTOR_PRODUCTION_BOOTSTRAP_SHA256` 和 Render 的 `EDU_AGENT_AUTOTUTOR_VERIFICATION_BOOTSTRAP_SHA256`。workflow 通过 `X-AutoTutor-Bootstrap-SHA256` 发送公开完整性引用，服务端对机器身份执行恒定时间比较；缺失、格式错误或不一致均以 403 fail-closed，管理员 JWT 不受影响。schema-v2 workflow receipt 会封存该引用，但 API readiness 与审计不输出 digest。详见 `docs/20260902-autotutor-production-ceremony-attestation-binding-v1498-spec.md`。
+
 ---
 
 ## 本地开发
