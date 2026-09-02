@@ -243,6 +243,21 @@ def build_autotutor_canary_verification(
     else:
         phase, status, decision, next_action = "canary_ready_for_snapshot", "READY", "GO", "build_exact_snapshot"
 
+    deployment_converged = bool(
+        environment == "production"
+        and bool(commit)
+        and commit == expected_commit
+        and settings.config_version == expected_config_version
+    )
+    v150_entry_blockers: list[str] = []
+    if not final_present:
+        v150_entry_blockers.append("final_evidence_missing")
+    if phase != "rollback_verified":
+        v150_entry_blockers.append("rollback_not_verified")
+    v150_entry_blockers.extend(blockers)
+    v150_entry_blockers = _unique(v150_entry_blockers)
+    v150_entry_ready = bool(final_present and phase == "rollback_verified" and not v150_entry_blockers)
+
     return {
         "schema_version": 1,
         "agent_type": "auto_tutor",
@@ -257,6 +272,7 @@ def build_autotutor_canary_verification(
             "deployed_commit": commit or None,
             "environment": environment or None,
             "schema_revision": schema.get("alembic_version"),
+            "converged": deployment_converged,
         },
         "configuration": settings.safe_summary(),
         "admission": admission,
@@ -289,7 +305,21 @@ def build_autotutor_canary_verification(
             "stage": evidence_stage,
             "sha256": evidence.get("evidence_sha256") if evidence else None,
             "drills": evidence.get("drills") if evidence else None,
+            "candidate_sha256": (
+                evidence.get("candidate_evidence_sha256")
+                if final_present
+                else evidence.get("evidence_sha256") if candidate_present else None
+            ),
+            "final_sha256": evidence.get("evidence_sha256") if final_present else None,
         },
+        "operations": {
+            "ci_provenance": "unknown",
+            "environment_bootstrap": "unknown",
+            "api_credential": "unknown",
+        },
+        "v150_entry_ready": v150_entry_ready,
+        "v150_entry_decision": "GO" if v150_entry_ready else "NO_GO",
+        "v150_entry_blockers": v150_entry_blockers,
     }
 
 

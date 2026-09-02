@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.verify_autotutor_canary_deployment import _assert_pii_free, _exit_code, verify_remote  # noqa: E402
 
 COMMIT = "d" * 40
-CONFIG = "v1.49.5-production-attestation"
+CONFIG = "v1.49.6-production-execution"
 
 
 class Response:
@@ -27,7 +27,8 @@ class Response:
 def main() -> None:
     workflow = (ROOT / ".github" / "workflows" / "autotutor-production-verification.yml").read_text(encoding="utf-8")
     assert "workflow_dispatch:" in workflow and "schedule:" not in workflow and "push:" not in workflow
-    assert "environment: production-verification" in workflow and "retention-days: 30" in workflow
+    assert "environment: production-verification" in workflow and "retention-days: 90" in workflow
+    assert "actions: read" in workflow and "--require-ci-provenance" in workflow
     assert "--persist-url" in workflow and "--require-go" in workflow
     render = (ROOT / "render.yaml").read_text(encoding="utf-8")
     assert "EDU_AGENT_AUTOTUTOR_EXECUTOR_MODE" in render and "value: legacy" in render
@@ -41,7 +42,7 @@ def main() -> None:
         if "/api/health" in request.full_url:
             return Response({"ok": True})
         return Response({"status": "READY", "decision": "GO", "blockers": [],
-                         "deployment": {"deployed_commit": COMMIT},
+                         "deployment": {"deployed_commit": COMMIT, "environment": "production"},
                          "configuration": {"config_version": CONFIG}})
 
     artifact = verify_remote(api_base="https://example.invalid", token="super-secret", expected_commit=COMMIT,

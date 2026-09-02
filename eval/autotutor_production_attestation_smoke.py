@@ -75,6 +75,15 @@ def main() -> None:
     assert ready["phase"] == "rollback_ready_for_finalize" and ready["decision"] == "GO", ready
     legacy = _verify(_aggregate(control=20), exact=True, evidence={"schema_version": 3, "decision": "GO"})
     assert legacy["phase"] == "legacy_evidence_requires_upgrade" and legacy["decision"] == "NO_GO", legacy
+    final = _verify(_aggregate(control=20), exact=True, evidence={
+        "schema_version": 4, "evidence_stage": "final", "decision": "GO",
+        "evidence_sha256": "sha256:final", "candidate_evidence_sha256": "sha256:candidate",
+        "cohort_fingerprint": rollback.cohort_fingerprint, "drills": {"rollback": "pass"},
+    })
+    assert final["phase"] == "rollback_verified" and final["v150_entry_ready"] is True, final
+    assert final["v150_entry_decision"] == "GO" and final["v150_entry_blockers"] == [], final
+    assert final["evidence"]["candidate_sha256"] == "sha256:candidate"
+    assert final["evidence"]["final_sha256"] == "sha256:final"
 
     for field in ("session_id", "trace_id", "effect_id", "transition_id", "raw_response", "content"):
         try:

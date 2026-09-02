@@ -316,15 +316,39 @@ async def get_autotutor_canary_evidence(
         environment=deployment_environment(),
     )
     if evidence is None:
-        return {"present": False, "decision": None, "evidence_sha256": None}
+        return {
+            "present": False,
+            "decision": None,
+            "evidence_sha256": None,
+            "candidate_sha256": None,
+            "final_sha256": None,
+            "v150_entry_ready": False,
+            "v150_entry_blockers": ["final_evidence_missing", "rollback_not_verified"],
+        }
     if include_payload:
         return {"present": True, "payload": evidence}
+    final = bool(
+        int(evidence.get("schema_version") or 0) == 4
+        and evidence.get("evidence_stage") == "final"
+        and evidence.get("decision") == "GO"
+    )
+    rollback_runtime = bool(settings.mode == "legacy" and settings.active_bps == 0 and not settings.kill_switch)
+    v150_entry_ready = bool(final and rollback_runtime)
+    v150_entry_blockers = []
+    if not final:
+        v150_entry_blockers.append("final_evidence_missing")
+    if not rollback_runtime:
+        v150_entry_blockers.append("rollback_not_verified")
     return {
         "present": True,
         "schema_version": evidence.get("schema_version"),
         "decision": evidence.get("decision"),
         "evidence_stage": evidence.get("evidence_stage"),
         "candidate_evidence_sha256": evidence.get("candidate_evidence_sha256"),
+        "candidate_sha256": (
+            evidence.get("candidate_evidence_sha256") if final else evidence.get("evidence_sha256")
+        ),
+        "final_sha256": evidence.get("evidence_sha256") if final else None,
         "evidence_sha256": evidence.get("evidence_sha256"),
         "generated_at": evidence.get("generated_at"),
         "deployed_commit": evidence.get("deployed_commit"),
@@ -332,6 +356,8 @@ async def get_autotutor_canary_evidence(
         "environment": evidence.get("environment"),
         "window": evidence.get("window"),
         "drills": evidence.get("drills"),
+        "v150_entry_ready": v150_entry_ready,
+        "v150_entry_blockers": v150_entry_blockers,
     }
 
 

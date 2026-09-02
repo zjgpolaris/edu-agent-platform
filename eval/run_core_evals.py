@@ -93,6 +93,7 @@ CORE_SUITES = [
     "autotutor_canary_evidence_smoke",
     "autotutor_production_verification_smoke",
     "autotutor_production_attestation_smoke",
+    "autotutor_production_execution_closure_smoke",
     "autotutor_production_remote_cli_smoke",
     "autotutor_production_verification_api_smoke",
     "autotutor_production_workflow_contract_smoke",

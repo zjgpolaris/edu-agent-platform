@@ -116,6 +116,8 @@ AutoTutor Canary 运维顺序固定为：先合并不可变 commit，并在 `BPS
 
 v1.49.5 将生产证据拆为 schema v4 `candidate` 与 `final`：Canary GO 只能持久化 candidate；恢复 Legacy/BPS 0 后，必须在 exact post-rollback window 内观察至少 20 条新 Legacy transitions，且 assigned/selected Graph 均为 0，才能生成 final GO。cohort fingerprint 绑定 config/salt/bucket algorithm，runtime-state fingerprint 单独绑定 mode/BPS/kill/comparator/fallback；两者均只输出 SHA256。生产 workflow 通过 concurrency lock 串行运行，不会自动修改 Render。详见 `docs/20260902-autotutor-production-attestation-rollback-v1495-spec.md`。
 
+v1.49.6 将生产验证从代码合同推进到可执行运维合同：workflow 在远程请求前绑定目标 commit 的成功 push CI，并对 Render 冷启动与 auto-deploy 收敛进行有界等待；每次运行输出 hash-sealed、PII-free receipt，artifact 保留 90 天。首次运行前必须人工创建受保护的 `production-verification` GitHub Environment，并在其中配置公开变量 `AUTOTUTOR_PRODUCTION_API_BASE` 与 secret `AUTOTUTOR_PRODUCTION_API_TOKEN`；workflow 仍无 Render 写权限，默认仍为 Legacy/BPS 0。只有 schema v4 final GO 被重新加载且 rollback 验证完成，AgentOps 才显示 v1.50 Entry GO。详见 `docs/20260902-autotutor-production-verification-bootstrap-v1496-spec.md`。
+
 ---
 
 ## 本地开发

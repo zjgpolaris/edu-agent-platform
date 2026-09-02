@@ -65,7 +65,7 @@ def build_rollout_status(
     if agent_type == "auto_tutor":
         commit = deployed_commit()
         environment = deployment_environment()
-        config = os.getenv("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.5-production-attestation").strip()
+        config = os.getenv("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.6-production-execution").strip()
         since = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
         schema = runtime_schema_readiness()
         from agents.autotutor_canary_admission import evaluate_autotutor_canary_admission
@@ -110,6 +110,12 @@ def build_rollout_status(
             deployed_commit=commit,
             environment=environment,
         )
+        final_evidence = bool(
+            evidence
+            and int(evidence.get("schema_version") or 0) == 4
+            and evidence.get("evidence_stage") == "final"
+            and evidence.get("decision") == "GO"
+        )
         bps_zero = settings.mode != "active_canary" or settings.active_bps == 0
         if not schema.get("schema_ready"):
             phase, status, next_action = "deployment_blocked", "NO_GO", "fix_deployment_contract"
@@ -121,7 +127,7 @@ def build_rollout_status(
             phase, status, next_action = "collecting_canary", "NOT_READY", "continue_collecting_canary"
         elif decision != "GO":
             phase, status, next_action = "canary_blocked", "NO_GO", "stop_rollout"
-        elif not evidence or evidence.get("decision") != "GO":
+        elif not final_evidence:
             phase, status, next_action = "canary_ready_for_review", "GO", "build_autotutor_evidence"
         else:
             phase, status, next_action = "production_verified", "GO", "review_v150_entry"
@@ -148,9 +154,18 @@ def build_rollout_status(
             "evidence": {
                 "present": evidence is not None,
                 "decision": evidence.get("decision") if evidence else None,
+                "stage": evidence.get("evidence_stage") if evidence else None,
                 "evidence_sha256": evidence.get("evidence_sha256") if evidence else None,
+                "candidate_sha256": (
+                    evidence.get("candidate_evidence_sha256") if final_evidence
+                    else evidence.get("evidence_sha256") if evidence and evidence.get("evidence_stage") == "candidate" else None
+                ),
+                "final_sha256": evidence.get("evidence_sha256") if final_evidence else None,
                 "drills": evidence.get("drills") if evidence else None,
             },
+            "v150_entry_ready": final_evidence and phase == "production_verified",
+            "v150_entry_decision": "GO" if final_evidence and phase == "production_verified" else "NO_GO",
+            "v150_entry_blockers": [] if final_evidence and phase == "production_verified" else ["rollback_not_verified"],
         }
     settings = RuntimeV2Settings.from_env()
     commit = deployed_commit()

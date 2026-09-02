@@ -63,7 +63,7 @@ services:
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS
         value: "0"
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION
-        value: v1.49.5-production-attestation
+        value: v1.49.6-production-execution
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT
         sync: false
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_KILL_SWITCH

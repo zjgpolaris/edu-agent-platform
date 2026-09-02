@@ -19,7 +19,7 @@ on:
       expected_config_version:
         description: Expected AutoTutor config version
         required: true
-        default: v1.49.5-production-attestation
+        default: v1.49.6-production-execution
         type: string
       window_start:
         description: Exact UTC window start (required for snapshot actions)
@@ -67,19 +67,49 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment: production-verification
     steps:
+      - name: Verify immutable CI provenance
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          if ! [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            python3 -c 'import json; json.dump({"schema_version":1,"workflow":"EduAgent CI","status":"blocked","conclusion":"","event":"push","head_sha":None,"run_id":None,"error_code":"expected_commit_invalid"},open("/tmp/autotutor-ci.json","w"))'
+            echo "verified=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" -f head_sha="$EXPECTED_COMMIT" -f event=push -f per_page=20 > /tmp/autotutor-ci-runs.json; then
+            python3 -c 'import json,os; json.dump({"schema_version":1,"workflow":"EduAgent CI","status":"unknown","conclusion":"","event":"push","head_sha":os.environ["EXPECTED_COMMIT"],"run_id":None,"error_code":"ci_api_unavailable"},open("/tmp/autotutor-ci.json","w"))'
+            echo "verified=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 -c 'import json,os; p=json.load(open("/tmp/autotutor-ci-runs.json")); runs=sorted(p.get("workflow_runs",[]),key=lambda r:r.get("created_at","") or "",reverse=True); r=runs[0] if runs else {}; complete=r.get("status")=="completed"; ok=complete and r.get("conclusion")=="success" and r.get("head_sha")==os.environ["EXPECTED_COMMIT"] and r.get("event")=="push"; error="ci_run_missing" if not r else ("ci_run_not_complete" if not complete else "ci_run_not_successful"); out={"schema_version":1,"workflow":"EduAgent CI","status":"verified" if ok else (r.get("status") or "blocked"),"conclusion":r.get("conclusion") or "","event":r.get("event") or "push","head_sha":r.get("head_sha") or os.environ["EXPECTED_COMMIT"],"run_id":str(r.get("id") or "") or None,"error_code":None if ok else error}; json.dump(out,open("/tmp/autotutor-ci.json","w")); open(os.environ["GITHUB_OUTPUT"],"a").write("verified="+("true" if ok else "false")+"\n")'
+
+      - name: Build blocked CI receipt
+        if: steps.ci.outputs.verified != 'true'
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
+          VERIFY_ACTION: ${{ inputs.action }}
+        run: |
+          python3 -c 'import datetime,hashlib,json,os,re; ci=json.load(open("/tmp/autotutor-ci.json")); commit=os.environ["EXPECTED_COMMIT"] if re.fullmatch(r"[0-9a-f]{40}",os.environ["EXPECTED_COMMIT"]) else None; config=os.environ["EXPECTED_CONFIG"] if re.fullmatch(r"[A-Za-z0-9._-]{1,120}",os.environ["EXPECTED_CONFIG"]) else None; receipt={"schema_version":1,"receipt_type":"autotutor_production_verification","repository":os.environ["GITHUB_REPOSITORY"],"workflow_run_id":os.environ["GITHUB_RUN_ID"],"workflow_run_attempt":int(os.environ["GITHUB_RUN_ATTEMPT"]),"workflow_actor":os.environ["GITHUB_ACTOR"],"action":os.environ.get("VERIFY_ACTION","preflight"),"expected_commit":commit,"deployed_commit":None,"config_version":config,"environment":"production","ci":ci,"window":{"start":None,"end":None},"result":{"status":"UNKNOWN","decision":"NO_GO","phase":"ci_blocked","blockers":[ci.get("error_code") or "ci_run_not_successful"]},"snapshot_sha256":None,"evidence_stage":None,"evidence_sha256":None,"generated_at":datetime.datetime.now(datetime.timezone.utc).isoformat()}; canonical=json.dumps(receipt,ensure_ascii=False,sort_keys=True,separators=(",",":")); receipt["receipt_sha256"]="sha256:"+hashlib.sha256(canonical.encode()).hexdigest(); json.dump(receipt,open("/tmp/autotutor-receipt.json","w"),ensure_ascii=False,indent=2)'
+
       - name: Checkout the expected immutable revision
+        if: steps.ci.outputs.verified == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.expected_commit }}
 
       - name: Verify checkout provenance
+        if: steps.ci.outputs.verified == 'true'
         env:
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
         run: |
@@ -88,16 +118,18 @@ jobs:
           git merge-base --is-ancestor "$EXPECTED_COMMIT" origin/main
 
       - name: Setup Python
+        if: steps.ci.outputs.verified == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Run read-only AutoTutor verification
+        if: steps.ci.outputs.verified == 'true'
         id: remote
         continue-on-error: true
         env:
           API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
-          API_BASE: ${{ secrets.AUTOTUTOR_PRODUCTION_API_BASE }}
+          API_BASE: ${{ vars.AUTOTUTOR_PRODUCTION_API_BASE }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
           VERIFY_ACTION: ${{ inputs.action }}
@@ -115,12 +147,24 @@ jobs:
             --minimum-control "$MINIMUM_CONTROL"
             --minimum-graph "$MINIMUM_GRAPH"
             --minimum-rollback-control "$MINIMUM_ROLLBACK"
+            --wait-for-deployment
+            --deployment-timeout-seconds 300
+            --require-ci-provenance
+            --ci-receipt-path /tmp/autotutor-ci.json
             --output-json /tmp/autotutor-verification.json
             --output-markdown /tmp/autotutor-verification.md
+            --output-receipt /tmp/autotutor-receipt.json
           )
           if [ -n "$WINDOW_START" ]; then args+=(--window-start "$WINDOW_START"); fi
           if [ -n "$WINDOW_END" ]; then args+=(--window-end "$WINDOW_END"); fi
           python3 scripts/verify_autotutor_canary_deployment.py "${args[@]}"
+
+      - name: Publish PII-free job summary
+        if: always() && steps.ci.outputs.verified == 'true'
+        run: |
+          if [ -f /tmp/autotutor-verification.md ]; then
+            sed -n '1,40p' /tmp/autotutor-verification.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Build immutable Canary evidence
         if: inputs.action == 'canary_snapshot' && steps.remote.outcome == 'success'
@@ -133,7 +177,7 @@ jobs:
           WINDOW_END: ${{ inputs.window_end }}
           WINDOW_START: ${{ inputs.window_start }}
           MINIMUM_GRAPH: ${{ inputs.minimum_graph }}
-          API_BASE: ${{ secrets.AUTOTUTOR_PRODUCTION_API_BASE }}
+          API_BASE: ${{ vars.AUTOTUTOR_PRODUCTION_API_BASE }}
           API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
         run: |
           python3 -c 'import json,os; print(json.dumps({"schema_version":1,"attestation_type":"environment_approved_operator","deployed_commit":os.environ["EXPECTED_COMMIT"],"config_version":os.environ["EXPECTED_CONFIG"],"environment":"production","generated_at":os.environ["WINDOW_END"],"window":{"start":os.environ["WINDOW_START"],"end":os.environ["WINDOW_END"]},"results":{"restart":os.environ["RESTART_RESULT"],"writer_failure":os.environ["WRITER_RESULT"],"kill_switch":os.environ["KILL_RESULT"]}}))' > /tmp/autotutor-drills.json
@@ -155,7 +199,7 @@ jobs:
         if: inputs.action == 'rollback_verify' && steps.remote.outcome == 'success'
         env:
           API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
-          API_BASE: ${{ secrets.AUTOTUTOR_PRODUCTION_API_BASE }}
+          API_BASE: ${{ vars.AUTOTUTOR_PRODUCTION_API_BASE }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
           WINDOW_START: ${{ inputs.window_start }}
@@ -177,11 +221,16 @@ jobs:
             --require-go
           python3 -c 'import json,os,urllib.request; expected=json.load(open("/tmp/autotutor-final-evidence.json"))["evidence_sha256"]; r=urllib.request.Request(os.environ["API_BASE"].rstrip("/")+"/api/admin/agent-runtime/autotutor-canary/evidence",headers={"Authorization":"Bearer "+os.environ["API_TOKEN"],"Accept":"application/json"}); actual=json.load(urllib.request.urlopen(r,timeout=30)); assert actual.get("evidence_stage")=="final" and actual.get("decision")=="GO" and actual.get("evidence_sha256")==expected'
 
+      - name: Bind produced evidence to workflow receipt
+        if: always() && steps.remote.outcome == 'success'
+        run: |
+          PYTHONPATH=. python3 -c 'import json,pathlib; from scripts.verify_autotutor_canary_deployment import attach_evidence_to_receipt; receipt_path=pathlib.Path("/tmp/autotutor-receipt.json"); candidates=[pathlib.Path("/tmp/autotutor-final-evidence.json"),pathlib.Path("/tmp/autotutor-evidence.json")]; evidence_path=next((p for p in candidates if p.exists()),None); receipt=json.load(open(receipt_path)); updated=attach_evidence_to_receipt(receipt,json.load(open(evidence_path))) if evidence_path else receipt; json.dump(updated,open(receipt_path,"w"),ensure_ascii=False,indent=2)'
+
       - name: Upload PII-free verification artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: autotutor-${{ inputs.action }}-${{ inputs.expected_commit }}
+          name: autotutor-${{ inputs.action }}-${{ github.run_id }}
           path: |
             /tmp/autotutor-verification.json
             /tmp/autotutor-verification.md
@@ -191,9 +240,11 @@ jobs:
             /tmp/autotutor-candidate.json
             /tmp/autotutor-rollback-snapshot.json
             /tmp/autotutor-final-evidence.json
+            /tmp/autotutor-ci.json
+            /tmp/autotutor-receipt.json
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
 
       - name: Enforce requested release decision
-        if: inputs.release_required && steps.remote.outcome != 'success'
+        if: steps.ci.outputs.verified != 'true' || (inputs.release_required && steps.remote.outcome != 'success')
         run: exit 1
