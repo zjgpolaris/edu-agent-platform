@@ -1,0 +1,165 @@
+name: AutoTutor Production Verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Read-only production verification action
+        required: true
+        type: choice
+        options: [preflight, control_snapshot, canary_snapshot, rollback_verify]
+      expected_commit:
+        description: Full deployed commit SHA
+        required: true
+        type: string
+      expected_config_version:
+        description: Expected AutoTutor config version
+        required: true
+        default: v1.49.4-production-verification
+        type: string
+      window_start:
+        description: Exact UTC window start (required for snapshot actions)
+        required: false
+        type: string
+      window_end:
+        description: Exact UTC window end (required for snapshot actions)
+        required: false
+        type: string
+      minimum_control:
+        description: Minimum verified control transitions
+        required: true
+        default: '100'
+        type: string
+      minimum_graph:
+        description: Minimum committed Graph transitions
+        required: true
+        default: '100'
+        type: string
+      restart_rehearsal:
+        required: true
+        default: not_run
+        type: choice
+        options: [not_run, pass, fail]
+      writer_failure_rehearsal:
+        required: true
+        default: not_run
+        type: choice
+        options: [not_run, pass, fail]
+      kill_switch_rehearsal:
+        required: true
+        default: not_run
+        type: choice
+        options: [not_run, pass, fail]
+      rollback_rehearsal:
+        required: true
+        default: not_run
+        type: choice
+        options: [not_run, pass, fail]
+      release_required:
+        description: Fail the workflow unless the requested phase is ready
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production-verification
+    steps:
+      - name: Checkout the expected immutable revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_commit }}
+
+      - name: Verify checkout provenance
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor "$EXPECTED_COMMIT" origin/main
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run read-only AutoTutor verification
+        id: remote
+        continue-on-error: true
+        env:
+          API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
+          API_BASE: ${{ secrets.AUTOTUTOR_PRODUCTION_API_BASE }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
+          VERIFY_ACTION: ${{ inputs.action }}
+          MINIMUM_CONTROL: ${{ inputs.minimum_control }}
+          MINIMUM_GRAPH: ${{ inputs.minimum_graph }}
+          WINDOW_START: ${{ inputs.window_start }}
+          WINDOW_END: ${{ inputs.window_end }}
+        run: |
+          args=(
+            --api-base "$API_BASE"
+            --expected-commit "$EXPECTED_COMMIT"
+            --expected-config-version "$EXPECTED_CONFIG"
+            --phase "$VERIFY_ACTION"
+            --minimum-control "$MINIMUM_CONTROL"
+            --minimum-graph "$MINIMUM_GRAPH"
+            --output-json /tmp/autotutor-verification.json
+            --output-markdown /tmp/autotutor-verification.md
+          )
+          if [ -n "$WINDOW_START" ]; then args+=(--window-start "$WINDOW_START"); fi
+          if [ -n "$WINDOW_END" ]; then args+=(--window-end "$WINDOW_END"); fi
+          python3 scripts/verify_autotutor_canary_deployment.py "${args[@]}"
+
+      - name: Build immutable Canary evidence
+        if: inputs.action == 'canary_snapshot' && steps.remote.outcome == 'success'
+        env:
+          RESTART_RESULT: ${{ inputs.restart_rehearsal }}
+          WRITER_RESULT: ${{ inputs.writer_failure_rehearsal }}
+          KILL_RESULT: ${{ inputs.kill_switch_rehearsal }}
+          ROLLBACK_RESULT: ${{ inputs.rollback_rehearsal }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
+          WINDOW_END: ${{ inputs.window_end }}
+          WINDOW_START: ${{ inputs.window_start }}
+          MINIMUM_GRAPH: ${{ inputs.minimum_graph }}
+          API_BASE: ${{ secrets.AUTOTUTOR_PRODUCTION_API_BASE }}
+          API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
+        run: |
+          python3 -c 'import json,os; print(json.dumps({"schema_version":1,"deployed_commit":os.environ["EXPECTED_COMMIT"],"config_version":os.environ["EXPECTED_CONFIG"],"environment":"production","generated_at":os.environ["WINDOW_END"],"window":{"start":os.environ["WINDOW_START"],"end":os.environ["WINDOW_END"]},"results":{"restart":os.environ["RESTART_RESULT"],"writer_failure":os.environ["WRITER_RESULT"],"kill_switch":os.environ["KILL_RESULT"],"rollback":os.environ["ROLLBACK_RESULT"]}}))' > /tmp/autotutor-drills.json
+          python3 -c 'import json; p=json.load(open("/tmp/autotutor-verification.json")); json.dump(p["result"],open("/tmp/autotutor-snapshot.json","w"))'
+          PYTHONPATH=backend python3 scripts/build_autotutor_canary_evidence.py \
+            --commit "$EXPECTED_COMMIT" \
+            --config-version "$EXPECTED_CONFIG" \
+            --environment production \
+            --window-start "$WINDOW_START" \
+            --window-end "$WINDOW_END" \
+            --minimum-graph-transitions "$MINIMUM_GRAPH" \
+            --snapshot-path /tmp/autotutor-snapshot.json \
+            --drill-artifact /tmp/autotutor-drills.json \
+            --output /tmp/autotutor-evidence.json \
+            --persist-url "$API_BASE/api/admin/agent-runtime/autotutor-canary/evidence" \
+            --require-go
+
+      - name: Upload PII-free verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autotutor-${{ inputs.action }}-${{ inputs.expected_commit }}
+          path: |
+            /tmp/autotutor-verification.json
+            /tmp/autotutor-verification.md
+            /tmp/autotutor-snapshot.json
+            /tmp/autotutor-drills.json
+            /tmp/autotutor-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce requested release decision
+        if: inputs.release_required && steps.remote.outcome != 'success'
+        run: exit 1

@@ -45,6 +45,7 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
         aggregate = payload.get("aggregate")
         window = payload.get("window")
         drills = payload.get("drills")
+        production_snapshot = payload.get("production_snapshot")
         if (
             not isinstance(aggregate, dict)
             or not isinstance(window, dict)
@@ -54,6 +55,23 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
             or int(payload.get("migration_revision") or 0) < 16
         ):
             raise ValueError("AutoTutor release evidence provenance is incomplete")
+        from agent_runtime.autotutor_canary_verification import validate_autotutor_canary_snapshot
+
+        validate_autotutor_canary_snapshot({
+            "snapshot": production_snapshot,
+            "snapshot_sha256": payload.get("snapshot_sha256"),
+        })
+        snapshot_deployment = production_snapshot.get("deployment") or {}
+        snapshot_configuration = production_snapshot.get("configuration") or {}
+        snapshot_schema = production_snapshot.get("schema") or {}
+        if (
+            production_snapshot.get("aggregate") != aggregate
+            or snapshot_deployment.get("deployed_commit") != payload.get("deployed_commit")
+            or snapshot_deployment.get("environment") != payload.get("environment")
+            or snapshot_configuration.get("config_version") != payload.get("config_version")
+            or str(snapshot_schema.get("revision") or "") != str(payload.get("migration_revision") or "")
+        ):
+            raise ValueError("AutoTutor production snapshot does not match evidence")
         try:
             window_start = datetime.fromisoformat(str(window["start"]).replace("Z", "+00:00"))
             window_end = datetime.fromisoformat(str(window["end"]).replace("Z", "+00:00"))
@@ -78,7 +96,7 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
         if payload.get("decision") == "GO":
             if aggregate.get("status") != "GO" or aggregate.get("decision") != "GO":
                 raise ValueError("AutoTutor GO evidence requires a GO aggregate")
-            required_drills = {"restart", "writer_failure", "kill_switch"}
+            required_drills = {"restart", "writer_failure", "kill_switch", "rollback"}
             if not isinstance(drills, dict) or any(drills.get(name) != "pass" for name in required_drills):
                 raise ValueError("AutoTutor GO evidence drills are incomplete")
         return _persist_release_evidence(payload, digest=digest, schema_version=schema_version)

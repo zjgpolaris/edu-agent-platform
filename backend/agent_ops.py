@@ -95,6 +95,12 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
     except Exception as exc:
         rollout_observation_health = {"status": "unavailable", "ok": False, "error_type": exc.__class__.__name__}
         autotutor_transition_canary = {"decision": "NO_GO", "status": "UNKNOWN", "blockers": ["canary_query_failed"], "error_type": exc.__class__.__name__}
+    try:
+        from agent_runtime.autotutor_canary_verification import build_autotutor_canary_verification
+
+        autotutor_verification = build_autotutor_canary_verification() if data_scope == "runtime" else None
+    except Exception as exc:
+        autotutor_verification = {"decision": "NO_GO", "status": "UNKNOWN", "blockers": ["verification_query_failed"], "error_type": exc.__class__.__name__}
     audit_counts = {str(row["action"]): int(row["count"] or 0) for row in runtime_audits}
     observation_write_failures = audit_counts.get("agent_runtime.rollout_observation_write_failed", 0)
 
@@ -124,6 +130,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
             "rollout_gates": [],
             "rollout_observations": [dict(row) for row in rollout_observation_rows],
             "autotutor_transition_canary": autotutor_transition_canary,
+            "autotutor_verification": autotutor_verification,
             "release_evidence_count": release_evidence_count,
         }
     status_counts = Counter(str(run.get("status") or "unknown") for run in runs)
@@ -262,6 +269,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
         "rollout_gates": rollout_gates,
         "rollout_observations": [dict(row) for row in rollout_observation_rows],
         "autotutor_transition_canary": autotutor_transition_canary,
+        "autotutor_verification": autotutor_verification,
         "release_evidence_count": release_evidence_count,
     }
 

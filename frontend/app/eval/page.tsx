@@ -55,6 +55,19 @@ type SuiteResult = {
 type AgentOpsSummary = {
   status: string;
   runtime_v2?: {
+    autotutor_verification?: {
+      phase?: string;
+      status?: string;
+      decision?: string;
+      next_action?: string;
+      blockers?: string[];
+      deployment?: { deployed_commit?: string | null; environment?: string | null; schema_revision?: string | null };
+      configuration?: { mode?: string; active_bps?: number; config_version?: string; config_fingerprint?: string; kill_switch?: boolean };
+      trusted_cohort?: { ready?: boolean; verified_actor_count?: number };
+      observation_health?: { status?: string; failure_count?: number | null };
+      progress?: { control_transition_count?: number; committed_graph_transition_count?: number; minimum_control?: number; minimum_graph?: number };
+      evidence?: { present?: boolean; decision?: string | null; drills?: Record<string, string> | null };
+    } | null;
     autotutor_transition_canary?: {
       status?: string;
       decision?: string;
@@ -1101,6 +1114,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="受限计划步骤" value={String(runtime?.plan_step_count ?? "--")} hint={`${runtime?.routing_count ?? 0} routed requests`} />
             <OpsCard label="Repair 成功率" value={runtime?.repair_count ? `${Math.round((runtime.repair_success_rate ?? 0) * 100)}%` : "--"} hint={`${runtime?.repair_success_count ?? 0}/${runtime?.repair_count ?? 0} repairs · rate ${Math.round((runtime?.repair_rate ?? 0) * 100)}%`} />
           </div>
+          {summary?.runtime_v2?.autotutor_verification ? <AutoTutorVerificationPanel verification={summary.runtime_v2.autotutor_verification} /> : null}
           {summary?.runtime_v2?.autotutor_transition_canary ? <AutoTutorCanaryPanel canary={summary.runtime_v2.autotutor_transition_canary} /> : null}
           {summary?.runtime_rollout?.deployment?.runtime_enabled ? <RuntimeRolloutPanel rollout={summary.runtime_rollout} /> : null}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
@@ -1218,6 +1232,38 @@ function AutoTutorCanaryPanel({ canary }: { canary: NonNullable<NonNullable<Agen
           {blockers.slice(0, 10).map((blocker) => <Badge key={blocker}>{blocker}</Badge>)}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function AutoTutorVerificationPanel({ verification }: { verification: NonNullable<NonNullable<AgentOpsSummary["runtime_v2"]>["autotutor_verification"]> }) {
+  const blockers = verification.blockers || [];
+  const progress = verification.progress;
+  const config = verification.configuration;
+  const deployment = verification.deployment;
+  const statusColor = verification.decision === "GO" ? "var(--jade-dark)" : verification.status === "NOT_READY" ? "#7a5524" : "var(--cinnabar-dark)";
+  return (
+    <section aria-label="AutoTutor Production Verification" style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.85rem", background: "var(--paper-strong)", marginBottom: "0.85rem" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem" }}>
+        <strong style={{ color: "var(--ink)" }}>AutoTutor Production Verification</strong>
+        <Badge>{verification.status || "UNKNOWN"}</Badge>
+        <span style={{ color: statusColor, fontSize: "0.78rem", fontWeight: 700 }}>{verification.phase || "unknown"} · {verification.decision || "NO_GO"}</span>
+        <span style={{ color: "var(--muted)", fontSize: "0.72rem", marginLeft: "auto" }}>
+          {(deployment?.deployed_commit || "").slice(0, 8) || "no commit"} · {config?.config_version || "no config"}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: "0.6rem" }}>
+        <OpsCard label="Executor" value={config?.mode || "unknown"} hint={`${config?.active_bps ?? 0} BPS · ${config?.kill_switch ? "kill on" : "kill off"}`} />
+        <OpsCard label="Control" value={`${progress?.control_transition_count ?? 0}/${progress?.minimum_control ?? 100}`} hint="verified transitions" />
+        <OpsCard label="Graph Committed" value={`${progress?.committed_graph_transition_count ?? 0}/${progress?.minimum_graph ?? 100}`} hint="exact production slice" />
+        <OpsCard label="Schema" value={deployment?.schema_revision || "missing"} hint={deployment?.environment || "unknown environment"} />
+        <OpsCard label="Trusted Cohort" value={verification.trusted_cohort?.ready ? "READY" : "MISSING"} hint={`${verification.trusted_cohort?.verified_actor_count ?? 0} verified actors`} />
+        <OpsCard label="Observation" value={verification.observation_health?.status || "unknown"} hint={`${verification.observation_health?.failure_count ?? "--"} failures`} />
+        <OpsCard label="Evidence" value={verification.evidence?.present ? (verification.evidence.decision || "present") : "missing"} hint={Object.entries(verification.evidence?.drills || {}).map(([name, result]) => `${name}:${result}`).join(" ") || "drills pending"} />
+        <OpsCard label="Config Fingerprint" value={(config?.config_fingerprint || "missing").slice(0, 15)} hint="salt-safe identity" />
+      </div>
+      <div style={{ marginTop: "0.7rem", color: statusColor, fontSize: "0.78rem" }}>下一步：{verification.next_action || "inspect_verification"}</div>
+      {blockers.length ? <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.55rem" }}>{blockers.slice(0, 10).map((blocker) => <Badge key={blocker}>{blocker}</Badge>)}</div> : null}
     </section>
   );
 }

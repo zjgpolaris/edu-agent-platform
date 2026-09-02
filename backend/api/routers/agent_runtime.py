@@ -36,6 +36,19 @@ class RecoverRunsRequest(BaseModel):
     updated_before: str
 
 
+class AutoTutorCanarySnapshotRequest(BaseModel):
+    expected_commit: str = Field(min_length=40, max_length=40, pattern=r"^[0-9a-f]{40}$")
+    expected_config_version: str = Field(min_length=1, max_length=120)
+    window_start: str = Field(min_length=10, max_length=80)
+    window_end: str = Field(min_length=10, max_length=80)
+    minimum_control: int = Field(default=100, ge=1, le=100_000)
+    minimum_graph: int = Field(default=100, ge=1, le=100_000)
+
+
+class AutoTutorCanaryEvidenceRequest(BaseModel):
+    evidence: dict
+
+
 def _client_run_payload(run: dict) -> dict:
     payload = dict(run)
     payload.pop("actor_id", None)
@@ -242,3 +255,106 @@ async def get_agent_runtime_rollout_status(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/admin/agent-runtime/autotutor-canary/verification")
+async def get_autotutor_canary_verification(
+    expected_commit: str | None = Query(default=None, min_length=40, max_length=40, pattern=r"^[0-9a-f]{40}$"),
+    expected_config_version: str | None = Query(default=None, min_length=1, max_length=120),
+    window_start: str | None = Query(default=None, min_length=10, max_length=80),
+    window_end: str | None = Query(default=None, min_length=10, max_length=80),
+    minimum_control: int = Query(default=100, ge=1, le=100_000),
+    minimum_graph: int = Query(default=100, ge=1, le=100_000),
+    actor: Actor = Depends(require_admin),
+):
+    from agent_runtime.autotutor_canary_verification import build_autotutor_canary_verification
+
+    try:
+        return build_autotutor_canary_verification(
+            expected_commit=expected_commit,
+            expected_config_version=expected_config_version,
+            window_start=window_start,
+            window_end=window_end,
+            minimum_control=minimum_control,
+            minimum_graph=minimum_graph,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/admin/agent-runtime/autotutor-canary/snapshots")
+async def create_autotutor_canary_snapshot(
+    req: AutoTutorCanarySnapshotRequest,
+    actor: Actor = Depends(require_admin),
+):
+    from agent_runtime.autotutor_canary_verification import build_autotutor_canary_snapshot
+
+    try:
+        return build_autotutor_canary_snapshot(**req.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/admin/agent-runtime/autotutor-canary/evidence")
+async def get_autotutor_canary_evidence(
+    include_payload: bool = Query(default=False),
+    actor: Actor = Depends(require_admin),
+):
+    from agent_runtime.evidence_store import load_release_evidence
+    from agents.autotutor_execution import AutoTutorExecutorSettings
+    from deployment import deployed_commit, deployment_environment
+
+    settings = AutoTutorExecutorSettings.from_env()
+    evidence = load_release_evidence(
+        agent_type="auto_tutor",
+        config_version=settings.config_version,
+        runtime_mode="active_canary",
+        deployed_commit=deployed_commit(),
+        environment=deployment_environment(),
+    )
+    if evidence is None:
+        return {"present": False, "decision": None, "evidence_sha256": None}
+    if include_payload:
+        return {"present": True, "payload": evidence}
+    return {
+        "present": True,
+        "schema_version": evidence.get("schema_version"),
+        "decision": evidence.get("decision"),
+        "evidence_sha256": evidence.get("evidence_sha256"),
+        "generated_at": evidence.get("generated_at"),
+        "deployed_commit": evidence.get("deployed_commit"),
+        "config_version": evidence.get("config_version"),
+        "environment": evidence.get("environment"),
+        "window": evidence.get("window"),
+        "drills": evidence.get("drills"),
+    }
+
+
+@router.post("/api/admin/agent-runtime/autotutor-canary/evidence")
+async def persist_autotutor_canary_evidence(
+    req: AutoTutorCanaryEvidenceRequest,
+    actor: Actor = Depends(require_admin),
+):
+    from agent_runtime.evidence_store import save_release_evidence
+    from agents.autotutor_execution import AutoTutorExecutorSettings
+    from deployment import deployed_commit, deployment_environment
+
+    try:
+        settings = AutoTutorExecutorSettings.from_env()
+        expected = {
+            "agent_type": "auto_tutor",
+            "runtime_mode": "active_canary",
+            "deployed_commit": deployed_commit(),
+            "config_version": settings.config_version,
+            "environment": deployment_environment(),
+        }
+        if any(req.evidence.get(field) != value for field, value in expected.items()):
+            raise ValueError("AutoTutor evidence does not match the current deployment")
+        evidence = save_release_evidence(req.evidence)
+    except (TypeError, ValueError, LookupError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "present": True,
+        "decision": evidence.get("decision"),
+        "evidence_sha256": evidence.get("evidence_sha256"),
+    }

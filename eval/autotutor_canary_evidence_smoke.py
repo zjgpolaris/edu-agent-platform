@@ -24,7 +24,7 @@ from db.schema import metadata  # noqa: E402
 from scripts.build_autotutor_canary_evidence import build_autotutor_canary_evidence  # noqa: E402
 
 COMMIT = "f" * 40
-CONFIG = "v1.49.3-evidence-smoke"
+CONFIG = "v1.49.4-evidence-smoke"
 START = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
 END = datetime.now(timezone.utc).isoformat()
 
@@ -55,7 +55,7 @@ def main() -> None:
         evidence = build_autotutor_canary_evidence(
             deployed_commit=COMMIT, config_version=CONFIG, environment="production",
             window_start=START, window_end=END,
-            drills={"restart": "pass", "writer_failure": "pass", "kill_switch": "pass"},
+            drills={"restart": "pass", "writer_failure": "pass", "kill_switch": "pass", "rollback": "pass"},
         )
     assert evidence["decision"] == "GO" and evidence["evidence_sha256"]
     assert not any(field in json.dumps(evidence) for field in ("student_id", "session_id", "raw_answer", "question_text"))

@@ -149,7 +149,7 @@ def evaluate_autotutor_canary_admission(*, settings: Any, context: Any) -> AutoT
             reason_codes=tuple(dict.fromkeys(base_reasons)),
         )
 
-    key = (context.environment, context.deployed_commit, settings.config_version)
+    key = (context.environment, context.deployed_commit, settings.config_fingerprint)
     now = time.monotonic()
     with _cache_lock:
         cached = _cache.get(key)
