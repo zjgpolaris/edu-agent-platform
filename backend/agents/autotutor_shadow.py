@@ -330,3 +330,23 @@ def shadow_metrics_snapshot(*, clear: bool = False) -> list[dict[str, Any]]:
         if clear:
             _METRICS.clear()
     return values
+
+
+def record_shadow_metric(
+    *,
+    transition_kind: str,
+    matched: bool,
+    duration_ms: float,
+    reason_codes: list[str] | tuple[str, ...] = (),
+) -> None:
+    """Compatibility evidence sink for the v1.49 pre-commit full-outcome Shadow."""
+    with _METRICS_LOCK:
+        _METRICS.append({
+            "transition_kind": transition_kind,
+            "matched": matched,
+            "reason_codes": list(reason_codes),
+            "duration_ms": round(max(0.0, duration_ms), 3),
+            "external_call_attempts": 0,
+            "side_effect_attempts": 0,
+            "config_version": shadow_config_version(),
+        })

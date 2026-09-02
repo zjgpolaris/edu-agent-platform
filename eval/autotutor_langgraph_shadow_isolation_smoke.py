@@ -23,12 +23,7 @@ sys.path.insert(0, str(BACKEND))
 from sqlalchemy import text  # noqa: E402
 
 from agents import auto_tutor as at  # noqa: E402
-from agents.autotutor_shadow import (  # noqa: E402
-    DenyShadowPorts,
-    build_transition_envelope,
-    capture_transition_observations,
-    run_autotutor_shadow_transition,
-)
+from agents.autotutor_graph import execute_autotutor_active  # noqa: E402
 from db.engine import get_connection  # noqa: E402
 
 
@@ -52,46 +47,32 @@ def _correct_answer(session_id: str) -> str:
 
 def main() -> None:
     captured: dict = {}
+    os.environ["EDU_AGENT_AUTOTUTOR_EXECUTOR_MODE"] = "shadow"
 
-    def capture(kind: str, **kwargs):
-        captured.update({"kind": kind, **kwargs})
+    def capture(observation):
+        captured["observation"] = observation
+        return execute_autotutor_active(observation)
 
-    with patch.object(at, "_maybe_run_langgraph_shadow_transition", side_effect=capture):
+    with patch("agents.autotutor_graph.execute_autotutor_active", side_effect=capture) as graph_spy:
         started = at.start_session("shadow-isolation", actor_role="student")
-    assert captured["kind"] == "start"
-    observations = capture_transition_observations("start", captured["before"], captured["after"])
-    envelope = build_transition_envelope(
-        transition_kind="start",
-        before=captured["before"],
-        observations=observations,
-    )
-    counts_before = _all_table_counts()
-    result = run_autotutor_shadow_transition(envelope, captured["after"])
-    counts_after = _all_table_counts()
-    assert result.matched, result
-    assert result.external_call_attempts == 0, result
-    assert result.side_effect_attempts == 0, result
-    assert counts_after == counts_before, "direct Shadow changed database rows"
+    assert graph_spy.call_count == 1
+    observation = captured["observation"]
+    assert observation.transition_kind == "start"
+    assert not any(key in observation.model_dump() for key in ("legacy_after", "expected_state", "expected_projection"))
 
-    attempted = DenyShadowPorts()
-    attempted.attempts["model"] = 1
-    denied = run_autotutor_shadow_transition(envelope, captured["after"], ports=attempted)
-    assert "shadow_external_call_attempted" in denied.reason_codes, denied
-
-    # Graph failure occurs only after the active start commit and cannot remove it.
-    os.environ["EDU_AGENT_AUTOTUTOR_LANGGRAPH_SHADOW_ENABLED"] = "true"
-    with patch("agents.autotutor_graph.AUTOTUTOR_SHADOW_GRAPH.invoke", side_effect=RuntimeError("graph down")):
+    # Shadow failure is diagnostic and cannot remove the active Legacy start.
+    with patch("agents.autotutor_graph.execute_autotutor_active", side_effect=RuntimeError("graph down")):
         failure_safe = at.start_session("shadow-failure-safe", actor_role="student")
     persisted = at._load_persisted_session(failure_safe["session_id"])
     assert persisted is not None, "active start was not committed before Shadow failure"
     assert persisted.revision == failure_safe["revision"]
 
-    # A committed answer invokes Shadow once; idempotent replay and stale revision do not.
+    # A candidate answer invokes pre-commit Shadow once; replay/stale/busy do not.
     sid = started["session_id"]
     state = at._load_persisted_session(sid)
     assert state is not None
     answer = _correct_answer(sid)
-    with patch.object(at, "_maybe_run_langgraph_shadow_transition") as shadow_spy:
+    with patch("agents.autotutor_graph.execute_autotutor_active", wraps=execute_autotutor_active) as shadow_spy:
         first = at.submit_answer(
             sid,
             answer,
@@ -99,7 +80,7 @@ def main() -> None:
             expected_revision=state.revision,
             idempotency_key="shadow-isolation-answer",
         )
-        assert shadow_spy.call_count == 1, "committed transition did not invoke Shadow"
+        assert shadow_spy.call_count == 1, "candidate transition did not invoke Shadow"
         replay = at.submit_answer(
             sid,
             answer,

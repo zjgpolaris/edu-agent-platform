@@ -542,10 +542,14 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
 @router.post("/api/autotutor/start")
 async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Depends(require_auth)):
     from agents.auto_tutor import AutoTutorUnavailableError, start_session as autotutor_start
+    from agent_runtime.context import rollout_eligibility
+    from agent_runtime.models import default_data_scope
     from security.auth import auth_required
     assert_student_access(actor, req.student_id)
     check_rate_limit(f"autotutor:{req.student_id}", limit=40, window_seconds=3600)
     actor_role = "student" if not auth_required() else actor.role
+    data_scope = default_data_scope()
+    eligible, eligibility_reason = rollout_eligibility(actor, data_scope)
     with trace_context(name="POST /api/autotutor/start", metadata=trace_meta("auto_tutor", "/api/autotutor/start", student_id=req.student_id, grade=req.grade), user_id=req.student_id, input_data={"student_id": req.student_id}):
         trace_id = current_trace_id()
         record_audit_event(actor_id=actor.actor_id, action="autotutor.start", resource_type="student", resource_id=req.student_id, metadata={"grade": req.grade})
@@ -556,6 +560,11 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
                 grade=req.grade,
                 actor_id=actor.actor_id,
                 actor_role=actor_role,
+                account_status=actor.account_status,
+                traffic_cohort=actor.traffic_cohort,
+                data_scope=data_scope,
+                rollout_eligible=eligible,
+                eligibility_reason=eligibility_reason,
                 trace_id=trace_id,
                 focus_tags=req.focus_tags or None,
                 focus_reason=req.focus_reason or None,
@@ -592,6 +601,8 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
         submit_answer as autotutor_answer,
     )
     from security.auth import auth_required
+    from agent_runtime.context import rollout_eligibility
+    from agent_runtime.models import default_data_scope
     try:
         session = await run_in_threadpool(autotutor_get, req.session_id)
     except LookupError:
@@ -601,6 +612,8 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
     session_student_id = str(session["student_id"])
     assert_student_access(actor, session_student_id)
     actor_role = "student" if not auth_required() else actor.role
+    data_scope = default_data_scope()
+    eligible, eligibility_reason = rollout_eligibility(actor, data_scope)
     record_audit_event(actor_id=actor.actor_id, action="autotutor.answer", resource_type="student", resource_id=session_student_id, metadata={"session_id": req.session_id})
     try:
         result = await run_in_threadpool(
@@ -609,6 +622,11 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
             req.answer,
             actor_id=actor.actor_id,
             actor_role=actor_role,
+            account_status=actor.account_status,
+            traffic_cohort=actor.traffic_cohort,
+            data_scope=data_scope,
+            rollout_eligible=eligible,
+            eligibility_reason=eligibility_reason,
             expected_revision=req.expected_revision,
             idempotency_key=req.idempotency_key,
         )

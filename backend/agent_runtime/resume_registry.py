@@ -64,17 +64,26 @@ async def _resume_auto_tutor(run: dict[str, Any], signal: ResumeSignal, actor: A
     if not answer or len(answer) > 8:
         raise ValueError("AutoTutor 恢复需要 1-8 个字符的 answer")
     from agents.auto_tutor import get_session, submit_answer
+    from agent_runtime.context import rollout_eligibility
+    from agent_runtime.models import default_data_scope
 
     session_id = str(run.get("session_id") or "")
     session = await asyncio.to_thread(get_session, session_id)
     if str(session.get("run_id") or "") != str(run["run_id"]):
         raise ValueError("AutoTutor session 与 run 不匹配")
+    data_scope = default_data_scope()
+    eligible, eligibility_reason = rollout_eligibility(actor, data_scope)
     return await asyncio.to_thread(
         submit_answer,
         session_id,
         answer,
         actor_id=actor.actor_id,
         actor_role=actor.role,
+        account_status=actor.account_status,
+        traffic_cohort=actor.traffic_cohort,
+        data_scope=data_scope,
+        rollout_eligible=eligible,
+        eligibility_reason=eligibility_reason,
         expected_revision=int(session["revision"]),
         idempotency_key=signal.correlation_key,
     )

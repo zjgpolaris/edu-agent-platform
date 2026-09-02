@@ -110,7 +110,7 @@ PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 | 会话存储 | Redis（本地）/ 进程内存兜底（生产） |
 | CI/CD | GitHub Actions：frontend lint + release gate + quick-eval；Docker build 在 main/manual 验证 |
 
-AutoTutor 当前仍以自研领域事务和持久化路径作为唯一 active runtime。v1.48.1 将 LangGraph Shadow 从终态 trace replay 收敛为独立状态转移：Graph 只接收 Legacy 转移前状态、命令和已捕获的非确定性观察值，在 active commit 成功后计算候选终态，再比较脱敏投影。可通过 `EDU_AGENT_AUTOTUTOR_LANGGRAPH_SHADOW_ENABLED=true` 启用；Shadow 使用 fail-closed ports，禁止重复调用 LLM、检索、工具、网络或数据库写入，失败不会改变用户响应，默认关闭。`eval/autotutor_langgraph_transition_parity_eval.py` 会生成绑定 commit/schema/dataset 的专用证据报告。LangSmith 尚未接入：本地 trace_store/Langfuse 与确定性 eval 继续承担观测和门禁，避免 Demo 数据中的提示词或学生答案被默认上传。
+AutoTutor 的 `autotutor_sessions` CAS 与领域事务仍是唯一业务写入边界。v1.49 增加 LangGraph active transition canary：`EDU_AGENT_AUTOTUTOR_EXECUTOR_MODE=legacy|shadow|active_canary`，新会话仅按服务端可信 verified runtime cohort 和稳定 bucket 选择执行器，并把选择粘性保存到 session state；active BPS 默认 0、本版上限 10%，kill switch 或不安全配置会 fail-closed 到 Legacy。Graph 只接管 transition compute，不引入 PostgreSQL checkpointer/interrupt，也不接管学习证据事务。旧 `EDU_AGENT_AUTOTUTOR_LANGGRAPH_SHADOW_ENABLED=true` 在新 mode 未配置时仍兼容映射到 Shadow。
 
 ---
 

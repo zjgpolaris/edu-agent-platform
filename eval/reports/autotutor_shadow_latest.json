@@ -1,5 +1,7 @@
 {
-  "blockers": [],
+  "blockers": [
+    "workspace_dirty_commit_evidence_not_sealed"
+  ],
   "case_results": [
     {
       "case": "plan_targets_weakpoints",
@@ -96,20 +98,20 @@
   "cases_passed": 13,
   "cases_total": 13,
   "dataset_version": "sha256:d9c8ea509b68a194e6c190d0ff43b2219c86921fd9ca8aeaf9d34a3b3e224fc9",
-  "decision": "GO",
-  "dirty": false,
+  "decision": "NO_GO",
+  "dirty": true,
   "exact_parity_rate": 1.0,
   "exception_or_timeout_count": 0,
   "external_call_attempts": 0,
-  "generated_at": "2026-09-01T14:56:14.690671+00:00",
-  "git_commit": "229ecacf1fc9b6ef9e3f9563f71da2492b7fe1fd",
+  "generated_at": "2026-09-02T01:21:32.876693+00:00",
+  "git_commit": "623f97fe6150b2028b77e9b85a8a7b0ff2f3460a",
   "graph_config_version": "v1.48.1-shadow",
   "latency_ms": {
-    "active_added_p50": 1.153,
-    "active_added_p95": 1.622,
-    "mean": 1.177,
-    "p50": 1.153,
-    "p95": 1.622
+    "active_added_p50": 1.197,
+    "active_added_p95": 4.711,
+    "mean": 9.257,
+    "p50": 1.197,
+    "p95": 4.711
   },
   "reason_code_counts": {},
   "schema_version": 1,
