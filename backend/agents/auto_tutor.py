@@ -35,6 +35,7 @@ from services.autotutor_transition_service import (
     AutoTutorTransitionEffects,
     LearningEventIntent,
     WeakpointEvidenceIntent,
+    commit_autotutor_start,
     commit_autotutor_transition,
 )
 from services.weakpoint_service import get_weakpoints
@@ -64,11 +65,13 @@ from agents.autotutor_domain import judge_answer, replan_policy
 from agents.autotutor_execution import (
     AutoTutorExecutionContext,
     AutoTutorExecutorSettings,
-    AutoTutorObservationBundle,
-    AutoTutorTransitionDiagnostics,
     AutoTutorTransitionOutcome,
+    GraphActiveTransitionExecutor,
+    LegacyTransitionExecutor,
+    compare_transition_outcomes,
     select_executor,
 )
+from agents.autotutor_observations import DEFAULT_AUTOTUTOR_OBSERVATION_PROVIDER
 
 AGENT_NAME = "auto_tutor"
 
@@ -215,6 +218,7 @@ class AutoTutorState(BaseModel):
     updated_at: float = 0.0
     _sequence: int = PrivateAttr(default=0)
     _transition_active: bool = PrivateAttr(default=False)
+    _observation_capture: bool = PrivateAttr(default=False)
     _pending_learning_events: list[LearningEventIntent] = PrivateAttr(default_factory=list)
     _pending_weakpoint_evidence: list[WeakpointEvidenceIntent] = PrivateAttr(default_factory=list)
     _pending_review_memory: MemoryEntryUpsert | None = PrivateAttr(default=None)
@@ -247,108 +251,112 @@ def _execution_context(
     )
 
 
-def _materialize_selected_outcome(
-    state: AutoTutorState,
+def _execute_selected_transition(
+    before: AutoTutorState,
     *,
     transition_kind: Literal["start", "lesson_answer", "exit_ticket_answer", "recovery_resume"],
     command: dict[str, Any],
-    public_result: dict[str, Any],
+    context: AutoTutorExecutionContext,
     started_at: float,
 ) -> AutoTutorTransitionOutcome:
-    """Build one complete outcome and, for active sessions, pass it through LangGraph."""
-    outcome = AutoTutorTransitionOutcome(
-        executor_mode=state.executor_mode,
-        next_state=state,
-        learning_events=list(state._pending_learning_events),
-        weakpoint_evidence=list(state._pending_weakpoint_evidence),
-        review_memory=state._pending_review_memory,
-        runtime_events=[step.model_dump(mode="json") for step in state.runtime_steps],
-        runtime_finalize={"run_id": state.run_id} if state.status == "completed" and state.run_id else None,
-        public_result=public_result,
-        diagnostics=AutoTutorTransitionDiagnostics(
-            executor_latency_ms=round((perf_counter() - started_at) * 1000, 3),
-        ),
+    """Acquire one observation bundle, compute both candidates, select one pre-commit."""
+    effective_command = {**command, "transition_kind": transition_kind}
+    provider_started = perf_counter()
+    observations = DEFAULT_AUTOTUTOR_OBSERVATION_PROVIDER.prepare(
+        before=before,
+        command=effective_command,
+        context=context,
     )
-    observation = AutoTutorObservationBundle(
-        transition_kind=transition_kind,
-        command=dict(command),
-        clock={"captured_at": state.updated_at},
-        identifiers={"session_id": state.session_id, "trace_id": state.trace_id},
-        provenance={"external_call_set": "single_active_transition"},
-        materialized=outcome.model_dump(round_trip=True),
-    )
+    provider_latency_ms = round((perf_counter() - provider_started) * 1000, 3)
     settings = AutoTutorExecutorSettings.from_env()
-    if state.executor_mode != "graph_active":
-        if settings.mode == "shadow":
-            shadow_started = perf_counter()
+    legacy = LegacyTransitionExecutor()
+    graph = GraphActiveTransitionExecutor()
+    selected_executor = graph if before.executor_mode == "graph_active" else legacy
+    comparator_executor = legacy if before.executor_mode == "graph_active" else graph
+    selected_started = perf_counter()
+    try:
+        selected = selected_executor.execute(
+            before=before,
+            command=effective_command,
+            observations=observations,
+        )
+    except Exception as exc:
+        if before.executor_mode != "graph_active" or not settings.fallback_enabled:
+            raise
+        selected = legacy.execute(before=before, command=effective_command, observations=observations)
+        reason = f"graph_precommit_fallback:{exc.__class__.__name__}"[:120]
+        selected.next_state.executor_mode = "legacy"
+        selected.next_state.executor_fallback_reason = reason
+        selected.executor_mode = "legacy"
+        selected.public_result = _public_state(selected.next_state)
+        selected.diagnostics.comparator_matched = False
+        selected.diagnostics.fallback_reason = reason
+        selected.diagnostics.provider_latency_ms = provider_latency_ms
+        selected.diagnostics.executor_latency_ms = round((perf_counter() - selected_started) * 1000, 3)
+        return selected
+    selected.diagnostics.provider_latency_ms = provider_latency_ms
+    selected.diagnostics.executor_latency_ms = round((perf_counter() - selected_started) * 1000, 3)
+
+    compare_required = before.executor_mode == "graph_active" or settings.mode == "shadow"
+    if not compare_required:
+        return selected
+    comparator_started = perf_counter()
+    try:
+        comparator = comparator_executor.execute(
+            before=before,
+            command=effective_command,
+            observations=observations,
+        )
+        matched, reasons = compare_transition_outcomes(selected, comparator)
+    except Exception as exc:
+        if before.executor_mode != "graph_active":
+            selected.diagnostics.comparator_matched = False
+            selected.diagnostics.fallback_reason = f"graph_shadow_failed:{exc.__class__.__name__}"[:120]
             try:
-                from agents.autotutor_graph import execute_autotutor_active
-                from agents.autotutor_domain import canonical_autotutor_projection
                 from agents.autotutor_shadow import record_shadow_metric
 
-                shadow = execute_autotutor_active(observation)
-                outcome.diagnostics.comparator_matched = (
-                    canonical_autotutor_projection(state)
-                    == canonical_autotutor_projection(shadow.next_state)
-                )
-                outcome.diagnostics.visited_nodes = list(shadow.diagnostics.visited_nodes)
                 record_shadow_metric(
                     transition_kind=transition_kind,
-                    matched=outcome.diagnostics.comparator_matched,
-                    duration_ms=(perf_counter() - shadow_started) * 1000,
-                    reason_codes=[] if outcome.diagnostics.comparator_matched else ["shadow_projection_mismatch"],
+                    matched=False,
+                    duration_ms=(perf_counter() - comparator_started) * 1000,
+                    reason_codes=["shadow_execution_failed"],
                 )
-            except Exception as exc:
-                outcome.diagnostics.comparator_matched = False
-                outcome.diagnostics.fallback_reason = f"shadow_execution_failed:{exc.__class__.__name__}"[:120]
-                try:
-                    from agents.autotutor_shadow import record_shadow_metric
-
-                    record_shadow_metric(
-                        transition_kind=transition_kind,
-                        matched=False,
-                        duration_ms=(perf_counter() - shadow_started) * 1000,
-                        reason_codes=["shadow_execution_failed"],
-                    )
-                except Exception:
-                    pass
-        return outcome
-    try:
-        from agents.autotutor_graph import execute_autotutor_active
-        from agents.autotutor_domain import canonical_autotutor_projection
-
-        graph_outcome = execute_autotutor_active(observation)
-        graph_matches = (
-            canonical_autotutor_projection(graph_outcome.next_state)
-            == canonical_autotutor_projection(state)
-            and graph_outcome.public_result == public_result
-            and len(graph_outcome.learning_events) == len(state._pending_learning_events)
-            and len(graph_outcome.weakpoint_evidence) == len(state._pending_weakpoint_evidence)
-            and bool(graph_outcome.review_memory) == bool(state._pending_review_memory)
-        )
-        graph_outcome.diagnostics.comparator_matched = graph_matches
-        if settings.comparator_enabled and not graph_matches:
-            if not settings.fallback_enabled:
-                raise RuntimeError("active_comparator_mismatch")
-            state.executor_mode = "legacy"
-            state.executor_fallback_reason = "active_comparator_mismatch"
-            outcome.executor_mode = "legacy"
-            outcome.diagnostics.comparator_matched = False
-            outcome.diagnostics.fallback_reason = state.executor_fallback_reason
-            return outcome
-        graph_outcome.next_state = state
-        graph_outcome.learning_events = list(state._pending_learning_events)
-        graph_outcome.weakpoint_evidence = list(state._pending_weakpoint_evidence)
-        graph_outcome.review_memory = state._pending_review_memory
-        return graph_outcome
-    except Exception as exc:
+            except Exception:
+                pass
+            return selected
         if not settings.fallback_enabled:
             raise
-        state.executor_mode = "legacy"
-        state.executor_fallback_reason = f"graph_precommit_fallback:{exc.__class__.__name__}"[:120]
-        outcome.executor_mode = "legacy"
-        outcome.diagnostics.fallback_reason = state.executor_fallback_reason
-        return outcome
+        comparator = legacy.execute(before=before, command=effective_command, observations=observations)
+        matched, reasons = False, ("legacy_comparator_failed",)
+    selected.diagnostics.comparator_latency_ms = round((perf_counter() - comparator_started) * 1000, 3)
+    selected.diagnostics.comparator_matched = matched
+    if before.executor_mode != "graph_active":
+        try:
+            from agents.autotutor_shadow import record_shadow_metric
+
+            record_shadow_metric(
+                transition_kind=transition_kind,
+                matched=matched,
+                duration_ms=(perf_counter() - comparator_started) * 1000,
+                reason_codes=list(reasons),
+            )
+        except Exception:
+            pass
+    if matched or before.executor_mode != "graph_active":
+        return selected
+    if not settings.fallback_enabled:
+        raise RuntimeError("active_comparator_mismatch:" + ",".join(reasons))
+    reason = ("active_comparator_mismatch:" + ",".join(reasons))[:120]
+    comparator.next_state.executor_mode = "legacy"
+    comparator.next_state.executor_fallback_reason = reason
+    comparator.executor_mode = "legacy"
+    comparator.public_result = _public_state(comparator.next_state)
+    comparator.diagnostics.provider_latency_ms = selected.diagnostics.provider_latency_ms
+    comparator.diagnostics.executor_latency_ms = selected.diagnostics.executor_latency_ms
+    comparator.diagnostics.comparator_latency_ms = selected.diagnostics.comparator_latency_ms
+    comparator.diagnostics.comparator_matched = False
+    comparator.diagnostics.fallback_reason = reason
+    return comparator
 
 
 def _record_executor_observation(
@@ -357,6 +365,7 @@ def _record_executor_observation(
     transition_kind: str,
     context: AutoTutorExecutionContext,
     started_at: float,
+    outcome: AutoTutorTransitionOutcome | None = None,
 ) -> None:
     try:
         from agent_runtime.rollout_observations import try_record_rollout_observation
@@ -364,6 +373,14 @@ def _record_executor_observation(
         status = "completed" if state.status == "completed" else "committed"
         if state.executor_fallback_reason:
             status = "fallback"
+        comparator_observed = bool(
+            outcome
+            and (
+                state.executor_mode == "graph_active"
+                or outcome.diagnostics.comparator_latency_ms > 0
+                or not outcome.diagnostics.comparator_matched
+            )
+        )
         try_record_rollout_observation(
             agent_type="auto_tutor",
             runtime_mode="active" if state.executor_mode == "graph_active" else "control",
@@ -377,6 +394,19 @@ def _record_executor_observation(
             traffic_cohort=context.traffic_cohort,
             rollout_eligible=context.rollout_eligible,
             eligibility_reason=context.eligibility_reason,
+            selected_executor=state.executor_mode,
+            transition_kind=transition_kind,
+            comparator_matched=outcome.diagnostics.comparator_matched if comparator_observed and outcome else None,
+            fallback_reason=state.executor_fallback_reason,
+            provider_latency_ms=round(outcome.diagnostics.provider_latency_ms) if outcome else None,
+            executor_latency_ms=round(outcome.diagnostics.executor_latency_ms) if outcome else None,
+            comparator_latency_ms=round(outcome.diagnostics.comparator_latency_ms) if outcome else None,
+            observation_external_calls=outcome.diagnostics.observation_external_calls if outcome else None,
+            effect_intent_count=(
+                len(outcome.learning_events)
+                + len(outcome.weakpoint_evidence)
+                + (1 if outcome.review_memory else 0)
+            ) if outcome else None,
         )
     except Exception:
         return
@@ -696,15 +726,18 @@ def _emit(
     error: dict[str, Any] | None = None,
 ) -> None:
     """记录一个 runtime step：写入 trace_store（可被 /api/traces 查询）并挂到会话状态上。"""
+    if state._observation_capture:
+        return
     latency_ms = round((perf_counter() - started_at) * 1000, 2) if started_at is not None else None
-    emit_trace_event(
-        agent_name=AGENT_NAME,
-        step_name=step_name,
-        event_type=event_type,
-        status=status,
-        latency_ms=int(latency_ms) if latency_ms is not None else None,
-        metadata=metadata,
-    )
+    if not state._transition_active:
+        emit_trace_event(
+            agent_name=AGENT_NAME,
+            step_name=step_name,
+            event_type=event_type,
+            status=status,
+            latency_ms=int(latency_ms) if latency_ms is not None else None,
+            metadata=metadata,
+        )
     state._sequence += 1
     state.runtime_steps.append(
         RuntimeStep(
@@ -719,6 +752,24 @@ def _emit(
             error=error,
         )
     )
+
+
+def _mirror_transition_trace(state: AutoTutorState, *, from_sequence: int) -> None:
+    """Best-effort trace mirror after the business transition has committed."""
+    for step in state.runtime_steps:
+        if step.sequence <= from_sequence:
+            continue
+        try:
+            emit_trace_event(
+                agent_name=AGENT_NAME,
+                step_name=step.step_name,
+                event_type=step.event_type,
+                status=step.status,
+                latency_ms=int(step.latency_ms) if step.latency_ms is not None else None,
+                metadata=step.metadata,
+            )
+        except Exception:
+            continue
 
 
 def _tool_context(student_id: str, actor_id: str | None, actor_role: str | None) -> ToolExecutionContext:
@@ -790,6 +841,8 @@ def _record_content_event(
     metadata: dict[str, Any],
     success: bool | None = None,
 ) -> None:
+    if state._observation_capture:
+        return
     objective = step.objective
     event_success = event_type == "auto_tutor_content_verified" if success is None else success
     event = LearningEvent(
@@ -1153,7 +1206,7 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
     )
 
     # 重新取材出题（被调整后的难度）
-    _act(state, step, ctx)
+    _KERNEL_ACT(state, step, ctx)
 
     record = ReflectionRecord(
         step_index=state.current_step_index,
@@ -1185,7 +1238,7 @@ def _start_exit_ticket(state: AutoTutorState, ctx: ToolExecutionContext) -> None
     ticket_started = perf_counter()
     target, generated_from = _select_exit_ticket_target(state)
     if target is None:
-        _finalize(state)
+        _KERNEL_FINALIZE(state)
         return
     difficulty: Difficulty = "medium"
     if target.objective is None:
@@ -1939,57 +1992,38 @@ def start_session(
     state.executor_config_version = decision.config_version
     state.executor_bucket = decision.bucket
     state.executor_fallback_reason = decision.fallback_reason
-    # plan
-    plan_started = perf_counter()
-    profile = get_student_profile(student_id)
-    try:
-        weakpoints = get_weakpoints(student_id)
-    except Exception:
-        weakpoints = []
-    # 若调用方指定了 focus_tags（如来自作业错题），将这些 tag 提升到 weakpoints 列表最前面
-    if focus_tags:
-        focus_set = set(focus_tags)
-        existing_tags = {w["knowledge_tag"] for w in weakpoints}
-        extra = [{"knowledge_tag": t, "wrong_count": 1, "last_wrong_at": "", "source": "assignment"} for t in focus_tags if t not in existing_tags]
-        weakpoints = [w for w in weakpoints if w["knowledge_tag"] in focus_set] + extra + [w for w in weakpoints if w["knowledge_tag"] not in focus_set]
-    if not state.grade:
-        state.grade = getattr(profile, "grade", None)
-    state.lesson_plan = _generate_plan(state, weakpoints, profile, focus_tags=focus_tags, focus_reason=focus_reason)
-    _emit(
-        state,
-        "plan",
-        "Plan · 规划本节课",
-        "plan",
-        started_at=plan_started,
-        metadata={
-            "weakpoint_count": len(weakpoints),
-            "targeted_points": [s.knowledge_point for s in state.lesson_plan],
-            "plan": [{"knowledge_point": s.knowledge_point, "difficulty": s.difficulty, "rationale": s.rationale} for s in state.lesson_plan],
-            "result_summary": "本节课计划：" + " → ".join(s.knowledge_point for s in state.lesson_plan),
-        },
-    )
-
-    # act 第一步
-    ctx = _tool_context(student_id, actor_id, actor_role)
-    _act(state, state.lesson_plan[0], ctx)
-    state.updated_at = time.time()
-    if state.status == "awaiting_answer":
-        _start_runtime_run(state, actor_id=actor_id, actor_role=actor_role)
-    else:
-        state.run_id = None
-    start_result = _public_state(state)
-    selected_outcome = _materialize_selected_outcome(
+    selected_outcome = _execute_selected_transition(
         state,
         transition_kind="start",
-        command={},
-        public_result=start_result,
+        command={"focus_tags": focus_tags or [], "focus_reason": focus_reason},
+        context=execution_context,
         started_at=transition_started,
     )
     state = selected_outcome.next_state
-    start_result = selected_outcome.public_result
-    _store.cache(state)
+    if state.status != "awaiting_answer":
+        state.run_id = None
+    elif state.run_id:
+        from agent_runtime.context import RuntimeV2Settings
+
+        runtime_settings = RuntimeV2Settings.from_env()
+        runtime_active, _ = runtime_settings.rollout_decision("auto_tutor", str(actor_id or state.student_id))
+        if not runtime_active or not runtime_settings.resumable_ready:
+            state.run_id = None
+    start_result = _public_state(state)
+    _ensure_session_table()
+    start_effects = AutoTutorTransitionEffects(
+        session_id=state.session_id,
+        claimed_revision=0,
+        idempotency_key=idempotency_key or f"start:{state.session_id}",
+        learning_events=list(state._pending_learning_events),
+    )
     try:
-        _persist_session(state, start_idempotency_key=idempotency_key)
+        commit_autotutor_start(
+            next_state=state,
+            response=start_result,
+            start_idempotency_key=idempotency_key,
+            effects=start_effects,
+        )
     except Exception:
         if idempotency_key:
             existing = _load_start_idempotent_session(student_id, idempotency_key)
@@ -1999,11 +2033,23 @@ def start_session(
                 replay["idempotent_replay"] = True
                 return replay
         raise
+    if state.run_id:
+        try:
+            _start_runtime_run(state, actor_id=actor_id, actor_role=actor_role)
+        except Exception:
+            pass
+    _mirror_transition_trace(state, from_sequence=0)
+    state._transition_active = False
+    state._pending_learning_events.clear()
+    state._pending_weakpoint_evidence.clear()
+    state._pending_review_memory = None
+    _store.cache(state)
     _record_executor_observation(
         state,
         transition_kind="start",
         context=execution_context,
         started_at=transition_started,
+        outcome=selected_outcome,
     )
     return start_result
 
@@ -2200,129 +2246,17 @@ def _submit_answer_locked(
     if state.executor_mode == "graph_active" and settings.kill_switch:
         state.executor_mode = "legacy"
         state.executor_fallback_reason = "kill_switch_enabled"
-    state._transition_active = True
-    state._pending_learning_events.clear()
-    state._pending_weakpoint_evidence.clear()
-    state._pending_review_memory = None
     set_trace_id(state.trace_id)
-    ctx = _tool_context(state.student_id, actor_id, actor_role)
+    previous_sequence = max((step.sequence for step in state.runtime_steps), default=0)
     try:
-        if state.phase == "exit_ticket":
-            is_correct, _correct_letter = _submit_exit_ticket_answer(state, answer)
-            _finalize(state)
-            state.revision = claimed_revision + 1
-            result = _public_state(state)
-            result["last_answer_correct"] = is_correct
-            selected_outcome = _materialize_selected_outcome(
-                state,
-                transition_kind="exit_ticket_answer",
-                command={"answer": (answer or "")[:1].upper()},
-                public_result=result,
-                started_at=transition_started,
-            )
-            state = selected_outcome.next_state
-            result = selected_outcome.public_result
-            committed_result = _commit_claimed_answer_transition(
-                state,
-                claimed_revision=claimed_revision,
-                transition_key=transition_key,
-                request_hash=request_hash,
-                result=result,
-            )
-            _record_executor_observation(
-                state,
-                transition_kind="exit_ticket_answer",
-                context=execution_context,
-                started_at=transition_started,
-            )
-            return committed_result
-
-        step = state.lesson_plan[state.current_step_index]
-        step.attempts += 1
-
-        is_correct, correct_letter = _judge(step, answer)
-        assessment = _assessment_from_question(step.question or {})
-        answer_feedback = build_answer_feedback(assessment, answer)
-        state.answer_feedback = answer_feedback
-        step.practice_result = {
-            "assessment_id": assessment.assessment_id,
-            "objective_id": assessment.objective_id,
-            "is_correct": is_correct,
-            "selected_answer": answer_feedback["selected_option"],
-            "content_validation_status": step.content_validation.status if step.content_validation else "blocked",
-        }
-        _record_content_event(
-            state,
-            step,
-            "auto_tutor_practice_answered",
-            success=is_correct,
-            metadata={
-                "assessment_id": assessment.assessment_id,
-                "assessment_kind": "practice",
-                "content_validation_status": step.content_validation.status if step.content_validation else "blocked",
-                "mastery_eligible": False,
-                "generation_mode": assessment.generation_mode,
-                "is_correct": is_correct,
-            },
+        transition_kind: Literal["lesson_answer", "exit_ticket_answer"] = (
+            "exit_ticket_answer" if state.phase == "exit_ticket" else "lesson_answer"
         )
-        _emit(
+        selected_outcome = _execute_selected_transition(
             state,
-            "judge",
-            "Judge · 判分",
-            "judge",
-            "success" if is_correct else "failed",
-            metadata={
-                "knowledge_point": step.knowledge_point,
-                "answer": (answer or "")[:1].upper(),
-                "is_correct": is_correct,
-                "attempt": step.attempts,
-                "result_summary": "答对，进入下一步" if is_correct else "答错，触发反思",
-            },
-        )
-        state.step_history.append(
-            {
-                "step_index": state.current_step_index,
-                "knowledge_point": step.knowledge_point,
-                "answer": (answer or "")[:1].upper(),
-                "is_correct": is_correct,
-                "attempt": step.attempts,
-            }
-        )
-
-        last_reflection: ReflectionRecord | None = None
-        if is_correct:
-            step.status = "practiced"
-            state.mastery_delta[step.knowledge_point] = 0.0
-            _advance(state, ctx)
-        else:
-            if step.attempts < MAX_ATTEMPTS_PER_STEP and state.replans < MAX_REPLANS:
-                last_reflection = _reflect_and_replan(state, step, answer, ctx)
-            else:
-                step.status = "struggling"
-                state.mastery_delta[step.knowledge_point] = -0.2
-                _emit(
-                    state,
-                    "give_up_step",
-                    "Re-plan · 标记薄弱并前进",
-                    "re_plan",
-                    metadata={
-                        "knowledge_point": step.knowledge_point,
-                        "reason": "已达单步重试上限或全局重规划上限",
-                        "result_summary": f"「{step.knowledge_point}」仍未掌握，记入错题本，继续下一步",
-                    },
-                )
-                _advance(state, ctx)
-
-        state.revision = claimed_revision + 1
-        result = _public_state(state)
-        if last_reflection is not None:
-            result["reflection"] = _public_reflection(last_reflection)
-        result["last_answer_correct"] = is_correct
-        selected_outcome = _materialize_selected_outcome(
-            state,
-            transition_kind="lesson_answer",
-            command={"answer": (answer or "")[:1].upper()},
-            public_result=result,
+            transition_kind=transition_kind,
+            command={"answer": (answer or "")[:1].upper(), "claimed_revision": claimed_revision},
+            context=execution_context,
             started_at=transition_started,
         )
         state = selected_outcome.next_state
@@ -2334,11 +2268,13 @@ def _submit_answer_locked(
             request_hash=request_hash,
             result=result,
         )
+        _mirror_transition_trace(state, from_sequence=previous_sequence)
         _record_executor_observation(
             state,
-            transition_kind="lesson_answer",
+            transition_kind=transition_kind,
             context=execution_context,
             started_at=transition_started,
+            outcome=selected_outcome,
         )
         return committed_result
     except Exception:
@@ -2356,9 +2292,9 @@ def _advance(state: AutoTutorState, ctx: ToolExecutionContext) -> None:
     next_index = state.current_step_index + 1
     if next_index >= len(state.lesson_plan) or next_index >= MAX_STEPS:
         if state.phase == "lesson" and state.exit_ticket is None:
-            _start_exit_ticket(state, ctx)
+            _KERNEL_START_EXIT_TICKET(state, ctx)
         else:
-            _finalize(state)
+            _KERNEL_FINALIZE(state)
         return
     state.current_step_index = next_index
     _emit(
@@ -2372,7 +2308,63 @@ def _advance(state: AutoTutorState, ctx: ToolExecutionContext) -> None:
             "result_summary": f"进入第 {next_index + 1} 步：{state.lesson_plan[next_index].knowledge_point}",
         },
     )
-    _act(state, state.lesson_plan[next_index], ctx)
+    _KERNEL_ACT(state, state.lesson_plan[next_index], ctx)
+
+
+def _mutate_answer_candidate(
+    state: AutoTutorState,
+    answer: str,
+    ctx: ToolExecutionContext,
+) -> tuple[bool, ReflectionRecord | None]:
+    """Compatibility mutation used only by the observation provider on a private clone."""
+    if state.phase == "exit_ticket":
+        is_correct, _ = _KERNEL_SUBMIT_EXIT_TICKET(state, answer)
+        _KERNEL_FINALIZE(state)
+        return is_correct, None
+
+    step = state.lesson_plan[state.current_step_index]
+    step.attempts += 1
+    is_correct, _ = _judge(step, answer)
+    assessment = _assessment_from_question(step.question or {})
+    feedback = build_answer_feedback(assessment, answer)
+    state.answer_feedback = feedback
+    step.practice_result = {
+        "assessment_id": assessment.assessment_id,
+        "objective_id": assessment.objective_id,
+        "is_correct": is_correct,
+        "selected_answer": feedback["selected_option"],
+        "content_validation_status": step.content_validation.status if step.content_validation else "blocked",
+    }
+    state.step_history.append({
+        "step_index": state.current_step_index,
+        "knowledge_point": step.knowledge_point,
+        "answer": (answer or "")[:1].upper(),
+        "is_correct": is_correct,
+        "attempt": step.attempts,
+    })
+    if is_correct:
+        step.status = "practiced"
+        state.mastery_delta[step.knowledge_point] = 0.0
+        _KERNEL_ADVANCE(state, ctx)
+        return True, None
+    if step.attempts < MAX_ATTEMPTS_PER_STEP and state.replans < MAX_REPLANS:
+        return False, _KERNEL_REFLECT(state, step, answer, ctx)
+    step.status = "struggling"
+    state.mastery_delta[step.knowledge_point] = -0.2
+    _KERNEL_ADVANCE(state, ctx)
+    return False, None
+
+
+# Stable references let the v1.49.1 provider characterize external observations
+# on a private clone while the Graph executor is independently tripwired against
+# the public Legacy wrapper names.
+_KERNEL_ACT = _act
+_KERNEL_REFLECT = _reflect_and_replan
+_KERNEL_START_EXIT_TICKET = _start_exit_ticket
+_KERNEL_SUBMIT_EXIT_TICKET = _submit_exit_ticket_answer
+_KERNEL_FINALIZE = _finalize
+_KERNEL_ADVANCE = _advance
+_KERNEL_MUTATE_ANSWER = _mutate_answer_candidate
 
 
 def get_session(session_id: str) -> dict[str, Any]:

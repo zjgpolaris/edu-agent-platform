@@ -1,8 +1,8 @@
-# AutoTutor LangGraph Active Transition Evidence
+# AutoTutor LangGraph Independent Transition Evidence
 
-- Commit: `4b76ad011a5af86e0a9a026730c18e3bcc82654a`
-- Observation/outcome: `v1.49-observation` / `v1.49-outcome`
-- Full outcome parity: 1/1
-- External calls: 0
-- Duplicate effects: 0
-- Decision: **GO**
+- Commit: `fb9d3bc53ee21adc653dced5fd7d05606c0b91c7` (dirty)
+- Observation/outcome: `v1.49.1-observation` / `v1.49.1-outcome`
+- Full trajectory parity: 108/108
+- Executor external calls / side effects: 0 / 0
+- Legacy wrapper tripwire: passed
+- Decision: **NO-GO (dirty evidence)**

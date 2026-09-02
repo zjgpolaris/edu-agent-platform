@@ -504,10 +504,20 @@ agent_rollout_observations = Table(
     Column("traffic_cohort", Text, nullable=False, server_default="legacy_untrusted"),
     Column("rollout_eligible", Integer, nullable=False, server_default="0"),
     Column("eligibility_reason", Text, nullable=False, server_default="legacy_untrusted"),
+    Column("selected_executor", Text),
+    Column("transition_kind", Text),
+    Column("comparator_matched", Integer),
+    Column("fallback_reason", Text),
+    Column("provider_latency_ms", Integer),
+    Column("executor_latency_ms", Integer),
+    Column("comparator_latency_ms", Integer),
+    Column("observation_external_calls", Integer),
+    Column("effect_intent_count", Integer),
     Column("created_at", Text, nullable=False),
     Index("idx_rollout_observation_slice_created", "agent_type", "config_version", "runtime_mode", "data_scope", "created_at"),
     Index("idx_rollout_observation_commit_created", "deployed_commit", "created_at"),
     Index("idx_rollout_observation_eligibility", "rollout_eligible", "eligibility_reason", "created_at"),
+    Index("idx_rollout_observation_transition", "agent_type", "selected_executor", "transition_kind", "created_at"),
 )
 
 agent_release_evidence = Table(

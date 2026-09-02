@@ -61,6 +61,15 @@ def record_rollout_observation(
     traffic_cohort: str | None = None,
     rollout_eligible: bool | None = None,
     eligibility_reason: str | None = None,
+    selected_executor: str | None = None,
+    transition_kind: str | None = None,
+    comparator_matched: bool | None = None,
+    fallback_reason: str | None = None,
+    provider_latency_ms: int | None = None,
+    executor_latency_ms: int | None = None,
+    comparator_latency_ms: int | None = None,
+    observation_external_calls: int | None = None,
+    effect_intent_count: int | None = None,
 ) -> str:
     if runtime_mode not in VALID_MODES:
         raise ValueError("runtime_mode must be control, shadow or active")
@@ -94,10 +103,16 @@ def record_rollout_observation(
             observation_id, agent_type, config_version, runtime_mode, deployed_commit,
             environment, status, latency_ms, trace_id, data_scope, created_at
             , traffic_cohort, rollout_eligible, eligibility_reason
+            , selected_executor, transition_kind, comparator_matched, fallback_reason
+            , provider_latency_ms, executor_latency_ms, comparator_latency_ms
+            , observation_external_calls, effect_intent_count
         ) VALUES (
             :observation_id, :agent_type, :config_version, :runtime_mode, :deployed_commit,
             :environment, :status, :latency_ms, :trace_id, :data_scope, :created_at
             , :traffic_cohort, :rollout_eligible, :eligibility_reason
+            , :selected_executor, :transition_kind, :comparator_matched, :fallback_reason
+            , :provider_latency_ms, :executor_latency_ms, :comparator_latency_ms
+            , :observation_external_calls, :effect_intent_count
         )"""), {
             "observation_id": observation_id,
             "agent_type": agent_type[:80],
@@ -113,6 +128,15 @@ def record_rollout_observation(
             "traffic_cohort": cohort,
             "rollout_eligible": 1 if rollout_eligible else 0,
             "eligibility_reason": reason,
+            "selected_executor": str(selected_executor)[:20] if selected_executor else None,
+            "transition_kind": str(transition_kind)[:40] if transition_kind else None,
+            "comparator_matched": None if comparator_matched is None else (1 if comparator_matched else 0),
+            "fallback_reason": str(fallback_reason)[:120] if fallback_reason else None,
+            "provider_latency_ms": max(0, int(provider_latency_ms)) if provider_latency_ms is not None else None,
+            "executor_latency_ms": max(0, int(executor_latency_ms)) if executor_latency_ms is not None else None,
+            "comparator_latency_ms": max(0, int(comparator_latency_ms)) if comparator_latency_ms is not None else None,
+            "observation_external_calls": max(0, int(observation_external_calls)) if observation_external_calls is not None else None,
+            "effect_intent_count": max(0, int(effect_intent_count)) if effect_intent_count is not None else None,
         })
     return observation_id
 

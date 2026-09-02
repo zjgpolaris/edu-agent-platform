@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, inspect as sa_inspect, text
 from db.engine import DATABASE_URL
 
 MIGRATION_LOCK_KEY = 4_539_941_140
-REQUIRED_REVISION = "013"
+REQUIRED_REVISION = "014"
 
 
 def validate_auth_preflight() -> dict[str, object]:

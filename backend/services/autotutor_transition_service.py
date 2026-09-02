@@ -62,6 +62,59 @@ class AutoTutorTransitionConflict(RuntimeError):
     pass
 
 
+def commit_autotutor_start(
+    *,
+    next_state: Any,
+    response: dict[str, Any],
+    start_idempotency_key: str | None,
+    effects: AutoTutorTransitionEffects,
+    fault_hook: Callable[[str], None] | None = None,
+) -> None:
+    """Insert a new session and its start effects in one transaction."""
+    init_db()
+    if effects.session_id != next_state.session_id:
+        raise ValueError("start effects do not match session")
+    if effects.weakpoint_evidence or effects.review_memory is not None:
+        raise ValueError("start transition cannot emit mastery effects")
+    if any(intent.event.student_id != next_state.student_id for intent in effects.learning_events):
+        raise ValueError("learning event owner does not match AutoTutor session")
+
+    def checkpoint(name: str) -> None:
+        if fault_hook is not None:
+            fault_hook(name)
+
+    next_state.updated_at = time.time()
+    payload = next_state.model_dump()
+    with get_connection() as conn:
+        for intent in effects.learning_events:
+            record_learning_event_with_connection(conn, intent.event, effect_key=intent.effect_key)
+            checkpoint(f"after_learning_event:{intent.effect_key}")
+        checkpoint("before_session_insert")
+        conn.execute(
+            text("""INSERT INTO autotutor_sessions (
+                session_id, student_id, trace_id, run_id, status, revision, state_json,
+                start_idempotency_key, last_response_json, created_at, updated_at
+            ) VALUES (
+                :session_id, :student_id, :trace_id, :run_id, :status, :revision, :state_json,
+                :start_idempotency_key, :last_response_json, :created_at, :updated_at
+            )"""),
+            {
+                "session_id": next_state.session_id,
+                "student_id": next_state.student_id,
+                "trace_id": next_state.trace_id,
+                "run_id": next_state.run_id,
+                "status": next_state.status,
+                "revision": next_state.revision,
+                "state_json": json.dumps(payload, ensure_ascii=False),
+                "start_idempotency_key": start_idempotency_key,
+                "last_response_json": json.dumps(response, ensure_ascii=False),
+                "created_at": next_state.created_at,
+                "updated_at": next_state.updated_at,
+            },
+        )
+        checkpoint("after_session_insert")
+
+
 def commit_autotutor_transition(
     *,
     previous_revision: int,

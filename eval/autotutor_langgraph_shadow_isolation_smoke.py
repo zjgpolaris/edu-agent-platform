@@ -49,9 +49,9 @@ def main() -> None:
     captured: dict = {}
     os.environ["EDU_AGENT_AUTOTUTOR_EXECUTOR_MODE"] = "shadow"
 
-    def capture(observation):
-        captured["observation"] = observation
-        return execute_autotutor_active(observation)
+    def capture(*, before, command, observations):
+        captured["observation"] = observations
+        return execute_autotutor_active(before=before, command=command, observations=observations)
 
     with patch("agents.autotutor_graph.execute_autotutor_active", side_effect=capture) as graph_spy:
         started = at.start_session("shadow-isolation", actor_role="student")

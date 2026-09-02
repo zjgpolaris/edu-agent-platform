@@ -95,16 +95,18 @@ AUTOTUTOR_SHADOW_GRAPH = build_autotutor_shadow_graph()
 
 
 class AutoTutorActiveGraphState(TypedDict, total=False):
-    observation: Any
+    before: Any
+    command: dict[str, Any]
+    observations: Any
     outcome: Any
     diagnostics: list[str]
     visited_nodes: list[str]
 
 
 def _active_load_context(state: AutoTutorActiveGraphState) -> dict[str, Any]:
-    observation = state.get("observation")
+    observation = state.get("observations")
     diagnostics: list[str] = []
-    if observation is None or getattr(observation, "schema_version", None) != "v1.49-observation":
+    if observation is None or getattr(observation, "schema_version", None) != "v1.49.1-observation":
         diagnostics.append("active_observation_invalid")
     return {"diagnostics": diagnostics, "visited_nodes": ["load_context"]}
 
@@ -112,7 +114,7 @@ def _active_load_context(state: AutoTutorActiveGraphState) -> dict[str, Any]:
 def _active_route(state: AutoTutorActiveGraphState) -> str:
     if state.get("diagnostics"):
         return "fail"
-    observation = state.get("observation")
+    observation = state.get("observations")
     kind = str(getattr(observation, "transition_kind", ""))
     return {
         "start": "plan",
@@ -130,31 +132,37 @@ def _active_visit(name: str):
 
 
 def _active_lesson_route(state: AutoTutorActiveGraphState) -> str:
-    observation = state.get("observation")
-    materialized = getattr(observation, "materialized", {}) if observation is not None else {}
-    next_state = materialized.get("next_state") if isinstance(materialized, dict) else {}
-    history = next_state.get("step_history") if isinstance(next_state, dict) else []
-    latest = history[-1] if isinstance(history, list) and history and isinstance(history[-1], dict) else {}
-    steps = next_state.get("lesson_plan") if isinstance(next_state, dict) else []
-    index = int(next_state.get("current_step_index") or 0) if isinstance(next_state, dict) else 0
+    before = state.get("before")
+    payload = before.model_dump(mode="json") if hasattr(before, "model_dump") else (before or {})
+    steps = payload.get("lesson_plan") if isinstance(payload, dict) else []
+    index = int(payload.get("current_step_index") or 0) if isinstance(payload, dict) else 0
     current = steps[index] if isinstance(steps, list) and 0 <= index < len(steps) and isinstance(steps[index], dict) else {}
-    if latest.get("is_correct") is False and current.get("replanned") and next_state.get("phase") == "lesson":
+    question = current.get("question") if isinstance(current.get("question"), dict) else {}
+    selected = str((state.get("command") or {}).get("answer") or "").strip()[:1].upper()
+    correct = str(question.get("answer") or "").strip()[:1].upper()
+    attempts = int(current.get("attempts") or 0) + 1
+    replans = int(payload.get("replans") or 0) if isinstance(payload, dict) else 0
+    if selected == correct:
+        return "advance"
+    if attempts < 3 and replans < 3:
         return "reflect"
-    return "build_effect_intents"
+    return "mark_struggling"
 
 
-def _active_materialize(state: AutoTutorActiveGraphState) -> dict[str, Any]:
-    """Materialize the already captured transition without I/O or persistence."""
-    from agents.autotutor_execution import AutoTutorTransitionOutcome
+def _active_compute(state: AutoTutorActiveGraphState) -> dict[str, Any]:
+    """Independently compute the complete transition from observations."""
+    from agents.autotutor_transition_kernel import execute_autotutor_transition
 
-    observation = state.get("observation")
-    payload = getattr(observation, "materialized", None)
     try:
-        outcome = AutoTutorTransitionOutcome.model_validate(payload or {})
+        outcome = execute_autotutor_transition(
+            before=state.get("before"),
+            command=state.get("command") or {},
+            observations=state.get("observations"),
+        )
     except Exception:
         return {"diagnostics": [*(state.get("diagnostics") or []), "active_outcome_invalid"]}
     outcome.executor_mode = "graph_active"
-    outcome.diagnostics.visited_nodes = [*(state.get("visited_nodes") or []), "materialize_outcome"]
+    outcome.diagnostics.visited_nodes = [*(state.get("visited_nodes") or []), "build_outcome"]
     return {"outcome": outcome, "visited_nodes": outcome.diagnostics.visited_nodes}
 
 
@@ -170,13 +178,19 @@ def build_autotutor_active_graph():
     graph.add_node("teach", _active_visit("teach"))
     graph.add_node("prepare_assessment", _active_visit("prepare_assessment"))
     graph.add_node("judge", _active_visit("judge"))
+    graph.add_node("advance", _active_visit("advance"))
+    graph.add_node("next_content_or_exit", _active_visit("next_content_or_exit"))
+    graph.add_node("mark_struggling", _active_visit("mark_struggling"))
     graph.add_node("reflect", _active_visit("reflect"))
     graph.add_node("re_plan", _active_visit("re_plan"))
     graph.add_node("reteach", _active_visit("reteach"))
     graph.add_node("verify_exit_ticket", _active_visit("verify_exit_ticket"))
+    graph.add_node("calculate_mastery", _active_visit("calculate_mastery"))
     graph.add_node("build_effect_intents", _active_visit("build_effect_intents"))
     graph.add_node("recovery_resume", _active_visit("recovery_resume"))
-    graph.add_node("materialize", _active_materialize)
+    graph.add_node("validate_state", _active_visit("validate_state"))
+    graph.add_node("route_current_phase", _active_visit("route_current_phase"))
+    graph.add_node("build_outcome", _active_compute)
     graph.add_node("fail", _active_fail)
     graph.add_edge(START, "load_context")
     graph.add_conditional_edges(
@@ -193,19 +207,25 @@ def build_autotutor_active_graph():
     graph.add_edge("plan", "content_gate")
     graph.add_edge("content_gate", "teach")
     graph.add_edge("teach", "prepare_assessment")
-    graph.add_edge("prepare_assessment", "materialize")
+    graph.add_edge("prepare_assessment", "build_outcome")
     graph.add_conditional_edges(
         "judge",
         _active_lesson_route,
-        {"reflect": "reflect", "build_effect_intents": "build_effect_intents"},
+        {"advance": "advance", "reflect": "reflect", "mark_struggling": "mark_struggling"},
     )
+    graph.add_edge("advance", "next_content_or_exit")
+    graph.add_edge("mark_struggling", "advance")
+    graph.add_edge("next_content_or_exit", "build_effect_intents")
     graph.add_edge("reflect", "re_plan")
     graph.add_edge("re_plan", "reteach")
     graph.add_edge("reteach", "build_effect_intents")
-    graph.add_edge("verify_exit_ticket", "build_effect_intents")
-    graph.add_edge("build_effect_intents", "materialize")
-    graph.add_edge("recovery_resume", "materialize")
-    graph.add_edge("materialize", END)
+    graph.add_edge("verify_exit_ticket", "calculate_mastery")
+    graph.add_edge("calculate_mastery", "build_effect_intents")
+    graph.add_edge("build_effect_intents", "build_outcome")
+    graph.add_edge("recovery_resume", "validate_state")
+    graph.add_edge("validate_state", "route_current_phase")
+    graph.add_edge("route_current_phase", "build_outcome")
+    graph.add_edge("build_outcome", END)
     graph.add_edge("fail", END)
     return graph.compile()
 
@@ -213,9 +233,15 @@ def build_autotutor_active_graph():
 AUTOTUTOR_ACTIVE_GRAPH = build_autotutor_active_graph()
 
 
-def execute_autotutor_active(observation: Any) -> Any:
+def execute_autotutor_active(*, before: Any, command: dict[str, Any], observations: Any) -> Any:
     result = AUTOTUTOR_ACTIVE_GRAPH.invoke(
-        {"observation": observation, "diagnostics": [], "visited_nodes": []},
+        {
+            "before": before,
+            "command": command,
+            "observations": observations,
+            "diagnostics": [],
+            "visited_nodes": [],
+        },
         config={"callbacks": [], "recursion_limit": 20},
     )
     diagnostics = list(result.get("diagnostics") or []) if isinstance(result, dict) else ["active_execution_failed"]

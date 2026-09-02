@@ -1,17 +1,18 @@
 """AutoTutor v1.49 executor contracts, trusted sticky routing and rollout config."""
 from __future__ import annotations
 
-import copy
 import hashlib
 import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from deployment import deployed_commit, deployment_environment
+from services.autotutor_transition_service import LearningEventIntent, WeakpointEvidenceIntent
+from student_profile import MemoryEntryUpsert
 
 
 ExecutorMode = Literal["legacy", "graph_active"]
@@ -156,13 +157,42 @@ class AutoTutorObservationBundle(BaseModel):
     """Immutable, reusable input captured exactly once for a transition."""
 
     model_config = ConfigDict(frozen=True)
-    schema_version: Literal["v1.49-observation"] = "v1.49-observation"
+    schema_version: Literal["v1.49.1-observation"] = "v1.49.1-observation"
+    transition_id: str
     transition_kind: TransitionKind
     command: dict[str, Any] = Field(default_factory=dict)
+    plan: list[dict[str, Any]] = Field(default_factory=list)
+    content: dict[str, Any] | None = None
+    reflection: dict[str, Any] | None = None
+    advance_content: dict[str, Any] | None = None
+    exit_ticket: dict[str, Any] | None = None
     clock: dict[str, float] = Field(default_factory=dict)
     identifiers: dict[str, str] = Field(default_factory=dict)
+    selection: dict[str, str] = Field(default_factory=dict)
+    call_counts: dict[str, int] = Field(default_factory=dict)
     provenance: dict[str, Any] = Field(default_factory=dict)
-    materialized: dict[str, Any] = Field(default_factory=dict, exclude=True)
+
+    @classmethod
+    def _forbidden_keys(cls) -> set[str]:
+        return {
+            "materialized", "next_state", "public_result", "expected_state",
+            "expected_projection", "effect_intents", "runtime_events",
+            "verified_mastery", "derived_status", "legacy_after",
+        }
+
+    def assert_no_derived_outcome(self) -> None:
+        def visit(value: Any) -> None:
+            if isinstance(value, dict):
+                forbidden = self._forbidden_keys().intersection(value)
+                if forbidden:
+                    raise ValueError(f"observation_derived_outcome_forbidden:{sorted(forbidden)[0]}")
+                for item in value.values():
+                    visit(item)
+            elif isinstance(value, list):
+                for item in value:
+                    visit(item)
+
+        visit(self.model_dump(mode="python"))
 
 
 class AutoTutorObservationProvider(Protocol):
@@ -177,6 +207,7 @@ class AutoTutorObservationProvider(Protocol):
 
 class AutoTutorTransitionDiagnostics(BaseModel):
     observation_external_calls: int = 0
+    provider_latency_ms: float = 0.0
     executor_latency_ms: float = 0.0
     comparator_latency_ms: float = 0.0
     comparator_matched: bool = True
@@ -188,15 +219,15 @@ class AutoTutorTransitionOutcome(BaseModel):
     """Complete internal outcome; only one instance may cross the commit boundary."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    schema_version: Literal["v1.49-outcome"] = "v1.49-outcome"
+    schema_version: Literal["v1.49.1-outcome"] = "v1.49.1-outcome"
     executor_mode: ExecutorMode
-    next_state: Any
-    learning_events: list[Any] = Field(default_factory=list)
-    weakpoint_evidence: list[Any] = Field(default_factory=list)
-    review_memory: Any | None = None
-    runtime_events: list[dict[str, Any]] = Field(default_factory=list)
-    runtime_finalize: dict[str, Any] | None = None
-    public_result: dict[str, Any] = Field(default_factory=dict)
+    next_state: object
+    learning_events: list[LearningEventIntent] = Field(default_factory=list)
+    weakpoint_evidence: list[WeakpointEvidenceIntent] = Field(default_factory=list)
+    review_memory: MemoryEntryUpsert | None = None
+    runtime_events: list[dict[str, object]] = Field(default_factory=list)
+    runtime_finalize: dict[str, object] | None = None
+    public_result: dict[str, object] = Field(default_factory=dict)
     diagnostics: AutoTutorTransitionDiagnostics = Field(default_factory=AutoTutorTransitionDiagnostics)
 
 
@@ -210,8 +241,9 @@ class LegacyTransitionExecutor:
     mode: ExecutorMode = "legacy"
 
     def execute(self, *, before: Any, command: dict[str, Any], observations: AutoTutorObservationBundle) -> AutoTutorTransitionOutcome:
-        del before, command
-        outcome = AutoTutorTransitionOutcome.model_validate(copy.deepcopy(observations.materialized))
+        from agents.autotutor_transition_kernel import execute_autotutor_transition
+
+        outcome = execute_autotutor_transition(before=before, command=command, observations=observations)
         outcome.executor_mode = "legacy"
         return outcome
 
@@ -220,10 +252,9 @@ class GraphActiveTransitionExecutor:
     mode: ExecutorMode = "graph_active"
 
     def execute(self, *, before: Any, command: dict[str, Any], observations: AutoTutorObservationBundle) -> AutoTutorTransitionOutcome:
-        del before, command
         from agents.autotutor_graph import execute_autotutor_active
 
-        return execute_autotutor_active(observations)
+        return execute_autotutor_active(before=before, command=command, observations=observations)
 
 
 def validate_autotutor_executor_config(environ: Mapping[str, str] | None = None) -> AutoTutorExecutorSettings:
@@ -231,33 +262,38 @@ def validate_autotutor_executor_config(environ: Mapping[str, str] | None = None)
     return AutoTutorExecutorSettings.from_env(environ)
 
 
-class CapturedAutoTutorObservationProvider:
-    """Capture one producer result while preserving the caller-owned before state."""
+def compare_transition_outcomes(
+    selected: AutoTutorTransitionOutcome,
+    comparator: AutoTutorTransitionOutcome,
+) -> tuple[bool, tuple[str, ...]]:
+    """Compare complete business semantics while ignoring executor diagnostics."""
+    reasons: list[str] = []
 
-    def __init__(
-        self,
-        transition_kind: TransitionKind,
-        producer: Callable[[Any, dict[str, Any], AutoTutorExecutionContext], AutoTutorTransitionOutcome],
-    ):
-        self._transition_kind = transition_kind
-        self._producer = producer
+    def stable(value: Any) -> Any:
+        if hasattr(value, "model_dump"):
+            value = value.model_dump(mode="json")
+        if isinstance(value, dict):
+            return {
+                key: stable(item)
+                for key, item in sorted(value.items())
+                if key not in {"executor_mode", "executor_fallback_reason", "latency_ms"}
+            }
+        if isinstance(value, list):
+            return [stable(item) for item in value]
+        return value
 
-    def prepare(
-        self,
-        *,
-        before: Any,
-        command: dict[str, Any],
-        context: AutoTutorExecutionContext,
-    ) -> AutoTutorObservationBundle:
-        candidate_before = copy.deepcopy(before)
-        outcome = self._producer(candidate_before, copy.deepcopy(command), context)
-        return AutoTutorObservationBundle(
-            transition_kind=self._transition_kind,
-            command=copy.deepcopy(command),
-            provenance={"external_call_set": "single_active_transition"},
-            materialized=outcome.model_dump(round_trip=True),
-        )
-
-
-def clone_observation(bundle: AutoTutorObservationBundle) -> AutoTutorObservationBundle:
-    return bundle.model_copy(update={"materialized": copy.deepcopy(bundle.materialized)})
+    if stable(selected.next_state) != stable(comparator.next_state):
+        reasons.append("state_mismatch")
+    if stable(selected.public_result) != stable(comparator.public_result):
+        reasons.append("public_result_mismatch")
+    if stable(selected.runtime_events) != stable(comparator.runtime_events):
+        reasons.append("runtime_event_mismatch")
+    if stable(selected.learning_events) != stable(comparator.learning_events):
+        reasons.append("learning_effect_mismatch")
+    if stable(selected.weakpoint_evidence) != stable(comparator.weakpoint_evidence):
+        reasons.append("weakpoint_effect_mismatch")
+    if stable(selected.review_memory) != stable(comparator.review_memory):
+        reasons.append("review_effect_mismatch")
+    if stable(selected.runtime_finalize) != stable(comparator.runtime_finalize):
+        reasons.append("runtime_finalize_mismatch")
+    return not reasons, tuple(reasons)

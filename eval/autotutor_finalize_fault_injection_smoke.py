@@ -16,6 +16,7 @@ except FileNotFoundError:
 sys.path.insert(0, str(ROOT / "backend"))
 
 from agents.auto_tutor import (  # noqa: E402
+    AutoTutorState,
     _answer_request_hash,
     _claim_answer_transition,
     _load_persisted_session,
@@ -27,6 +28,7 @@ from services.autotutor_transition_service import (  # noqa: E402
     AutoTutorTransitionEffects,
     LearningEventIntent,
     WeakpointEvidenceIntent,
+    commit_autotutor_start,
     commit_autotutor_transition,
 )
 from student_profile import LearningEvent, MemoryEntryUpsert  # noqa: E402
@@ -40,6 +42,7 @@ FAULT_POINTS = [
     "before_session_cas",
     "after_session_cas",
 ]
+START_FAULT_POINTS = ["after_learning_event", "before_session_insert", "after_session_insert"]
 
 
 def _count(effect_key: str, evidence_key: str, student_id: str) -> tuple[int, int, int]:
@@ -143,7 +146,65 @@ def main() -> None:
         assert result.status == "committed"
         assert _count(effect_key, evidence_key, student_id) == (1, 1, 1)
         print("OK", fault_point)
-    print(f"autotutor_finalize_fault_injection={len(FAULT_POINTS)}/{len(FAULT_POINTS)}")
+
+    for index, fault_point in enumerate(START_FAULT_POINTS):
+        student_id = f"start-fault-student-{index}"
+        session_id = f"at_start_fault_{index}"
+        effect_key = f"autotutor:{session_id}:revision:0:start"
+        state = AutoTutorState(
+            session_id=session_id,
+            trace_id=f"trace-start-fault-{index}",
+            student_id=student_id,
+            created_at=1.0,
+            updated_at=1.0,
+        )
+        effects = AutoTutorTransitionEffects(
+            session_id=session_id,
+            claimed_revision=0,
+            idempotency_key=f"start-fault-{index}",
+            learning_events=[LearningEventIntent(
+                effect_key=effect_key,
+                event=LearningEvent(
+                    student_id=student_id,
+                    session_id=session_id,
+                    feature="auto_tutor",
+                    event_type="auto_tutor_content_verified",
+                    topic="start-fault",
+                    success=True,
+                ),
+            )],
+        )
+
+        def fail_start(name: str) -> None:
+            if name == fault_point or name.startswith(f"{fault_point}:"):
+                raise RuntimeError(f"injected:{fault_point}")
+
+        try:
+            commit_autotutor_start(
+                next_state=state,
+                response={"session_id": session_id},
+                start_idempotency_key=f"start-fault-{index}",
+                effects=effects,
+                fault_hook=fail_start,
+            )
+        except RuntimeError as exc:
+            assert str(exc).startswith("injected:")
+        else:
+            raise AssertionError(f"start fault point {fault_point} was not triggered")
+        with get_connection() as conn:
+            session_count = int(conn.execute(
+                text("SELECT COUNT(*) FROM autotutor_sessions WHERE session_id=:session_id"),
+                {"session_id": session_id},
+            ).scalar() or 0)
+            event_count = int(conn.execute(
+                text("SELECT COUNT(*) FROM learning_events WHERE effect_key=:effect_key"),
+                {"effect_key": effect_key},
+            ).scalar() or 0)
+        assert (session_count, event_count) == (0, 0)
+        print("OK", f"start:{fault_point}")
+
+    total = len(FAULT_POINTS) + len(START_FAULT_POINTS)
+    print(f"autotutor_finalize_fault_injection={total}/{total}")
 
 
 if __name__ == "__main__":

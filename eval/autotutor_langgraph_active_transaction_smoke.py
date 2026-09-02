@@ -36,7 +36,11 @@ def _answer(session_id: str) -> str:
 
 def main() -> None:
     before = {"revision": 0}
-    bundle = AutoTutorObservationBundle(transition_kind="start", command={}, materialized={})
+    bundle = AutoTutorObservationBundle(
+        transition_id="immutability-smoke",
+        transition_kind="start",
+        command={},
+    )
     try:
         bundle.command = {"bad": True}  # type: ignore[misc]
     except Exception:

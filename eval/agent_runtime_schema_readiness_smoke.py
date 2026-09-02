@@ -35,7 +35,7 @@ def main() -> None:
         agent_release_evidence.create(bind=conn, checkfirst=True)
         llm_capability_manifests.create(bind=conn, checkfirst=True)
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('013')"))
+        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('014')"))
     init_db()
     _ensure_table()
 
@@ -44,8 +44,8 @@ def main() -> None:
         "status": "ready",
         "schema_ready": True,
         "database_dialect": "sqlite",
-        "required_alembic_version": "013",
-        "alembic_version": "013",
+        "required_alembic_version": "014",
+        "alembic_version": "014",
         "missing_tables": [],
         "missing_columns": [],
     }
