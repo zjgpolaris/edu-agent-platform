@@ -63,7 +63,7 @@ services:
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS
         value: "0"
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION
-        value: v1.49.6-production-execution
+        value: v1.49.7-scoped-verification-identity
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT
         sync: false
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_KILL_SWITCH
@@ -72,6 +72,20 @@ services:
         value: "true"
       - key: EDU_AGENT_AUTOTUTOR_GRAPH_FALLBACK_ENABLED
         value: "true"
+      # AutoTutor production verification uses a least-privilege machine token.
+      # GitHub owns the raw token; Render stores only SHA-256 digests.
+      - key: EDU_AGENT_AUTOTUTOR_VERIFICATION_MACHINE_REQUIRED
+        value: "true"
+      - key: EDU_AGENT_AUTOTUTOR_VERIFICATION_TOKEN_SHA256
+        sync: false
+      - key: EDU_AGENT_AUTOTUTOR_VERIFICATION_TOKEN_KEY_ID
+        value: current
+      - key: EDU_AGENT_AUTOTUTOR_VERIFICATION_NEXT_TOKEN_SHA256
+        sync: false
+      - key: EDU_AGENT_AUTOTUTOR_VERIFICATION_NEXT_TOKEN_KEY_ID
+        sync: false
+      - key: EDU_AGENT_AUTOTUTOR_VERIFICATION_BOOTSTRAP_SHA256
+        sync: false
       - key: EDU_AGENT_RUNTIME_V2_PERSIST_EVENTS
         value: "true"
       - key: EDU_AGENT_RUNTIME_V2_ARTIFACT_ENABLED

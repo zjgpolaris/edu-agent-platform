@@ -14,6 +14,11 @@ from agent_runtime.event_store import (
 from agent_runtime.models import ResumeSignal
 from agent_runtime.recovery import recover_stale_runs
 from security.auth import Actor, assert_teacher_student_access, auth_required, require_admin, require_auth
+from security.audit_log import record_audit_event
+from security.autotutor_verification_auth import (
+    autotutor_verification_principal_kind,
+    require_autotutor_verifier,
+)
 
 router = APIRouter(tags=["agent-runtime"])
 
@@ -48,6 +53,25 @@ class AutoTutorCanarySnapshotRequest(BaseModel):
 
 class AutoTutorCanaryEvidenceRequest(BaseModel):
     evidence: dict
+
+
+def _audit_autotutor_verification(
+    actor: Actor,
+    action: str,
+    *,
+    success: bool,
+    metadata: dict | None = None,
+) -> None:
+    record_audit_event(
+        actor_id=actor.actor_id,
+        action=action,
+        resource_type="autotutor_production_verification",
+        success=success,
+        metadata={
+            "principal_kind": autotutor_verification_principal_kind(actor),
+            **(metadata or {}),
+        },
+    )
 
 
 def _client_run_payload(run: dict) -> dict:
@@ -267,12 +291,12 @@ async def get_autotutor_canary_verification(
     minimum_control: int = Query(default=100, ge=1, le=100_000),
     minimum_graph: int = Query(default=100, ge=1, le=100_000),
     minimum_rollback_control: int = Query(default=20, ge=1, le=100_000),
-    actor: Actor = Depends(require_admin),
+    actor: Actor = Depends(require_autotutor_verifier),
 ):
     from agent_runtime.autotutor_canary_verification import build_autotutor_canary_verification
 
     try:
-        return build_autotutor_canary_verification(
+        result = build_autotutor_canary_verification(
             expected_commit=expected_commit,
             expected_config_version=expected_config_version,
             window_start=window_start,
@@ -282,26 +306,44 @@ async def get_autotutor_canary_verification(
             minimum_rollback_control=minimum_rollback_control,
         )
     except ValueError as exc:
+        _audit_autotutor_verification(
+            actor, "autotutor.verification.read", success=False,
+            metadata={"reason": "invalid_request"},
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_autotutor_verification(
+        actor, "autotutor.verification.read", success=True,
+        metadata={"phase": result.get("phase"), "decision": result.get("decision")},
+    )
+    return result
 
 
 @router.post("/api/admin/agent-runtime/autotutor-canary/snapshots")
 async def create_autotutor_canary_snapshot(
     req: AutoTutorCanarySnapshotRequest,
-    actor: Actor = Depends(require_admin),
+    actor: Actor = Depends(require_autotutor_verifier),
 ):
     from agent_runtime.autotutor_canary_verification import build_autotutor_canary_snapshot
 
     try:
-        return build_autotutor_canary_snapshot(**req.model_dump())
+        result = build_autotutor_canary_snapshot(**req.model_dump())
     except ValueError as exc:
+        _audit_autotutor_verification(
+            actor, "autotutor.snapshot.create", success=False,
+            metadata={"reason": "invalid_request"},
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _audit_autotutor_verification(
+        actor, "autotutor.snapshot.create", success=True,
+        metadata={"snapshot_kind": result.get("snapshot", {}).get("snapshot_kind")},
+    )
+    return result
 
 
 @router.get("/api/admin/agent-runtime/autotutor-canary/evidence")
 async def get_autotutor_canary_evidence(
     include_payload: bool = Query(default=False),
-    actor: Actor = Depends(require_admin),
+    actor: Actor = Depends(require_autotutor_verifier),
 ):
     from agent_runtime.evidence_store import load_release_evidence
     from agents.autotutor_execution import AutoTutorExecutorSettings
@@ -316,7 +358,7 @@ async def get_autotutor_canary_evidence(
         environment=deployment_environment(),
     )
     if evidence is None:
-        return {
+        result = {
             "present": False,
             "decision": None,
             "evidence_sha256": None,
@@ -325,7 +367,16 @@ async def get_autotutor_canary_evidence(
             "v150_entry_ready": False,
             "v150_entry_blockers": ["final_evidence_missing", "rollback_not_verified"],
         }
+        _audit_autotutor_verification(
+            actor, "autotutor.evidence.read", success=True,
+            metadata={"present": False, "include_payload": include_payload},
+        )
+        return result
     if include_payload:
+        _audit_autotutor_verification(
+            actor, "autotutor.evidence.read", success=True,
+            metadata={"present": True, "include_payload": True},
+        )
         return {"present": True, "payload": evidence}
     final = bool(
         int(evidence.get("schema_version") or 0) == 4
@@ -339,7 +390,7 @@ async def get_autotutor_canary_evidence(
         v150_entry_blockers.append("final_evidence_missing")
     if not rollback_runtime:
         v150_entry_blockers.append("rollback_not_verified")
-    return {
+    result = {
         "present": True,
         "schema_version": evidence.get("schema_version"),
         "decision": evidence.get("decision"),
@@ -359,12 +410,22 @@ async def get_autotutor_canary_evidence(
         "v150_entry_ready": v150_entry_ready,
         "v150_entry_blockers": v150_entry_blockers,
     }
+    _audit_autotutor_verification(
+        actor, "autotutor.evidence.read", success=True,
+        metadata={
+            "present": True,
+            "include_payload": False,
+            "evidence_stage": evidence.get("evidence_stage"),
+            "decision": evidence.get("decision"),
+        },
+    )
+    return result
 
 
 @router.post("/api/admin/agent-runtime/autotutor-canary/evidence")
 async def persist_autotutor_canary_evidence(
     req: AutoTutorCanaryEvidenceRequest,
-    actor: Actor = Depends(require_admin),
+    actor: Actor = Depends(require_autotutor_verifier),
 ):
     from agent_runtime.evidence_store import save_release_evidence
     from agents.autotutor_execution import AutoTutorExecutorSettings
@@ -387,9 +448,21 @@ async def persist_autotutor_canary_evidence(
             raise ValueError("AutoTutor evidence cohort fingerprint does not match the current deployment")
         evidence = save_release_evidence(req.evidence)
     except (TypeError, ValueError, LookupError) as exc:
+        _audit_autotutor_verification(
+            actor, "autotutor.evidence.persist", success=False,
+            metadata={"reason": "evidence_rejected", "error_type": exc.__class__.__name__},
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {
+    result = {
         "present": True,
         "decision": evidence.get("decision"),
         "evidence_sha256": evidence.get("evidence_sha256"),
     }
+    _audit_autotutor_verification(
+        actor, "autotutor.evidence.persist", success=True,
+        metadata={
+            "evidence_stage": evidence.get("evidence_stage"),
+            "decision": evidence.get("decision"),
+        },
+    )
+    return result

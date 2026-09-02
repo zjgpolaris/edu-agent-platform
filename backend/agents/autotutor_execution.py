@@ -75,9 +75,9 @@ class AutoTutorExecutorSettings:
             errors.append("executor_mode_invalid")
             mode = "legacy"
         bps = _integer(env, "EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS")
-        config = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.6-production-execution")).strip()[:120]
+        config = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.7-scoped-verification-identity")).strip()[:120]
         salt_configured = bool(str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "")).strip())
-        salt = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "v1.49.6")).strip()[:120]
+        salt = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "v1.49.7")).strip()[:120]
         kill_switch = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_KILL_SWITCH")
         comparator = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_COMPARATOR_ENABLED", True)
         fallback = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_FALLBACK_ENABLED", True)
@@ -105,8 +105,8 @@ class AutoTutorExecutorSettings:
         return cls(
             mode=mode,  # type: ignore[arg-type]
             active_bps=max(0, min(bps, 1000)),
-            config_version=config or "v1.49.6-production-execution",
-            bucket_salt=salt or "v1.49.6",
+            config_version=config or "v1.49.7-scoped-verification-identity",
+            bucket_salt=salt or "v1.49.7",
             bucket_salt_configured=salt_configured,
             kill_switch=kill_switch,
             comparator_enabled=comparator,

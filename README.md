@@ -118,6 +118,8 @@ v1.49.5 将生产证据拆为 schema v4 `candidate` 与 `final`：Canary GO 只�
 
 v1.49.6 将生产验证从代码合同推进到可执行运维合同：workflow 在远程请求前绑定目标 commit 的成功 push CI，并对 Render 冷启动与 auto-deploy 收敛进行有界等待；每次运行输出 hash-sealed、PII-free receipt，artifact 保留 90 天。首次运行前必须人工创建受保护的 `production-verification` GitHub Environment，并在其中配置公开变量 `AUTOTUTOR_PRODUCTION_API_BASE` 与 secret `AUTOTUTOR_PRODUCTION_API_TOKEN`；workflow 仍无 Render 写权限，默认仍为 Legacy/BPS 0。只有 schema v4 final GO 被重新加载且 rollback 验证完成，AgentOps 才显示 v1.50 Entry GO。详见 `docs/20260902-autotutor-production-verification-bootstrap-v1496-spec.md`。
 
+v1.49.7 为上述 workflow 增加最小权限机器身份：原始 token（至少 32 字符）只保存在 GitHub Environment，Render 仅配置 `sha256sum` 生成的 64 位小写 digest，并支持 current/next 双槽轮换；该身份只可访问四个 AutoTutor verification/snapshot/evidence 接口，其他 admin 接口仍拒绝。首次执行前运行 `python scripts/verify_autotutor_verification_environment.py --repository OWNER/REPO --output autotutor-bootstrap.json --require-go`，审核 PII-free sealed attestation 后，仅将其 `attestation_sha256` 配置到 Render。生产 blueprint 默认要求 credential 与 bootstrap attestation 均就绪，但不会自动创建 Environment、写 secret 或扩大 Canary。详见 `docs/20260902-autotutor-scoped-verification-identity-v1497-spec.md`。
+
 ---
 
 ## 本地开发

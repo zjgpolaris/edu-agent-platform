@@ -63,12 +63,14 @@ type AgentOpsSummary = {
       blockers?: string[];
       deployment?: { deployed_commit?: string | null; environment?: string | null; schema_revision?: string | null; converged?: boolean };
       configuration?: { mode?: string; active_bps?: number; config_version?: string; config_fingerprint?: string; cohort_fingerprint?: string; runtime_state_fingerprint?: string; kill_switch?: boolean };
+      verification_identity?: { required?: boolean; configured?: boolean; valid?: boolean; rotation_state?: string; bootstrap_attested?: boolean; errors?: string[] };
       trusted_cohort?: { ready?: boolean; verified_actor_count?: number };
       observation_health?: { status?: string; failure_count?: number | null };
       progress?: { control_transition_count?: number; committed_graph_transition_count?: number; minimum_control?: number; minimum_graph?: number; minimum_rollback_control?: number };
       rollback?: { exact_window?: boolean; assigned_control_count?: number; assigned_graph_count?: number; selected_graph_count?: number; minimum_control?: number; verified?: boolean };
       evidence?: { present?: boolean; decision?: string | null; stage?: string | null; candidate_sha256?: string | null; final_sha256?: string | null; drills?: Record<string, string> | null };
-      operations?: { ci_provenance?: string; environment_bootstrap?: string; api_credential?: string };
+      operations?: { ci_provenance?: string; environment_bootstrap?: string; api_credential?: string; credential_rotation?: string };
+      production_verification_ready?: boolean;
       v150_entry_ready?: boolean;
       v150_entry_decision?: string;
       v150_entry_blockers?: string[];
@@ -1268,7 +1270,9 @@ function AutoTutorVerificationPanel({ verification }: { verification: NonNullabl
         <OpsCard label="Rollback" value={verification.rollback?.verified ? "VERIFIED" : `${verification.rollback?.assigned_control_count ?? 0}/${verification.rollback?.minimum_control ?? 20}`} hint={`${verification.rollback?.assigned_graph_count ?? 0} assigned · ${verification.rollback?.selected_graph_count ?? 0} selected Graph`} />
         <OpsCard label="Evidence" value={verification.evidence?.present ? (verification.evidence.decision || "present") : "missing"} hint={`${verification.evidence?.stage || "no stage"} · ${Object.entries(verification.evidence?.drills || {}).map(([name, result]) => `${name}:${result}`).join(" ") || "drills pending"}`} />
         <OpsCard label="CI Provenance" value={verification.operations?.ci_provenance || "unknown"} hint="workflow receipt authority" />
-        <OpsCard label="Environment" value={verification.operations?.environment_bootstrap || "unknown"} hint={`credential ${verification.operations?.api_credential || "unknown"}`} />
+        <OpsCard label="Environment" value={verification.operations?.environment_bootstrap || "unknown"} hint="sealed bootstrap attestation" />
+        <OpsCard label="Machine Credential" value={verification.operations?.api_credential || "unknown"} hint={`rotation ${verification.operations?.credential_rotation || verification.verification_identity?.rotation_state || "unknown"}`} />
+        <OpsCard label="Production Verify" value={verification.production_verification_ready ? "READY" : "BLOCKED"} hint="deployment + identity + bootstrap" />
         <OpsCard label="v1.50 Entry" value={verification.v150_entry_decision || (verification.v150_entry_ready ? "GO" : "NO_GO")} hint={(verification.v150_entry_blockers || []).join(" · ") || "all production gates passed"} />
         <OpsCard label="Cohort Fingerprint" value={(config?.cohort_fingerprint || "missing").slice(0, 15)} hint="stable bucket identity" />
         <OpsCard label="Runtime Fingerprint" value={(config?.runtime_state_fingerprint || config?.config_fingerprint || "missing").slice(0, 15)} hint="mode/BPS safety state" />

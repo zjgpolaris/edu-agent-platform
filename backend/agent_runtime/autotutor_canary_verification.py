@@ -14,6 +14,7 @@ from agents.autotutor_canary_admission import evaluate_autotutor_canary_admissio
 from agents.autotutor_execution import AutoTutorExecutionContext, AutoTutorExecutorSettings
 from deployment import deployed_commit, deployment_environment
 from security.accounts import trusted_rollout_cohort_status
+from security.autotutor_verification_auth import AutoTutorVerificationIdentitySettings
 
 MAX_WINDOW = timedelta(days=7)
 
@@ -104,6 +105,7 @@ def build_autotutor_canary_verification(
         minimum_graph = max(100, minimum_graph)
         minimum_rollback_control = max(20, minimum_rollback_control)
     settings = AutoTutorExecutorSettings.from_env()
+    verification_identity = AutoTutorVerificationIdentitySettings.from_env()
     expected_commit = (expected_commit or commit).strip()
     expected_config_version = (expected_config_version or settings.config_version).strip()
     try:
@@ -189,6 +191,13 @@ def build_autotutor_canary_verification(
         blockers.extend(settings.reason_codes)
     if not health.get("ok"):
         blockers.append("observation_write_unhealthy")
+    if verification_identity.required:
+        if not verification_identity.configured:
+            blockers.append("verification_machine_credential_missing")
+        elif not verification_identity.valid:
+            blockers.append("verification_machine_credential_invalid")
+        if not verification_identity.bootstrap_attested:
+            blockers.append("verification_bootstrap_not_attested")
     aggregate_blockers = [str(item) for item in aggregate.get("blockers") or []]
     always_hard = {
         "unauthorized_graph_traffic", "duplicate_effects_detected",
@@ -249,6 +258,12 @@ def build_autotutor_canary_verification(
         and commit == expected_commit
         and settings.config_version == expected_config_version
     )
+    production_verification_ready = bool(
+        deployment_converged
+        and not blockers
+        and (not verification_identity.required or verification_identity.valid)
+        and (not verification_identity.required or verification_identity.bootstrap_attested)
+    )
     v150_entry_blockers: list[str] = []
     if not final_present:
         v150_entry_blockers.append("final_evidence_missing")
@@ -275,6 +290,7 @@ def build_autotutor_canary_verification(
             "converged": deployment_converged,
         },
         "configuration": settings.safe_summary(),
+        "verification_identity": verification_identity.safe_summary(),
         "admission": admission,
         "trusted_cohort": {
             "ready": bool(cohort.get("ready")),
@@ -314,9 +330,17 @@ def build_autotutor_canary_verification(
         },
         "operations": {
             "ci_provenance": "unknown",
-            "environment_bootstrap": "unknown",
-            "api_credential": "unknown",
+            "environment_bootstrap": (
+                "attested" if verification_identity.bootstrap_attested else "missing"
+            ),
+            "api_credential": (
+                "configured" if verification_identity.valid
+                else "invalid" if verification_identity.configured
+                else "missing"
+            ),
+            "credential_rotation": verification_identity.rotation_state,
         },
+        "production_verification_ready": production_verification_ready,
         "v150_entry_ready": v150_entry_ready,
         "v150_entry_decision": "GO" if v150_entry_ready else "NO_GO",
         "v150_entry_blockers": v150_entry_blockers,

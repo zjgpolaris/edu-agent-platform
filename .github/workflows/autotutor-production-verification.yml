@@ -19,7 +19,7 @@ on:
       expected_config_version:
         description: Expected AutoTutor config version
         required: true
-        default: v1.49.6-production-execution
+        default: v1.49.7-scoped-verification-identity
         type: string
       window_start:
         description: Exact UTC window start (required for snapshot actions)

@@ -373,6 +373,8 @@ def main() -> None:
                 raise ValueError("ci_run_missing") from None
         if not token:
             raise PermissionError("production_api_token_missing")
+        if len(token) < 32:
+            raise PermissionError("production_api_token_too_short")
         if not args.api_base.strip():
             raise PermissionError("production_api_base_missing")
         artifact = verify_remote(

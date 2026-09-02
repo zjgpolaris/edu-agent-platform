@@ -41,6 +41,7 @@ PY_COMPILE_TARGETS = [
     "backend/agent_runtime/rollout_gate.py",
     "backend/student_profile.py",
     "backend/security/audit_log.py",
+    "backend/security/autotutor_verification_auth.py",
     "backend/agents/learning_assistant.py",
     "backend/agents/answer_verifier.py",
     "backend/agents/learning_assistant_router.py",
@@ -130,6 +131,8 @@ PY_COMPILE_TARGETS = [
     "eval/autotutor_production_verification_api_smoke.py",
     "eval/autotutor_production_workflow_contract_smoke.py",
     "eval/autotutor_production_rollback_verification_smoke.py",
+    "eval/autotutor_scoped_verification_identity_smoke.py",
+    "eval/autotutor_verification_environment_bootstrap_smoke.py",
     "eval/autotutor_canary_writer_failure_smoke.py",
     "eval/autotutor_langgraph_full_outcome_parity_eval.py",
     "eval/autotutor_langgraph_active_recovery_smoke.py",
@@ -161,6 +164,7 @@ PY_COMPILE_TARGETS.extend(
         "backend/alembic/versions/016_autotutor_canary_admission.py",
         "scripts/build_autotutor_canary_evidence.py",
         "scripts/verify_autotutor_canary_deployment.py",
+        "scripts/verify_autotutor_verification_environment.py",
         "backend/api/routers/agent_runtime.py",
     ]
 )
@@ -186,6 +190,8 @@ FAST_SUITES = [
     "autotutor_production_verification_api_smoke",
     "autotutor_production_workflow_contract_smoke",
     "autotutor_production_rollback_verification_smoke",
+    "autotutor_scoped_verification_identity_smoke",
+    "autotutor_verification_environment_bootstrap_smoke",
     "autotutor_canary_writer_failure_smoke",
     "autotutor_finalize_fault_injection_smoke",
     "autotutor_langgraph_full_outcome_parity_eval",
