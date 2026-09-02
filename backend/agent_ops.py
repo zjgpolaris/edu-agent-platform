@@ -47,14 +47,25 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
                     "data_scope": data_scope,
                 }).mappings().all()
             runtime_audits = []
-            rollout_observation_rows = conn.execute(text("""SELECT agent_type, config_version, runtime_mode, status, COUNT(*) AS count
+            rollout_observation_rows = conn.execute(text("""SELECT agent_type, config_version, runtime_mode,
+                    assigned_executor, selected_executor, transition_kind, comparator_matched,
+                    commit_status, status, COUNT(*) AS count
                 FROM agent_rollout_observations
                 WHERE created_at>=:since AND data_scope=:data_scope
-                GROUP BY agent_type, config_version, runtime_mode, status
-                ORDER BY agent_type, config_version, runtime_mode, status"""), {
+                GROUP BY agent_type, config_version, runtime_mode, assigned_executor,
+                    selected_executor, transition_kind, comparator_matched, commit_status, status
+                ORDER BY agent_type, config_version, runtime_mode, assigned_executor,
+                    selected_executor, transition_kind, status"""), {
                     "since": since,
                     "data_scope": data_scope,
                 }).mappings().all()
+            autotutor_slice = conn.execute(text("""SELECT config_version, deployed_commit, environment
+                FROM agent_rollout_observations
+                WHERE agent_type='auto_tutor' AND created_at>=:since AND data_scope=:data_scope
+                ORDER BY created_at DESC LIMIT 1"""), {
+                    "since": since,
+                    "data_scope": data_scope,
+                }).mappings().first()
             release_evidence_count = int(conn.execute(text(
                 "SELECT COUNT(*) FROM agent_release_evidence WHERE created_at>=:since"
             ), {"since": since}).scalar_one())
@@ -67,11 +78,21 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
         return {"status": "unknown", "reason": "runtime_v2_query_failed", "error_type": exc.__class__.__name__, "run_count": None}
 
     try:
-        from agent_runtime.rollout_observations import observation_write_health
+        from agent_runtime.rollout_observations import aggregate_autotutor_transition_canary, observation_write_health
 
         rollout_observation_health = observation_write_health(window_minutes=15)
+        autotutor_transition_canary = (
+            aggregate_autotutor_transition_canary(
+                config_version=str(autotutor_slice["config_version"]),
+                deployed_commit=str(autotutor_slice["deployed_commit"]),
+                environment=str(autotutor_slice["environment"]),
+                since=since,
+            )
+            if autotutor_slice else None
+        )
     except Exception as exc:
         rollout_observation_health = {"status": "unavailable", "ok": False, "error_type": exc.__class__.__name__}
+        autotutor_transition_canary = {"decision": "NO_GO", "status": "UNKNOWN", "blockers": ["canary_query_failed"], "error_type": exc.__class__.__name__}
     audit_counts = {str(row["action"]): int(row["count"] or 0) for row in runtime_audits}
     observation_write_failures = audit_counts.get("agent_runtime.rollout_observation_write_failed", 0)
 
@@ -100,6 +121,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
             "legacy_v2_disagreement_total": None,
             "rollout_gates": [],
             "rollout_observations": [dict(row) for row in rollout_observation_rows],
+            "autotutor_transition_canary": autotutor_transition_canary,
             "release_evidence_count": release_evidence_count,
         }
     status_counts = Counter(str(run.get("status") or "unknown") for run in runs)
@@ -237,6 +259,7 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
         "by_event_type": {str(row["event_type"]): int(row["count"] or 0) for row in event_types},
         "rollout_gates": rollout_gates,
         "rollout_observations": [dict(row) for row in rollout_observation_rows],
+        "autotutor_transition_canary": autotutor_transition_canary,
         "release_evidence_count": release_evidence_count,
     }
 

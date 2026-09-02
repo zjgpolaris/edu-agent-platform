@@ -93,7 +93,11 @@ def _assert_v2(db_path: Path) -> None:
         manifest_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(llm_capability_manifests)")}
         assert "idx_rollout_observation_slice_created" in rollout_indexes
         assert "idx_rollout_observation_eligibility" in rollout_indexes
-        assert {"traffic_cohort", "rollout_eligible", "eligibility_reason"} <= rollout_columns
+        assert {
+            "traffic_cohort", "rollout_eligible", "eligibility_reason",
+            "assigned_executor", "selected_executor", "transition_kind", "transition_id",
+            "observation_schema_version", "outcome_schema_version", "commit_status",
+        } <= rollout_columns
         assert {"account_status", "traffic_cohort", "updated_at"} <= account_columns
         assert "uq_agent_release_evidence_hash" in release_indexes
         assert "uq_llm_capability_manifest_hash" in manifest_indexes

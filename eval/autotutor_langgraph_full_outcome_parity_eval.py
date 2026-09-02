@@ -115,6 +115,8 @@ def _build_trajectory():
 
 
 def main() -> None:
+    graph_source = (ROOT / "backend" / "agents" / "autotutor_graph.py").read_text(encoding="utf-8")
+    assert "execute_autotutor_transition" not in graph_source
     cases = _build_trajectory()
     legacy = LegacyTransitionExecutor()
     graph = GraphActiveTransitionExecutor()
@@ -155,9 +157,9 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "git_commit": commit,
         "dirty": dirty,
-        "executor_config_version": "v1.49.1-independent-transition",
-        "observation_schema": "v1.49.1-observation",
-        "outcome_schema": "v1.49.1-outcome",
+        "executor_config_version": "v1.49.2-canary-readiness",
+        "observation_schema": "v1.49.2-observation",
+        "outcome_schema": "v1.49.2-outcome",
         "trajectory_kinds": [case[2].transition_kind for case in cases],
         "transitions_total": total,
         "transitions_matched": matched,
@@ -174,7 +176,7 @@ def main() -> None:
     REPORT_MD.write_text(
         "# AutoTutor LangGraph Independent Transition Evidence\n\n"
         f"- Commit: `{commit}`{' (dirty)' if dirty else ''}\n"
-        "- Observation/outcome: `v1.49.1-observation` / `v1.49.1-outcome`\n"
+        "- Observation/outcome: `v1.49.2-observation` / `v1.49.2-outcome`\n"
         f"- Full trajectory parity: {matched}/{total}\n"
         "- Executor external calls / side effects: 0 / 0\n"
         "- Legacy wrapper tripwire: passed\n"

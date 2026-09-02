@@ -210,6 +210,7 @@ class AutoTutorState(BaseModel):
     transition_contract_version: Literal[2] = 2
     executor_contract_version: Literal[3] = 3
     executor_mode: Literal["legacy", "graph_active"] = "legacy"
+    executor_assigned_mode: Literal["legacy", "graph_active"] | None = None
     executor_config_version: str | None = None
     executor_bucket: int | None = None
     executor_fallback_reason: str | None = None
@@ -394,8 +395,13 @@ def _record_executor_observation(
             traffic_cohort=context.traffic_cohort,
             rollout_eligible=context.rollout_eligible,
             eligibility_reason=context.eligibility_reason,
+            assigned_executor=state.executor_assigned_mode or state.executor_mode,
             selected_executor=state.executor_mode,
             transition_kind=transition_kind,
+            transition_id=outcome.diagnostics.transition_id if outcome else None,
+            observation_schema_version="v1.49.2-observation" if outcome else None,
+            outcome_schema_version=outcome.schema_version if outcome else None,
+            commit_status=status,
             comparator_matched=outcome.diagnostics.comparator_matched if comparator_observed and outcome else None,
             fallback_reason=state.executor_fallback_reason,
             provider_latency_ms=round(outcome.diagnostics.provider_latency_ms) if outcome else None,
@@ -521,6 +527,8 @@ def _ensure_session_table() -> None:
 
 
 def _restore_state(payload: dict[str, Any]) -> AutoTutorState:
+    if "executor_assigned_mode" not in payload:
+        payload = {**payload, "executor_assigned_mode": payload.get("executor_mode", "legacy")}
     state = AutoTutorState.model_validate(payload)
     if state.status == "completed" and state.phase != "completed":
         # 兼容 v1.26 之前持久化的已完成会话（当时还没有 phase 字段）。
@@ -1101,9 +1109,13 @@ class _Reflection(BaseModel):
     explanation: str
 
 
-def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ctx: ToolExecutionContext) -> ReflectionRecord:
-    """学生答错 → 反思（讲错/超纲/粗心）→ 真实修改计划（补讲/降难度/换例子）。"""
-    reflect_started = perf_counter()
+def _acquire_reflection_observation(
+    step: LessonStep,
+    answer: str,
+    *,
+    step_index: int,
+) -> ReflectionRecord:
+    """Acquire one model/fallback reflection without mutating transition state."""
     question = step.question or {}
     assessment = _assessment_from_question(question)
     feedback = build_answer_feedback(assessment, answer)
@@ -1156,7 +1168,21 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
             fallback_used=True,
         ).model_dump(mode="json")
 
-    public_provenance = public_decision_provenance(provenance)
+    return ReflectionRecord(
+        step_index=step_index,
+        knowledge_point=step.knowledge_point,
+        diagnosis=reflection.diagnosis,
+        adjustment=reflection.adjustment,
+        explanation=reflection.explanation,
+        decision_provenance=provenance,
+    )
+
+
+def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ctx: ToolExecutionContext) -> ReflectionRecord:
+    """学生答错 → 反思（讲错/超纲/粗心）→ 真实修改计划（补讲/降难度/换例子）。"""
+    reflect_started = perf_counter()
+    record = _acquire_reflection_observation(step, answer, step_index=state.current_step_index)
+    public_provenance = public_decision_provenance(record.decision_provenance)
 
     _emit(
         state,
@@ -1166,10 +1192,10 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
         started_at=reflect_started,
         metadata={
             "knowledge_point": step.knowledge_point,
-            "diagnosis": reflection.diagnosis,
-            "adjustment": reflection.adjustment,
+            "diagnosis": record.diagnosis,
+            "adjustment": record.adjustment,
             "decision_provenance": public_provenance,
-            "result_summary": f"诊断：{reflection.diagnosis} → 调整：{reflection.adjustment}",
+            "result_summary": f"诊断：{record.diagnosis} → 调整：{record.adjustment}",
         },
     )
 
@@ -1181,8 +1207,8 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
     replan = replan_policy(
         current_difficulty=step.difficulty,
         later_difficulties=[later.difficulty for later in later_steps],
-        adjustment=reflection.adjustment,
-        explanation=reflection.explanation,
+        adjustment=record.adjustment,
+        explanation=record.explanation,
         later_labels=[later.knowledge_point for later in later_steps],
     )
     step.difficulty = replan.current_difficulty
@@ -1199,7 +1225,7 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
         started_at=replan_started,
         metadata={
             "replans": state.replans,
-            "adjustment": reflection.adjustment,
+            "adjustment": record.adjustment,
             "plan_changes": changes,
             "result_summary": "；".join(changes),
         },
@@ -1208,14 +1234,6 @@ def _reflect_and_replan(state: AutoTutorState, step: LessonStep, answer: str, ct
     # 重新取材出题（被调整后的难度）
     _KERNEL_ACT(state, step, ctx)
 
-    record = ReflectionRecord(
-        step_index=state.current_step_index,
-        knowledge_point=step.knowledge_point,
-        diagnosis=reflection.diagnosis,
-        adjustment=reflection.adjustment,
-        explanation=reflection.explanation,
-        decision_provenance=provenance,
-    )
     state.reflect_log.append(record)
     return record
 
@@ -1989,6 +2007,7 @@ def start_session(
     )
     decision = select_executor(subject=actor_id or student_id, context=execution_context)
     state.executor_mode = decision.mode
+    state.executor_assigned_mode = decision.mode
     state.executor_config_version = decision.config_version
     state.executor_bucket = decision.bucket
     state.executor_fallback_reason = decision.fallback_reason

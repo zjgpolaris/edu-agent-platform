@@ -12,7 +12,7 @@ from agents.autotutor_execution import (
 from agents.autotutor_domain import replan_policy
 
 
-def _restore(before: Any):
+def initialize_transition_draft(before: Any):
     from agents import auto_tutor as at
 
     payload = before.model_dump(mode="json") if hasattr(before, "model_dump") else copy.deepcopy(before)
@@ -119,7 +119,7 @@ def _apply_advance(state: Any, observations: AutoTutorObservationBundle) -> None
     _apply_exit_ticket(state, observations.exit_ticket)
 
 
-def _apply_start(state: Any, observations: AutoTutorObservationBundle) -> None:
+def apply_start_transition(state: Any, observations: AutoTutorObservationBundle) -> None:
     from agents import auto_tutor as at
 
     if not observations.plan or not observations.content:
@@ -140,7 +140,13 @@ def _apply_start(state: Any, observations: AutoTutorObservationBundle) -> None:
     _record_observed_content(state, state.lesson_plan[0])
 
 
-def _apply_lesson_answer(state: Any, answer: str, observations: AutoTutorObservationBundle) -> tuple[bool, Any | None]:
+def apply_lesson_answer_transition(
+    state: Any,
+    answer: str,
+    observations: AutoTutorObservationBundle,
+    *,
+    claimed_revision: int,
+) -> tuple[bool, Any | None]:
     from agents import auto_tutor as at
     from agents.autotutor_content import answer_feedback as build_answer_feedback
 
@@ -191,6 +197,7 @@ def _apply_lesson_answer(state: Any, answer: str, observations: AutoTutorObserva
         step.status = "practiced"
         state.mastery_delta[step.knowledge_point] = 0.0
         _apply_advance(state, observations)
+        state.revision = claimed_revision + 1
         return True, None
 
     if step.attempts < at.MAX_ATTEMPTS_PER_STEP and state.replans < at.MAX_REPLANS:
@@ -231,42 +238,40 @@ def _apply_lesson_answer(state: Any, answer: str, observations: AutoTutorObserva
         state.lesson_plan[state.current_step_index] = observed_step
         state.reflect_log.append(reflection_record)
         _record_observed_content(state, observed_step)
+        state.revision = claimed_revision + 1
         return False, reflection_record
 
     step.status = "struggling"
     state.mastery_delta[step.knowledge_point] = -0.2
     at._emit(state, "give_up_step", "Re-plan · 标记薄弱并前进", "re_plan", metadata={"knowledge_point": step.knowledge_point})
     _apply_advance(state, observations)
+    state.revision = claimed_revision + 1
     return False, None
 
 
-def execute_autotutor_transition(
-    *,
-    before: Any,
-    command: dict[str, Any],
-    observations: AutoTutorObservationBundle,
-) -> AutoTutorTransitionOutcome:
-    """Compute a full outcome without external calls or persistence."""
+def apply_exit_answer_transition(state: Any, answer: str, *, claimed_revision: int) -> bool:
     from agents import auto_tutor as at
 
-    observations.assert_no_derived_outcome()
-    state = _restore(before)
-    kind = observations.transition_kind
-    last_correct: bool | None = None
-    reflection = None
-    if kind == "start":
-        _apply_start(state, observations)
-    elif kind == "lesson_answer":
-        last_correct, reflection = _apply_lesson_answer(state, str(command.get("answer") or ""), observations)
-        state.revision = int(command.get("claimed_revision", state.revision)) + 1
-    elif kind == "exit_ticket_answer":
-        last_correct, _ = at._KERNEL_SUBMIT_EXIT_TICKET(state, str(command.get("answer") or ""))
-        at._KERNEL_FINALIZE(state)
-        state.revision = int(command.get("claimed_revision", state.revision)) + 1
-    elif kind == "recovery_resume":
-        pass
-    else:
-        raise ValueError("observation_transition_kind_invalid")
+    correct, _ = at._KERNEL_SUBMIT_EXIT_TICKET(state, answer)
+    at._KERNEL_FINALIZE(state)
+    state.revision = claimed_revision + 1
+    return correct
+
+
+def apply_recovery_transition(_state: Any) -> None:
+    return None
+
+
+def build_transition_outcome(
+    *,
+    state: Any,
+    before: Any,
+    observations: AutoTutorObservationBundle,
+    last_correct: bool | None,
+    reflection: Any | None,
+) -> AutoTutorTransitionOutcome:
+    from agents import auto_tutor as at
+
     state.updated_at = float(observations.clock.get("captured_at") or state.updated_at)
     before_sequence = max(
         (getattr(item, "sequence", 0) for item in getattr(before, "runtime_steps", []) or []),
@@ -290,9 +295,52 @@ def execute_autotutor_transition(
         runtime_finalize={"run_id": state.run_id} if state.status == "completed" and state.run_id else None,
         public_result=public,
         diagnostics=AutoTutorTransitionDiagnostics(
+            transition_id=observations.transition_id,
             observation_external_calls=sum(
                 int(observations.call_counts.get(key, 0))
                 for key in ("model", "retrieval", "tool", "network")
             ),
         ),
+    )
+
+
+def execute_autotutor_transition(
+    *,
+    before: Any,
+    command: dict[str, Any],
+    observations: AutoTutorObservationBundle,
+) -> AutoTutorTransitionOutcome:
+    """Compute a full outcome without external calls or persistence."""
+    from agents import auto_tutor as at
+
+    observations.assert_no_derived_outcome()
+    state = initialize_transition_draft(before)
+    kind = observations.transition_kind
+    last_correct: bool | None = None
+    reflection = None
+    if kind == "start":
+        apply_start_transition(state, observations)
+    elif kind == "lesson_answer":
+        last_correct, reflection = apply_lesson_answer_transition(
+            state,
+            str(command.get("answer") or ""),
+            observations,
+            claimed_revision=int(command.get("claimed_revision", state.revision)),
+        )
+    elif kind == "exit_ticket_answer":
+        last_correct = apply_exit_answer_transition(
+            state,
+            str(command.get("answer") or ""),
+            claimed_revision=int(command.get("claimed_revision", state.revision)),
+        )
+    elif kind == "recovery_resume":
+        apply_recovery_transition(state)
+    else:
+        raise ValueError("observation_transition_kind_invalid")
+    return build_transition_outcome(
+        state=state,
+        before=before,
+        observations=observations,
+        last_correct=last_correct,
+        reflection=reflection,
     )

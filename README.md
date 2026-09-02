@@ -110,7 +110,9 @@ PYTHONPATH=backend python3 scripts/seed_pilot_demo.py
 | 会话存储 | Redis（本地）/ 进程内存兜底（生产） |
 | CI/CD | GitHub Actions：frontend lint + release gate + quick-eval；Docker build 在 main/manual 验证 |
 
-AutoTutor 的 `autotutor_sessions` CAS 与领域事务仍是唯一业务写入边界。v1.49 增加 LangGraph active transition canary：`EDU_AGENT_AUTOTUTOR_EXECUTOR_MODE=legacy|shadow|active_canary`，新会话仅按服务端可信 verified runtime cohort 和稳定 bucket 选择执行器，并把选择粘性保存到 session state；active BPS 默认 0、本版上限 10%，kill switch 或不安全配置会 fail-closed 到 Legacy。Graph 只接管 transition compute，不引入 PostgreSQL checkpointer/interrupt，也不接管学习证据事务。旧 `EDU_AGENT_AUTOTUTOR_LANGGRAPH_SHADOW_ENABLED=true` 在新 mode 未配置时仍兼容映射到 Shadow。
+AutoTutor 的 `autotutor_sessions` CAS 与领域事务仍是唯一业务写入边界。v1.49.2 加固 LangGraph active transition canary：`EDU_AGENT_AUTOTUTOR_EXECUTOR_MODE=legacy|shadow|active_canary`，新会话仅按服务端可信 verified runtime cohort 和稳定 bucket 选择执行器，并把 assigned/selected executor 粘性保存到 session state；active BPS 默认 0、production 本版硬上限 1%，kill switch 或不安全配置会 fail-closed 到 Legacy。Graph 只接管 transition compute，不引入 PostgreSQL checkpointer/interrupt，也不接管学习证据事务。旧 `EDU_AGENT_AUTOTUTOR_LANGGRAPH_SHADOW_ENABLED=true` 在新 mode 未配置时仍兼容映射到 Shadow。
+
+AutoTutor Canary 运维顺序固定为：先合并不可变 commit，并在 `BPS=0` 下升级到 migration 015；部署后确认 runtime schema、observation health 和 verified cohort；再以不超过 `100 BPS` 手工开启 Canary。达到至少 100 个 Graph-assigned committed transitions 后，通过 AgentOps/rollout status 核对 comparator 100%、fallback <1%、无重复 effect、无越权流量且延迟未超门槛。任一 blocker 出现时立即设置 kill switch，或恢复 `EXECUTOR_MODE=legacy`、`BPS=0`；已提交 transition 不重放，015 的 nullable 遥测列无需回滚。
 
 ---
 

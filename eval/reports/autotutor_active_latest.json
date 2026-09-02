@@ -1,18 +1,20 @@
 {
-  "blockers": [],
-  "decision": "GO",
-  "dirty": false,
+  "blockers": [
+    "workspace_dirty_commit_evidence_not_sealed"
+  ],
+  "decision": "NO_GO",
+  "dirty": true,
   "duplicate_effect_count": 0,
   "evidence_scope": "development",
   "exact_parity_rate": 1.0,
-  "executor_config_version": "v1.49.1-independent-transition",
+  "executor_config_version": "v1.49.2-canary-readiness",
   "executor_external_call_attempts": 0,
   "executor_side_effect_attempts": 0,
-  "generated_at": "2026-09-02T03:49:35.676615+00:00",
-  "git_commit": "a38f35365a6f879436b59ae4650c782c3b9e3e0e",
+  "generated_at": "2026-09-02T04:40:56.166112+00:00",
+  "git_commit": "1d49cde0c7c0d6d112fb45ba9efc8d9f5e1827d1",
   "legacy_wrapper_tripwire": "passed",
-  "observation_schema": "v1.49.1-observation",
-  "outcome_schema": "v1.49.1-outcome",
+  "observation_schema": "v1.49.2-observation",
+  "outcome_schema": "v1.49.2-outcome",
   "schema_version": 2,
   "trajectory_kinds": [
     "start",

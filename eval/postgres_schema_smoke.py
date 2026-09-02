@@ -29,7 +29,11 @@ def main() -> None:
         observation_columns = {column["name"] for column in inspector.get_columns("agent_rollout_observations")}
         observation_indexes = {index["name"] for index in inspector.get_indexes("agent_rollout_observations")}
         assert {"account_status", "traffic_cohort", "updated_at"} <= account_columns
-        assert {"traffic_cohort", "rollout_eligible", "eligibility_reason"} <= observation_columns
+        assert {
+            "traffic_cohort", "rollout_eligible", "eligibility_reason",
+            "assigned_executor", "selected_executor", "transition_id",
+            "observation_schema_version", "outcome_schema_version", "commit_status",
+        } <= observation_columns
         assert "idx_rollout_observation_eligibility" in observation_indexes
         version = str(conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar_one())
         assert version == RUNTIME_SCHEMA_HEAD, (version, RUNTIME_SCHEMA_HEAD)

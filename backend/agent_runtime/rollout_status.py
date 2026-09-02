@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from agent_runtime.context import RuntimeV2Settings
@@ -9,11 +9,15 @@ from agent_runtime.evidence_store import load_release_evidence
 from agent_runtime.readiness import runtime_schema_readiness
 from agent_runtime.rollout_config import validate_runtime_rollout_config
 from agent_runtime.rollout_gate import build_rollout_readiness
-from agent_runtime.rollout_observations import control_observation_progress, observation_write_health
+from agent_runtime.rollout_observations import (
+    aggregate_autotutor_transition_canary,
+    control_observation_progress,
+    observation_write_health,
+)
 from deployment import auth_configuration_status, deployed_commit, deployment_environment, runtime_configuration_errors, runtime_config_version
 
 
-SUPPORTED_ROLLOUT_AGENTS = {"history_character"}
+SUPPORTED_ROLLOUT_AGENTS = {"history_character", "auto_tutor"}
 HARD_GATE_REASONS = {
     "duplicate_side_effects_detected",
     "invalid_transitions_detected",
@@ -58,6 +62,38 @@ def build_rollout_status(
         raise ValueError("unsupported rollout agent type")
     minimum = _minimum_samples(minimum_samples)
     window_hours = max(1, min(int(window_hours), 24 * 31))
+    if agent_type == "auto_tutor":
+        commit = deployed_commit()
+        environment = deployment_environment()
+        config = os.getenv("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.2-canary").strip()
+        since = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+        try:
+            aggregate = aggregate_autotutor_transition_canary(
+                config_version=config,
+                deployed_commit=commit,
+                environment=environment,
+                since=since,
+                minimum_graph_transitions=minimum,
+            )
+        except Exception as exc:
+            return {
+                "schema_version": 1, "agent_type": "auto_tutor", "phase": "canary_unknown",
+                "status": "UNKNOWN", "decision": "NO_GO", "blockers": ["canary_query_failed"],
+                "error_type": exc.__class__.__name__,
+                "deployment": {"commit": commit or None, "config_version": config or None, "environment": environment or None},
+            }
+        decision = str(aggregate["decision"])
+        insufficient = "insufficient_graph_samples" in aggregate["blockers"]
+        return {
+            "schema_version": 1,
+            "agent_type": "auto_tutor",
+            "phase": "collecting_canary" if insufficient else "canary_evaluated",
+            "status": "NOT_READY" if insufficient else decision,
+            "decision": decision,
+            "blockers": aggregate["blockers"],
+            "deployment": {"commit": commit or None, "config_version": config or None, "environment": environment or None},
+            "autotutor_transition_canary": aggregate,
+        }
     settings = RuntimeV2Settings.from_env()
     commit = deployed_commit()
     environment = deployment_environment()

@@ -98,6 +98,10 @@ class AutoTutorActiveGraphState(TypedDict, total=False):
     before: Any
     command: dict[str, Any]
     observations: Any
+    draft: Any
+    last_correct: bool | None
+    reflection: Any
+    transition_applied: bool
     outcome: Any
     diagnostics: list[str]
     visited_nodes: list[str]
@@ -106,9 +110,15 @@ class AutoTutorActiveGraphState(TypedDict, total=False):
 def _active_load_context(state: AutoTutorActiveGraphState) -> dict[str, Any]:
     observation = state.get("observations")
     diagnostics: list[str] = []
-    if observation is None or getattr(observation, "schema_version", None) != "v1.49.1-observation":
+    if observation is None or getattr(observation, "schema_version", None) != "v1.49.2-observation":
         diagnostics.append("active_observation_invalid")
-    return {"diagnostics": diagnostics, "visited_nodes": ["load_context"]}
+    result: dict[str, Any] = {"diagnostics": diagnostics, "visited_nodes": ["load_context"]}
+    if not diagnostics:
+        from agents.autotutor_transition_kernel import initialize_transition_draft
+
+        result["draft"] = initialize_transition_draft(state.get("before"))
+        result["transition_applied"] = False
+    return result
 
 
 def _active_route(state: AutoTutorActiveGraphState) -> str:
@@ -131,6 +141,74 @@ def _active_visit(name: str):
     return visit
 
 
+def _active_apply_start(state: AutoTutorActiveGraphState) -> dict[str, Any]:
+    from agents.autotutor_transition_kernel import apply_start_transition
+
+    draft = state.get("draft")
+    apply_start_transition(draft, state.get("observations"))
+    return {
+        "draft": draft,
+        "transition_applied": True,
+        "visited_nodes": [*(state.get("visited_nodes") or []), "plan"],
+    }
+
+
+def _active_apply_lesson(name: str):
+    def apply(state: AutoTutorActiveGraphState) -> dict[str, Any]:
+        visited = [*(state.get("visited_nodes") or []), name]
+        if state.get("transition_applied"):
+            return {"visited_nodes": visited}
+        from agents.autotutor_transition_kernel import apply_lesson_answer_transition
+
+        draft = state.get("draft")
+        command = state.get("command") or {}
+        correct, reflection = apply_lesson_answer_transition(
+            draft,
+            str(command.get("answer") or ""),
+            state.get("observations"),
+            claimed_revision=int(command.get("claimed_revision", getattr(draft, "revision", 0))),
+        )
+        return {
+            "draft": draft,
+            "last_correct": correct,
+            "reflection": reflection,
+            "transition_applied": True,
+            "visited_nodes": visited,
+        }
+
+    return apply
+
+
+def _active_apply_exit(state: AutoTutorActiveGraphState) -> dict[str, Any]:
+    from agents.autotutor_transition_kernel import apply_exit_answer_transition
+
+    draft = state.get("draft")
+    command = state.get("command") or {}
+    correct = apply_exit_answer_transition(
+        draft,
+        str(command.get("answer") or ""),
+        claimed_revision=int(command.get("claimed_revision", getattr(draft, "revision", 0))),
+    )
+    return {
+        "draft": draft,
+        "last_correct": correct,
+        "transition_applied": True,
+        "visited_nodes": [*(state.get("visited_nodes") or []), "verify_exit_ticket"],
+    }
+
+
+def _active_apply_recovery(state: AutoTutorActiveGraphState) -> dict[str, Any]:
+    from agents.autotutor_transition_kernel import apply_recovery_transition
+
+    draft = state.get("draft")
+    apply_recovery_transition(draft)
+    return {
+        "draft": draft,
+        "transition_applied": True,
+        "visited_nodes": [*(state.get("visited_nodes") or []), "recovery_resume"],
+    }
+
+
 def _active_lesson_route(state: AutoTutorActiveGraphState) -> str:
     before = state.get("before")
     payload = before.model_dump(mode="json") if hasattr(before, "model_dump") else (before or {})
@@ -150,14 +228,18 @@ def _active_lesson_route(state: AutoTutorActiveGraphState) -> str:
 
 
 def _active_compute(state: AutoTutorActiveGraphState) -> dict[str, Any]:
-    """Independently compute the complete transition from observations."""
-    from agents.autotutor_transition_kernel import execute_autotutor_transition
+    """Build an outcome from the draft produced by real Graph nodes."""
+    from agents.autotutor_transition_kernel import build_transition_outcome
 
     try:
-        outcome = execute_autotutor_transition(
+        if not state.get("transition_applied"):
+            raise ValueError("active_transition_not_applied")
+        outcome = build_transition_outcome(
+            state=state.get("draft"),
             before=state.get("before"),
-            command=state.get("command") or {},
             observations=state.get("observations"),
+            last_correct=state.get("last_correct"),
+            reflection=state.get("reflection"),
         )
     except Exception:
         return {"diagnostics": [*(state.get("diagnostics") or []), "active_outcome_invalid"]}
@@ -173,21 +255,21 @@ def _active_fail(state: AutoTutorActiveGraphState) -> dict[str, Any]:
 def build_autotutor_active_graph():
     graph = StateGraph(AutoTutorActiveGraphState)
     graph.add_node("load_context", _active_load_context)
-    graph.add_node("plan", _active_visit("plan"))
+    graph.add_node("plan", _active_apply_start)
     graph.add_node("content_gate", _active_visit("content_gate"))
     graph.add_node("teach", _active_visit("teach"))
     graph.add_node("prepare_assessment", _active_visit("prepare_assessment"))
     graph.add_node("judge", _active_visit("judge"))
-    graph.add_node("advance", _active_visit("advance"))
+    graph.add_node("advance", _active_apply_lesson("advance"))
     graph.add_node("next_content_or_exit", _active_visit("next_content_or_exit"))
-    graph.add_node("mark_struggling", _active_visit("mark_struggling"))
-    graph.add_node("reflect", _active_visit("reflect"))
+    graph.add_node("mark_struggling", _active_apply_lesson("mark_struggling"))
+    graph.add_node("reflect", _active_apply_lesson("reflect"))
     graph.add_node("re_plan", _active_visit("re_plan"))
     graph.add_node("reteach", _active_visit("reteach"))
-    graph.add_node("verify_exit_ticket", _active_visit("verify_exit_ticket"))
+    graph.add_node("verify_exit_ticket", _active_apply_exit)
     graph.add_node("calculate_mastery", _active_visit("calculate_mastery"))
     graph.add_node("build_effect_intents", _active_visit("build_effect_intents"))
-    graph.add_node("recovery_resume", _active_visit("recovery_resume"))
+    graph.add_node("recovery_resume", _active_apply_recovery)
     graph.add_node("validate_state", _active_visit("validate_state"))
     graph.add_node("route_current_phase", _active_visit("route_current_phase"))
     graph.add_node("build_outcome", _active_compute)

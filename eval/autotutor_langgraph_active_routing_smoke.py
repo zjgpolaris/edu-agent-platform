@@ -75,6 +75,13 @@ def main() -> None:
     assert select_executor(subject=subject, context=_context(), settings=killed).mode == "legacy"
     legacy = AutoTutorExecutorSettings.from_env({})
     assert legacy.mode == "legacy" and legacy.active_bps == 0
+    production_unsafe = AutoTutorExecutorSettings.from_env({
+        **active_env,
+        "EDU_AGENT_ENVIRONMENT": "production",
+        "EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS": "101",
+    })
+    assert not production_unsafe.valid
+    assert "production_active_bps_exceeds_one_percent" in production_unsafe.reason_codes
     print("autotutor_langgraph_active_routing_smoke=PASS")
 
 

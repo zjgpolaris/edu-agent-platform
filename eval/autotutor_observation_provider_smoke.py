@@ -28,7 +28,8 @@ def main() -> None:
         patch.object(at, "get_student_profile", return_value=type("Profile", (), {"grade": "八年级", "weak_topics": [], "recent_topics": []})()),
         patch.object(at, "get_weakpoints", return_value=[]),
         patch.object(at, "_generate_plan", return_value=plan),
-        patch.object(at, "_KERNEL_ACT", return_value=None) as act,
+        patch.object(at, "_KERNEL_ACT", side_effect=AssertionError("provider must not call the transition kernel")) as act,
+        patch.object(at, "_KERNEL_MUTATE_ANSWER", side_effect=AssertionError("provider must not mutate answers")) as mutate,
     ):
         bundle = DefaultAutoTutorObservationProvider().prepare(
             before=before,
@@ -36,13 +37,17 @@ def main() -> None:
             context=AutoTutorExecutionContext(),
         )
 
-    assert act.call_count == 1
+    assert act.call_count == 0
+    assert mutate.call_count == 0
     assert before.model_dump(mode="json") == original
-    assert bundle.schema_version == "v1.49.1-observation"
+    assert bundle.schema_version == "v1.49.2-observation"
     assert bundle.transition_kind == "start"
     bundle.assert_no_derived_outcome()
     payload = bundle.model_dump(mode="json")
     assert not any(key in payload for key in ("materialized", "legacy_after", "expected_state", "expected_projection"))
+    source = (ROOT / "backend" / "agents" / "autotutor_observations.py").read_text(encoding="utf-8")
+    assert "_KERNEL_" not in source
+    assert "execute_autotutor_transition" not in source
     print("autotutor_observation_provider_smoke=PASS")
 
 

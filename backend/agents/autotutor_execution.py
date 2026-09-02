@@ -74,8 +74,8 @@ class AutoTutorExecutorSettings:
             errors.append("executor_mode_invalid")
             mode = "legacy"
         bps = _integer(env, "EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS")
-        config = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49-active")).strip()[:120]
-        salt = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "v1.49")).strip()[:120]
+        config = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.2-canary")).strip()[:120]
+        salt = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "v1.49.2")).strip()[:120]
         kill_switch = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_KILL_SWITCH")
         comparator = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_COMPARATOR_ENABLED", True)
         fallback = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_FALLBACK_ENABLED", True)
@@ -98,11 +98,13 @@ class AutoTutorExecutorSettings:
             commit = str(env.get("EDU_AGENT_DEPLOYED_COMMIT", "") or env.get("RENDER_GIT_COMMIT", "") or (deployed_commit() if environ is None else ""))
             if environment == "production" and not re.fullmatch(r"[0-9a-f]{40}", commit):
                 errors.append("deployed_commit_invalid")
+            if environment == "production" and bps > 100:
+                errors.append("production_active_bps_exceeds_one_percent")
         return cls(
             mode=mode,  # type: ignore[arg-type]
             active_bps=max(0, min(bps, 1000)),
-            config_version=config or "v1.49-active",
-            bucket_salt=salt or "v1.49",
+            config_version=config or "v1.49.2-canary",
+            bucket_salt=salt or "v1.49.2",
             kill_switch=kill_switch,
             comparator_enabled=comparator,
             fallback_enabled=fallback,
@@ -157,7 +159,7 @@ class AutoTutorObservationBundle(BaseModel):
     """Immutable, reusable input captured exactly once for a transition."""
 
     model_config = ConfigDict(frozen=True)
-    schema_version: Literal["v1.49.1-observation"] = "v1.49.1-observation"
+    schema_version: Literal["v1.49.2-observation"] = "v1.49.2-observation"
     transition_id: str
     transition_kind: TransitionKind
     command: dict[str, Any] = Field(default_factory=dict)
@@ -206,6 +208,7 @@ class AutoTutorObservationProvider(Protocol):
 
 
 class AutoTutorTransitionDiagnostics(BaseModel):
+    transition_id: str | None = None
     observation_external_calls: int = 0
     provider_latency_ms: float = 0.0
     executor_latency_ms: float = 0.0
@@ -219,7 +222,7 @@ class AutoTutorTransitionOutcome(BaseModel):
     """Complete internal outcome; only one instance may cross the commit boundary."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    schema_version: Literal["v1.49.1-outcome"] = "v1.49.1-outcome"
+    schema_version: Literal["v1.49.2-outcome"] = "v1.49.2-outcome"
     executor_mode: ExecutorMode
     next_state: object
     learning_events: list[LearningEventIntent] = Field(default_factory=list)

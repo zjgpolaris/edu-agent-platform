@@ -122,7 +122,7 @@ def _prepare_production_shape() -> dict[str, object]:
 
 def _verify_after(before: dict[str, object]) -> None:
     with get_connection() as conn:
-        assert _revision() == "014"
+        assert _revision() == "015"
         assert _legacy_fingerprints(conn) == before["legacy_fingerprints"]
         assert tuple(conn.execute(text("SELECT student_id, grade, display_name FROM students WHERE student_id=:sid"), {"sid": FIXTURE_STUDENT}).one()) == before["student"]
         assert tuple(conn.execute(text("SELECT id, student_id, feature, event_type FROM learning_events WHERE id='migration-event'")).one()) == before["learning"]
@@ -135,10 +135,12 @@ def _verify_after(before: dict[str, object]) -> None:
         learning_columns = {column["name"] for column in sa_inspect(conn).get_columns("learning_events")}
         audit_columns = {column["name"] for column in sa_inspect(conn).get_columns("audit_events")}
         autotutor_columns = {column["name"] for column in sa_inspect(conn).get_columns("autotutor_sessions")}
+        observation_columns = {column["name"] for column in sa_inspect(conn).get_columns("agent_rollout_observations")}
         review_columns = {column["name"] for column in sa_inspect(conn).get_columns("review_sessions")}
         assert {"data_scope", "effect_key"} <= learning_columns
         assert "data_scope" in audit_columns
         assert {"run_id", "revision", "inflight_request_hash", "last_request_hash"} <= autotutor_columns
+        assert {"assigned_executor", "transition_id", "observation_schema_version", "outcome_schema_version", "commit_status"} <= observation_columns
         assert {"revision", "status", "last_request_hash", "last_response_json"} <= review_columns
         assert conn.execute(text("SELECT data_scope FROM learning_events WHERE id='migration-event'")).scalar_one() == "runtime"
         assert conn.execute(text("SELECT data_scope FROM audit_events WHERE id='migration-audit'")).scalar_one() == "runtime"

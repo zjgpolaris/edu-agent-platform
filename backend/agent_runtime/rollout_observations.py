@@ -61,8 +61,13 @@ def record_rollout_observation(
     traffic_cohort: str | None = None,
     rollout_eligible: bool | None = None,
     eligibility_reason: str | None = None,
+    assigned_executor: str | None = None,
     selected_executor: str | None = None,
     transition_kind: str | None = None,
+    transition_id: str | None = None,
+    observation_schema_version: str | None = None,
+    outcome_schema_version: str | None = None,
+    commit_status: str | None = None,
     comparator_matched: bool | None = None,
     fallback_reason: str | None = None,
     provider_latency_ms: int | None = None,
@@ -103,14 +108,18 @@ def record_rollout_observation(
             observation_id, agent_type, config_version, runtime_mode, deployed_commit,
             environment, status, latency_ms, trace_id, data_scope, created_at
             , traffic_cohort, rollout_eligible, eligibility_reason
-            , selected_executor, transition_kind, comparator_matched, fallback_reason
+            , assigned_executor, selected_executor, transition_kind, transition_id
+            , observation_schema_version, outcome_schema_version, commit_status
+            , comparator_matched, fallback_reason
             , provider_latency_ms, executor_latency_ms, comparator_latency_ms
             , observation_external_calls, effect_intent_count
         ) VALUES (
             :observation_id, :agent_type, :config_version, :runtime_mode, :deployed_commit,
             :environment, :status, :latency_ms, :trace_id, :data_scope, :created_at
             , :traffic_cohort, :rollout_eligible, :eligibility_reason
-            , :selected_executor, :transition_kind, :comparator_matched, :fallback_reason
+            , :assigned_executor, :selected_executor, :transition_kind, :transition_id
+            , :observation_schema_version, :outcome_schema_version, :commit_status
+            , :comparator_matched, :fallback_reason
             , :provider_latency_ms, :executor_latency_ms, :comparator_latency_ms
             , :observation_external_calls, :effect_intent_count
         )"""), {
@@ -128,8 +137,13 @@ def record_rollout_observation(
             "traffic_cohort": cohort,
             "rollout_eligible": 1 if rollout_eligible else 0,
             "eligibility_reason": reason,
+            "assigned_executor": str(assigned_executor)[:20] if assigned_executor else None,
             "selected_executor": str(selected_executor)[:20] if selected_executor else None,
             "transition_kind": str(transition_kind)[:40] if transition_kind else None,
+            "transition_id": str(transition_id)[:160] if transition_id else None,
+            "observation_schema_version": str(observation_schema_version)[:60] if observation_schema_version else None,
+            "outcome_schema_version": str(outcome_schema_version)[:60] if outcome_schema_version else None,
+            "commit_status": str(commit_status)[:40] if commit_status else None,
             "comparator_matched": None if comparator_matched is None else (1 if comparator_matched else 0),
             "fallback_reason": str(fallback_reason)[:120] if fallback_reason else None,
             "provider_latency_ms": max(0, int(provider_latency_ms)) if provider_latency_ms is not None else None,
@@ -172,6 +186,9 @@ def try_record_rollout_observation(**kwargs: Any) -> str | None:
                         "error_type": exc.__class__.__name__,
                         "agent_type": str(kwargs.get("agent_type") or "unknown")[:80],
                         "runtime_mode": str(kwargs.get("runtime_mode") or "unknown")[:20],
+                        "config_version": str(kwargs.get("config_version") or runtime_config_version())[:120],
+                        "deployed_commit": str(kwargs.get("deployed_commit") or deployed_commit())[:120],
+                        "environment": str(kwargs.get("environment") or deployment_environment())[:80],
                     },
                 )
             except Exception:
@@ -179,18 +196,29 @@ def try_record_rollout_observation(**kwargs: Any) -> str | None:
         return None
 
 
-def observation_write_health(*, window_minutes: int = 15) -> dict[str, Any]:
-    since = (datetime.now(timezone.utc) - timedelta(minutes=max(1, min(window_minutes, 24 * 60)))).isoformat()
+def observation_write_health(
+    *,
+    window_minutes: int = 15,
+    config_version: str | None = None,
+    deployed_commit: str | None = None,
+    environment: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> dict[str, Any]:
+    since_value = since or (datetime.now(timezone.utc) - timedelta(minutes=max(1, min(window_minutes, 24 * 60)))).isoformat()
+    until_clause = " AND created_at<:until" if until else ""
     try:
         with get_connection() as conn:
             tables = set(sa_inspect(conn).get_table_names())
             if "agent_rollout_observations" not in tables or "audit_events" not in tables:
                 return {"status": "unavailable", "ok": False, "failure_count": None, "reason": "schema_unavailable"}
-            rows = conn.execute(text("""SELECT metadata_json, COUNT(*) AS count FROM audit_events
+            rows = conn.execute(text(f"""SELECT metadata_json, COUNT(*) AS count FROM audit_events
                 WHERE action=:action AND data_scope='runtime' AND created_at>=:since
+                {until_clause}
                 GROUP BY metadata_json"""), {
                     "action": OBSERVATION_FAILURE_ACTION,
-                    "since": since,
+                    "since": since_value,
+                    "until": until,
                 }).mappings().all()
         by_reason: dict[str, int] = {}
         for row in rows:
@@ -198,6 +226,12 @@ def observation_write_health(*, window_minutes: int = 15) -> dict[str, Any]:
                 metadata = json.loads(row["metadata_json"] or "{}")
             except (TypeError, ValueError):
                 metadata = {}
+            if config_version is not None and metadata.get("config_version") != config_version:
+                continue
+            if deployed_commit is not None and metadata.get("deployed_commit") != deployed_commit:
+                continue
+            if environment is not None and metadata.get("environment") != environment:
+                continue
             reason = str(metadata.get("reason_code") or "unknown")
             by_reason[reason] = by_reason.get(reason, 0) + int(row["count"] or 0)
         total = sum(by_reason.values())
@@ -323,3 +357,153 @@ def observation_summary(*, agent_type: str, config_version: str, data_scope: str
                 "data_scope": data_scope,
             }).mappings().all()
     return {"agent_type": agent_type, "config_version": config_version, "groups": [dict(row) for row in rows]}
+
+
+def aggregate_autotutor_transition_canary(
+    *,
+    config_version: str,
+    deployed_commit: str,
+    environment: str,
+    since: str,
+    until: str | None = None,
+    minimum_graph_transitions: int = 100,
+    data_scope: str = "runtime",
+    traffic_cohort: str = "verified",
+) -> dict[str, Any]:
+    """Evaluate one immutable AutoTutor canary slice; unrelated rows never enter its denominator."""
+    where_until = " AND created_at<:until" if until else ""
+    params = {
+        "config_version": config_version,
+        "deployed_commit": deployed_commit,
+        "environment": environment,
+        "since": since,
+        "until": until,
+        "data_scope": data_scope,
+        "traffic_cohort": traffic_cohort,
+    }
+    with get_connection() as conn:
+        if "agent_rollout_observations" not in set(sa_inspect(conn).get_table_names()):
+            raise LookupError("rollout observation schema is not migrated")
+        rows = conn.execute(text(f"""SELECT * FROM agent_rollout_observations
+            WHERE agent_type='auto_tutor' AND config_version=:config_version
+              AND deployed_commit=:deployed_commit AND environment=:environment
+              AND data_scope=:data_scope AND traffic_cohort=:traffic_cohort
+              AND rollout_eligible=1 AND created_at>=:since{where_until}
+            ORDER BY created_at ASC"""), params).mappings().all()
+        observed_count = int(conn.execute(text(f"""SELECT COUNT(*) FROM agent_rollout_observations
+            WHERE agent_type='auto_tutor' AND config_version=:config_version
+              AND deployed_commit=:deployed_commit AND environment=:environment
+              AND created_at>=:since{where_until}"""), params).scalar_one())
+        unauthorized = int(conn.execute(text(f"""SELECT COUNT(*) FROM agent_rollout_observations
+            WHERE agent_type='auto_tutor' AND config_version=:config_version
+              AND deployed_commit=:deployed_commit AND environment=:environment
+              AND created_at>=:since{where_until}
+              AND (assigned_executor='graph_active' OR selected_executor='graph_active')
+              AND (data_scope!=:data_scope OR traffic_cohort!=:traffic_cohort OR rollout_eligible!=1)"""), params).scalar_one())
+        duplicate_effect_count = 0
+        if "learning_events" in set(sa_inspect(conn).get_table_names()):
+            duplicate_effect_count = int(conn.execute(text(f"""SELECT COUNT(*) FROM (
+                SELECT effect_key FROM learning_events
+                WHERE effect_key IS NOT NULL AND created_at>=:since{where_until}
+                GROUP BY effect_key HAVING COUNT(*)>1
+            ) duplicate_effects"""), params).scalar_one())
+
+    graph_rows = [row for row in rows if str(row.get("assigned_executor") or "") == "graph_active"]
+    control_rows = [row for row in rows if str(row.get("assigned_executor") or "") == "legacy"]
+    selected_graph = [row for row in graph_rows if str(row.get("selected_executor") or "") == "graph_active"]
+    fallback_rows = [
+        row for row in graph_rows
+        if str(row.get("selected_executor") or "") != "graph_active" or bool(row.get("fallback_reason"))
+    ]
+    compared = [row for row in graph_rows if row.get("comparator_matched") is not None]
+    mismatches = [row for row in compared if int(row.get("comparator_matched") or 0) != 1]
+    provider_calls = sum(int(row.get("observation_external_calls") or 0) for row in graph_rows)
+    latencies: dict[str, dict[str, float | None]] = {}
+    for field in ("provider_latency_ms", "executor_latency_ms", "comparator_latency_ms", "latency_ms"):
+        values = [int(row[field]) for row in graph_rows if row.get(field) is not None]
+        latencies[field.removesuffix("_ms")] = {"p50_ms": _percentile(values, 0.50), "p95_ms": _percentile(values, 0.95)}
+    control_total = [int(row["latency_ms"]) for row in control_rows if row.get("latency_ms") is not None]
+    control_p95 = _percentile(control_total, 0.95)
+    active_p95 = latencies["latency"]["p95_ms"]
+
+    denominator = len(graph_rows)
+    fallback_rate = round(len(fallback_rows) / denominator, 6) if denominator else None
+    comparator_match_rate = round((len(compared) - len(mismatches)) / len(compared), 6) if compared else None
+    covered_kinds = sorted({str(row.get("transition_kind") or "") for row in graph_rows if row.get("transition_kind")})
+    required_kinds = {"start", "lesson_answer", "exit_ticket_answer"}
+    missing_kinds = sorted(required_kinds - set(covered_kinds))
+    provenance_complete = [
+        row for row in graph_rows
+        if row.get("transition_id")
+        and row.get("observation_schema_version") == "v1.49.2-observation"
+        and row.get("outcome_schema_version") == "v1.49.2-outcome"
+        and str(row.get("commit_status") or "") in {"committed", "completed", "fallback"}
+    ]
+    blockers: list[str] = []
+    if denominator < max(1, int(minimum_graph_transitions)):
+        blockers.append("insufficient_graph_samples")
+    if len(compared) != denominator or mismatches:
+        blockers.append("comparator_not_exact")
+    if fallback_rate is None or fallback_rate > 0.01:
+        blockers.append("fallback_rate_above_one_percent")
+    if unauthorized:
+        blockers.append("unauthorized_graph_traffic")
+    if missing_kinds:
+        blockers.append("transition_kind_coverage_incomplete")
+    if duplicate_effect_count:
+        blockers.append("duplicate_effects_detected")
+    if control_p95 is None:
+        blockers.append("control_baseline_missing")
+    elif active_p95 is not None and (active_p95 > control_p95 * 1.20 or active_p95 - control_p95 > 50):
+        blockers.append("active_latency_regression")
+    if any(str(row.get("observation_schema_version") or "") != "v1.49.2-observation" for row in graph_rows):
+        blockers.append("observation_schema_mismatch")
+    if any(str(row.get("outcome_schema_version") or "") != "v1.49.2-outcome" for row in graph_rows):
+        blockers.append("outcome_schema_mismatch")
+    if any(not row.get("transition_id") or str(row.get("commit_status") or "") not in {"committed", "completed", "fallback"} for row in graph_rows):
+        blockers.append("transition_provenance_incomplete")
+    health = observation_write_health(
+        config_version=config_version,
+        deployed_commit=deployed_commit,
+        environment=environment,
+        since=since,
+        until=until,
+    )
+    if not health.get("ok"):
+        blockers.append("observation_write_failure")
+
+    return {
+        "decision": "GO" if not blockers else "NO_GO",
+        "blockers": blockers,
+        "slice": {
+            "agent_type": "auto_tutor", "config_version": config_version,
+            "deployed_commit": deployed_commit, "environment": environment,
+            "data_scope": data_scope, "traffic_cohort": traffic_cohort,
+            "since": since, "until": until,
+        },
+        "transition_count": len(rows),
+        "observed_transition_count": observed_count,
+        "eligible_transition_count": len(rows),
+        "assigned_control_count": len(control_rows),
+        "assigned_graph_count": denominator,
+        "selected_graph_count": len(selected_graph),
+        "fallback_count": len(fallback_rows),
+        "fallback_rate": fallback_rate,
+        "comparator_observed_count": len(compared),
+        "comparator_mismatch_count": len(mismatches),
+        "comparator_match_rate": comparator_match_rate,
+        "transition_kind_coverage": covered_kinds,
+        "missing_transition_kinds": missing_kinds,
+        "provenance_coverage": round(len(provenance_complete) / denominator, 6) if denominator else None,
+        "fallback_by_reason": {
+            reason: sum(1 for row in fallback_rows if str(row.get("fallback_reason") or "unknown") == reason)
+            for reason in sorted({str(row.get("fallback_reason") or "unknown") for row in fallback_rows})
+        },
+        "unauthorized_graph_count": unauthorized,
+        "observation_external_calls": provider_calls,
+        "effect_intent_count": sum(int(row.get("effect_intent_count") or 0) for row in graph_rows),
+        "duplicate_effect_count": duplicate_effect_count,
+        "control_latency": {"p50_ms": _percentile(control_total, 0.50), "p95_ms": control_p95},
+        "latency": latencies,
+        "observation_write_health": health,
+    }
