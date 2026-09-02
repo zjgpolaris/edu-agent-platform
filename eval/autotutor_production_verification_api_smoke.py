@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from api.main import app  # noqa: E402
 
 COMMIT = "a" * 40
-CONFIG = "v1.49.4-production-verification"
+CONFIG = "v1.49.5-production-attestation"
 
 
 def main() -> None:

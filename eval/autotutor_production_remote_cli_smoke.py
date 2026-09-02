@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.verify_autotutor_canary_deployment import _assert_pii_free, _exit_code, verify_remote  # noqa: E402
 
 COMMIT = "d" * 40
-CONFIG = "v1.49.4-production-verification"
+CONFIG = "v1.49.5-production-attestation"
 
 
 class Response:

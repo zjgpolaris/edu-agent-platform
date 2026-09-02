@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -9,6 +10,13 @@ from sqlalchemy import inspect as sa_inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from db.engine import get_connection
+
+
+def _canonical_sha256(payload: dict[str, Any]) -> str:
+    import hashlib
+
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _now() -> str:
@@ -39,7 +47,7 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
     if not now - timedelta(days=7) <= generated.astimezone(timezone.utc) <= now + timedelta(minutes=5):
         raise ValueError("release evidence is stale or generated in the future")
     schema_version = int(payload.get("schema_version") or 1)
-    if schema_version not in ({3} if is_autotutor else {1, 2}):
+    if schema_version not in ({3, 4} if is_autotutor else {1, 2}):
         raise ValueError("release evidence schema is unsupported")
     if is_autotutor:
         aggregate = payload.get("aggregate")
@@ -72,6 +80,18 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
             or str(snapshot_schema.get("revision") or "") != str(payload.get("migration_revision") or "")
         ):
             raise ValueError("AutoTutor production snapshot does not match evidence")
+        if schema_version == 4:
+            stage = payload.get("evidence_stage")
+            cohort_fingerprint = str(payload.get("cohort_fingerprint") or "")
+            runtime_state_fingerprint = str(payload.get("runtime_state_fingerprint") or "")
+            if (
+                stage not in {"candidate", "final"}
+                or not cohort_fingerprint.startswith("sha256:")
+                or not runtime_state_fingerprint.startswith("sha256:")
+                or snapshot_configuration.get("cohort_fingerprint") != cohort_fingerprint
+                or snapshot_configuration.get("runtime_state_fingerprint") != runtime_state_fingerprint
+            ):
+                raise ValueError("AutoTutor v4 evidence fingerprints are invalid")
         try:
             window_start = datetime.fromisoformat(str(window["start"]).replace("Z", "+00:00"))
             window_end = datetime.fromisoformat(str(window["end"]).replace("Z", "+00:00"))
@@ -93,12 +113,76 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
             or aggregate_slice.get("until") != window.get("end")
         ):
             raise ValueError("AutoTutor aggregate slice does not match evidence")
+        if schema_version == 4 and payload.get("evidence_stage") == "candidate":
+            attestation = payload.get("drill_attestation")
+            if payload.get("decision") != "CANDIDATE_GO" or payload.get("blockers"):
+                raise ValueError("AutoTutor candidate evidence decision is invalid")
+            if aggregate.get("status") != "GO" or aggregate.get("decision") != "GO":
+                raise ValueError("AutoTutor candidate evidence requires a GO aggregate")
+            if (
+                production_snapshot.get("snapshot_kind") != "canary"
+                or snapshot_configuration.get("mode") != "active_canary"
+                or not 1 <= int(snapshot_configuration.get("active_bps") or 0) <= 100
+            ):
+                raise ValueError("AutoTutor candidate snapshot is not an approved production canary")
+            required_candidate_drills = {"restart", "writer_failure", "kill_switch"}
+            if not isinstance(drills, dict) or any(drills.get(name) != "pass" for name in required_candidate_drills):
+                raise ValueError("AutoTutor candidate evidence drills are incomplete")
+            if (
+                not isinstance(attestation, dict)
+                or attestation.get("attestation_type") != "environment_approved_operator"
+                or payload.get("drill_attestation_sha256") != _canonical_sha256(attestation)
+                or attestation.get("deployed_commit") != payload.get("deployed_commit")
+                or attestation.get("config_version") != payload.get("config_version")
+                or attestation.get("environment") != payload.get("environment")
+                or attestation.get("window") != payload.get("window")
+                or any((attestation.get("results") or {}).get(name) != drills.get(name) for name in required_candidate_drills)
+            ):
+                raise ValueError("AutoTutor candidate rehearsal attestation is invalid")
         if payload.get("decision") == "GO":
             if aggregate.get("status") != "GO" or aggregate.get("decision") != "GO":
                 raise ValueError("AutoTutor GO evidence requires a GO aggregate")
             required_drills = {"restart", "writer_failure", "kill_switch", "rollback"}
             if not isinstance(drills, dict) or any(drills.get(name) != "pass" for name in required_drills):
                 raise ValueError("AutoTutor GO evidence drills are incomplete")
+        if schema_version == 4 and payload.get("evidence_stage") == "final":
+            candidate_digest = str(payload.get("candidate_evidence_sha256") or "")
+            rollback_snapshot = payload.get("rollback_snapshot")
+            rollback_digest = str(payload.get("rollback_snapshot_sha256") or "")
+            if payload.get("decision") != "GO" or not re.fullmatch(r"[0-9a-f]{64}", candidate_digest):
+                raise ValueError("AutoTutor final evidence provenance is incomplete")
+            validate_autotutor_canary_snapshot({"snapshot": rollback_snapshot, "snapshot_sha256": rollback_digest})
+            rollback_configuration = rollback_snapshot.get("configuration") or {}
+            rollback_deployment = rollback_snapshot.get("deployment") or {}
+            rollback_metrics = rollback_snapshot.get("rollback") or {}
+            if (
+                rollback_snapshot.get("snapshot_kind") != "rollback"
+                or rollback_snapshot.get("phase") != "rollback_ready_for_finalize"
+                or rollback_snapshot.get("status") != "READY"
+                or rollback_snapshot.get("decision") != "GO"
+                or rollback_deployment.get("deployed_commit") != payload.get("deployed_commit")
+                or rollback_deployment.get("environment") != payload.get("environment")
+                or rollback_configuration.get("config_version") != payload.get("config_version")
+                or rollback_configuration.get("cohort_fingerprint") != payload.get("cohort_fingerprint")
+                or rollback_configuration.get("mode") != "legacy"
+                or int(rollback_configuration.get("active_bps") or 0) != 0
+                or int(rollback_metrics.get("assigned_graph_count") or 0) != 0
+                or int(rollback_metrics.get("selected_graph_count") or 0) != 0
+                or int(rollback_metrics.get("assigned_control_count") or 0) < int(rollback_metrics.get("minimum_control") or 20)
+            ):
+                raise ValueError("AutoTutor final evidence rollback proof is invalid")
+            candidate = load_release_evidence(evidence_sha256=candidate_digest)
+            if (
+                candidate is None
+                or candidate.get("evidence_stage") != "candidate"
+                or candidate.get("decision") != "CANDIDATE_GO"
+                or any(candidate.get(field) != payload.get(field) for field in (
+                    "deployed_commit", "config_version", "environment", "cohort_fingerprint",
+                    "runtime_state_fingerprint", "window", "snapshot_sha256", "aggregate",
+                    "drill_attestation_sha256",
+                ))
+            ):
+                raise ValueError("AutoTutor final evidence candidate is not persisted or does not match")
         return _persist_release_evidence(payload, digest=digest, schema_version=schema_version)
     if schema_version == 2 and not str(payload.get("image_digest") or "").strip():
         raise ValueError("release evidence image digest is required for schema v2")

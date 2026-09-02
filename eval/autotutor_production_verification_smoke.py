@@ -18,7 +18,7 @@ from agent_runtime.autotutor_canary_verification import (  # noqa: E402
 )
 
 COMMIT = "c" * 40
-CONFIG = "v1.49.4-production-verification"
+CONFIG = "v1.49.5-production-attestation"
 NOW = datetime.now(timezone.utc)
 START = (NOW - timedelta(hours=1)).isoformat()
 END = NOW.isoformat()

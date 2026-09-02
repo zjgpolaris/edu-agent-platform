@@ -10,9 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from agent_runtime.autotutor_canary_verification import build_autotutor_canary_verification  # noqa: E402
+from agents.autotutor_execution import AutoTutorExecutorSettings  # noqa: E402
 
 COMMIT = "e" * 40
-CONFIG = "v1.49.4-production-verification"
+CONFIG = "v1.49.5-production-attestation"
 
 
 def main() -> None:
@@ -23,7 +24,8 @@ def main() -> None:
            "EDU_AGENT_AUTOTUTOR_GRAPH_KILL_SWITCH": "false"}
     aggregate = {"status": "NOT_READY", "decision": "NO_GO", "blockers": ["insufficient_graph_samples"],
                  "assigned_control_count": 100, "assigned_graph_count": 0, "committed_graph_count": 0}
-    evidence = {"decision": "GO", "evidence_sha256": "sha256:sealed",
+    evidence = {"schema_version": 4, "evidence_stage": "final", "decision": "GO", "evidence_sha256": "sha256:sealed",
+                "cohort_fingerprint": AutoTutorExecutorSettings.from_env(env).cohort_fingerprint,
                 "drills": {"restart": "pass", "writer_failure": "pass", "kill_switch": "pass", "rollback": "pass"}}
     with patch.dict(os.environ, env, clear=True), \
          patch("agent_runtime.autotutor_canary_verification.runtime_schema_readiness", return_value={"schema_ready": True, "alembic_version": "016"}), \

@@ -62,11 +62,12 @@ type AgentOpsSummary = {
       next_action?: string;
       blockers?: string[];
       deployment?: { deployed_commit?: string | null; environment?: string | null; schema_revision?: string | null };
-      configuration?: { mode?: string; active_bps?: number; config_version?: string; config_fingerprint?: string; kill_switch?: boolean };
+      configuration?: { mode?: string; active_bps?: number; config_version?: string; config_fingerprint?: string; cohort_fingerprint?: string; runtime_state_fingerprint?: string; kill_switch?: boolean };
       trusted_cohort?: { ready?: boolean; verified_actor_count?: number };
       observation_health?: { status?: string; failure_count?: number | null };
-      progress?: { control_transition_count?: number; committed_graph_transition_count?: number; minimum_control?: number; minimum_graph?: number };
-      evidence?: { present?: boolean; decision?: string | null; drills?: Record<string, string> | null };
+      progress?: { control_transition_count?: number; committed_graph_transition_count?: number; minimum_control?: number; minimum_graph?: number; minimum_rollback_control?: number };
+      rollback?: { exact_window?: boolean; assigned_control_count?: number; assigned_graph_count?: number; selected_graph_count?: number; minimum_control?: number; verified?: boolean };
+      evidence?: { present?: boolean; decision?: string | null; stage?: string | null; drills?: Record<string, string> | null };
     } | null;
     autotutor_transition_canary?: {
       status?: string;
@@ -1259,8 +1260,10 @@ function AutoTutorVerificationPanel({ verification }: { verification: NonNullabl
         <OpsCard label="Schema" value={deployment?.schema_revision || "missing"} hint={deployment?.environment || "unknown environment"} />
         <OpsCard label="Trusted Cohort" value={verification.trusted_cohort?.ready ? "READY" : "MISSING"} hint={`${verification.trusted_cohort?.verified_actor_count ?? 0} verified actors`} />
         <OpsCard label="Observation" value={verification.observation_health?.status || "unknown"} hint={`${verification.observation_health?.failure_count ?? "--"} failures`} />
-        <OpsCard label="Evidence" value={verification.evidence?.present ? (verification.evidence.decision || "present") : "missing"} hint={Object.entries(verification.evidence?.drills || {}).map(([name, result]) => `${name}:${result}`).join(" ") || "drills pending"} />
-        <OpsCard label="Config Fingerprint" value={(config?.config_fingerprint || "missing").slice(0, 15)} hint="salt-safe identity" />
+        <OpsCard label="Rollback" value={verification.rollback?.verified ? "VERIFIED" : `${verification.rollback?.assigned_control_count ?? 0}/${verification.rollback?.minimum_control ?? 20}`} hint={`${verification.rollback?.assigned_graph_count ?? 0} assigned · ${verification.rollback?.selected_graph_count ?? 0} selected Graph`} />
+        <OpsCard label="Evidence" value={verification.evidence?.present ? (verification.evidence.decision || "present") : "missing"} hint={`${verification.evidence?.stage || "no stage"} · ${Object.entries(verification.evidence?.drills || {}).map(([name, result]) => `${name}:${result}`).join(" ") || "drills pending"}`} />
+        <OpsCard label="Cohort Fingerprint" value={(config?.cohort_fingerprint || "missing").slice(0, 15)} hint="stable bucket identity" />
+        <OpsCard label="Runtime Fingerprint" value={(config?.runtime_state_fingerprint || config?.config_fingerprint || "missing").slice(0, 15)} hint="mode/BPS safety state" />
       </div>
       <div style={{ marginTop: "0.7rem", color: statusColor, fontSize: "0.78rem" }}>下一步：{verification.next_action || "inspect_verification"}</div>
       {blockers.length ? <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.55rem" }}>{blockers.slice(0, 10).map((blocker) => <Badge key={blocker}>{blocker}</Badge>)}</div> : null}

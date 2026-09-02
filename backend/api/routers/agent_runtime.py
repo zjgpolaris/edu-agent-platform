@@ -43,6 +43,7 @@ class AutoTutorCanarySnapshotRequest(BaseModel):
     window_end: str = Field(min_length=10, max_length=80)
     minimum_control: int = Field(default=100, ge=1, le=100_000)
     minimum_graph: int = Field(default=100, ge=1, le=100_000)
+    minimum_rollback_control: int = Field(default=20, ge=1, le=100_000)
 
 
 class AutoTutorCanaryEvidenceRequest(BaseModel):
@@ -265,6 +266,7 @@ async def get_autotutor_canary_verification(
     window_end: str | None = Query(default=None, min_length=10, max_length=80),
     minimum_control: int = Query(default=100, ge=1, le=100_000),
     minimum_graph: int = Query(default=100, ge=1, le=100_000),
+    minimum_rollback_control: int = Query(default=20, ge=1, le=100_000),
     actor: Actor = Depends(require_admin),
 ):
     from agent_runtime.autotutor_canary_verification import build_autotutor_canary_verification
@@ -277,6 +279,7 @@ async def get_autotutor_canary_verification(
             window_end=window_end,
             minimum_control=minimum_control,
             minimum_graph=minimum_graph,
+            minimum_rollback_control=minimum_rollback_control,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -320,6 +323,8 @@ async def get_autotutor_canary_evidence(
         "present": True,
         "schema_version": evidence.get("schema_version"),
         "decision": evidence.get("decision"),
+        "evidence_stage": evidence.get("evidence_stage"),
+        "candidate_evidence_sha256": evidence.get("candidate_evidence_sha256"),
         "evidence_sha256": evidence.get("evidence_sha256"),
         "generated_at": evidence.get("generated_at"),
         "deployed_commit": evidence.get("deployed_commit"),
@@ -350,6 +355,10 @@ async def persist_autotutor_canary_evidence(
         }
         if any(req.evidence.get(field) != value for field, value in expected.items()):
             raise ValueError("AutoTutor evidence does not match the current deployment")
+        if int(req.evidence.get("schema_version") or 0) == 4 and (
+            req.evidence.get("cohort_fingerprint") != settings.cohort_fingerprint
+        ):
+            raise ValueError("AutoTutor evidence cohort fingerprint does not match the current deployment")
         evidence = save_release_evidence(req.evidence)
     except (TypeError, ValueError, LookupError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

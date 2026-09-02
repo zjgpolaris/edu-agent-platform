@@ -114,6 +114,8 @@ AutoTutor 的 `autotutor_sessions` CAS 与领域事务仍是唯一业务写入�
 
 AutoTutor Canary 运维顺序固定为：先合并不可变 commit，并在 `BPS=0` 下升级到 migration 016；部署后通过手工触发的 `AutoTutor Production Verification` workflow 核对 commit、runtime schema、observation health、verified cohort 与至少 100 条 control transitions，再人工审批最多 `100 BPS` 的 Canary。达到至少 100 个 committed Graph transitions 后，使用 exact UTC window 生成 hash-sealed snapshot，完成 restart/writer-failure/kill-switch/rollback 四项演练，并将 schema v3 evidence 持久化。AgentOps 只显示脱敏后的 phase、blocker、进度和配置指纹；workflow 只读生产状态，不自动修改 Render 配置。任一 blocker 出现时立即设置 kill switch，或恢复 `EXECUTOR_MODE=legacy`、`BPS=0`；已提交 transition 不重放，015/016 的 nullable 遥测列无需回滚。完整操作与验收标准见 `docs/20260902-autotutor-canary-production-verification-v1494-spec.md`。
 
+v1.49.5 将生产证据拆为 schema v4 `candidate` 与 `final`：Canary GO 只能持久化 candidate；恢复 Legacy/BPS 0 后，必须在 exact post-rollback window 内观察至少 20 条新 Legacy transitions，且 assigned/selected Graph 均为 0，才能生成 final GO。cohort fingerprint 绑定 config/salt/bucket algorithm，runtime-state fingerprint 单独绑定 mode/BPS/kill/comparator/fallback；两者均只输出 SHA256。生产 workflow 通过 concurrency lock 串行运行，不会自动修改 Render。详见 `docs/20260902-autotutor-production-attestation-rollback-v1495-spec.md`。
+
 ---
 
 ## 本地开发

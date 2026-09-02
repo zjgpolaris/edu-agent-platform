@@ -1,5 +1,9 @@
 name: AutoTutor Production Verification
 
+concurrency:
+  group: autotutor-production-verification
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +19,7 @@ on:
       expected_config_version:
         description: Expected AutoTutor config version
         required: true
-        default: v1.49.4-production-verification
+        default: v1.49.5-production-attestation
         type: string
       window_start:
         description: Exact UTC window start (required for snapshot actions)
@@ -35,6 +39,11 @@ on:
         required: true
         default: '100'
         type: string
+      minimum_rollback_control:
+        description: Minimum post-rollback Legacy transitions
+        required: true
+        default: '20'
+        type: string
       restart_rehearsal:
         required: true
         default: not_run
@@ -46,11 +55,6 @@ on:
         type: choice
         options: [not_run, pass, fail]
       kill_switch_rehearsal:
-        required: true
-        default: not_run
-        type: choice
-        options: [not_run, pass, fail]
-      rollback_rehearsal:
         required: true
         default: not_run
         type: choice
@@ -99,6 +103,7 @@ jobs:
           VERIFY_ACTION: ${{ inputs.action }}
           MINIMUM_CONTROL: ${{ inputs.minimum_control }}
           MINIMUM_GRAPH: ${{ inputs.minimum_graph }}
+          MINIMUM_ROLLBACK: ${{ inputs.minimum_rollback_control }}
           WINDOW_START: ${{ inputs.window_start }}
           WINDOW_END: ${{ inputs.window_end }}
         run: |
@@ -109,6 +114,7 @@ jobs:
             --phase "$VERIFY_ACTION"
             --minimum-control "$MINIMUM_CONTROL"
             --minimum-graph "$MINIMUM_GRAPH"
+            --minimum-rollback-control "$MINIMUM_ROLLBACK"
             --output-json /tmp/autotutor-verification.json
             --output-markdown /tmp/autotutor-verification.md
           )
@@ -122,7 +128,6 @@ jobs:
           RESTART_RESULT: ${{ inputs.restart_rehearsal }}
           WRITER_RESULT: ${{ inputs.writer_failure_rehearsal }}
           KILL_RESULT: ${{ inputs.kill_switch_rehearsal }}
-          ROLLBACK_RESULT: ${{ inputs.rollback_rehearsal }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
           WINDOW_END: ${{ inputs.window_end }}
@@ -131,7 +136,7 @@ jobs:
           API_BASE: ${{ secrets.AUTOTUTOR_PRODUCTION_API_BASE }}
           API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
         run: |
-          python3 -c 'import json,os; print(json.dumps({"schema_version":1,"deployed_commit":os.environ["EXPECTED_COMMIT"],"config_version":os.environ["EXPECTED_CONFIG"],"environment":"production","generated_at":os.environ["WINDOW_END"],"window":{"start":os.environ["WINDOW_START"],"end":os.environ["WINDOW_END"]},"results":{"restart":os.environ["RESTART_RESULT"],"writer_failure":os.environ["WRITER_RESULT"],"kill_switch":os.environ["KILL_RESULT"],"rollback":os.environ["ROLLBACK_RESULT"]}}))' > /tmp/autotutor-drills.json
+          python3 -c 'import json,os; print(json.dumps({"schema_version":1,"attestation_type":"environment_approved_operator","deployed_commit":os.environ["EXPECTED_COMMIT"],"config_version":os.environ["EXPECTED_CONFIG"],"environment":"production","generated_at":os.environ["WINDOW_END"],"window":{"start":os.environ["WINDOW_START"],"end":os.environ["WINDOW_END"]},"results":{"restart":os.environ["RESTART_RESULT"],"writer_failure":os.environ["WRITER_RESULT"],"kill_switch":os.environ["KILL_RESULT"]}}))' > /tmp/autotutor-drills.json
           python3 -c 'import json; p=json.load(open("/tmp/autotutor-verification.json")); json.dump(p["result"],open("/tmp/autotutor-snapshot.json","w"))'
           PYTHONPATH=backend python3 scripts/build_autotutor_canary_evidence.py \
             --commit "$EXPECTED_COMMIT" \
@@ -143,8 +148,34 @@ jobs:
             --snapshot-path /tmp/autotutor-snapshot.json \
             --drill-artifact /tmp/autotutor-drills.json \
             --output /tmp/autotutor-evidence.json \
+            --stage candidate \
             --persist-url "$API_BASE/api/admin/agent-runtime/autotutor-canary/evidence" \
             --require-go
+      - name: Finalize rollback-bound evidence
+        if: inputs.action == 'rollback_verify' && steps.remote.outcome == 'success'
+        env:
+          API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
+          API_BASE: ${{ secrets.AUTOTUTOR_PRODUCTION_API_BASE }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
+          WINDOW_START: ${{ inputs.window_start }}
+          WINDOW_END: ${{ inputs.window_end }}
+        run: |
+          python3 -c 'import json,os,urllib.request; r=urllib.request.Request(os.environ["API_BASE"].rstrip("/")+"/api/admin/agent-runtime/autotutor-canary/evidence?include_payload=true",headers={"Authorization":"Bearer "+os.environ["API_TOKEN"],"Accept":"application/json"}); json.dump(json.load(urllib.request.urlopen(r,timeout=30)),open("/tmp/autotutor-candidate.json","w"))'
+          python3 -c 'import json; p=json.load(open("/tmp/autotutor-verification.json")); json.dump(p["result"],open("/tmp/autotutor-rollback-snapshot.json","w"))'
+          PYTHONPATH=backend python3 scripts/build_autotutor_canary_evidence.py \
+            --stage final \
+            --commit "$EXPECTED_COMMIT" \
+            --config-version "$EXPECTED_CONFIG" \
+            --environment production \
+            --window-start "$WINDOW_START" \
+            --window-end "$WINDOW_END" \
+            --candidate-evidence-path /tmp/autotutor-candidate.json \
+            --rollback-snapshot-path /tmp/autotutor-rollback-snapshot.json \
+            --output /tmp/autotutor-final-evidence.json \
+            --persist-url "$API_BASE/api/admin/agent-runtime/autotutor-canary/evidence" \
+            --require-go
+          python3 -c 'import json,os,urllib.request; expected=json.load(open("/tmp/autotutor-final-evidence.json"))["evidence_sha256"]; r=urllib.request.Request(os.environ["API_BASE"].rstrip("/")+"/api/admin/agent-runtime/autotutor-canary/evidence",headers={"Authorization":"Bearer "+os.environ["API_TOKEN"],"Accept":"application/json"}); actual=json.load(urllib.request.urlopen(r,timeout=30)); assert actual.get("evidence_stage")=="final" and actual.get("decision")=="GO" and actual.get("evidence_sha256")==expected'
 
       - name: Upload PII-free verification artifacts
         if: always()
@@ -157,6 +188,9 @@ jobs:
             /tmp/autotutor-snapshot.json
             /tmp/autotutor-drills.json
             /tmp/autotutor-evidence.json
+            /tmp/autotutor-candidate.json
+            /tmp/autotutor-rollback-snapshot.json
+            /tmp/autotutor-final-evidence.json
           if-no-files-found: warn
           retention-days: 30
 

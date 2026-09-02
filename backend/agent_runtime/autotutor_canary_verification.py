@@ -90,16 +90,19 @@ def build_autotutor_canary_verification(
     window_end: str | None = None,
     minimum_control: int = 100,
     minimum_graph: int = 100,
+    minimum_rollback_control: int = 20,
 ) -> dict[str, Any]:
     """Build the only phase/blocker/next-action contract for AutoTutor production."""
     minimum_control = max(1, min(int(minimum_control), 100_000))
     minimum_graph = max(1, min(int(minimum_graph), 100_000))
+    minimum_rollback_control = max(1, min(int(minimum_rollback_control), 100_000))
     since, until = _parse_window(window_start, window_end)
     commit = deployed_commit()
     environment = deployment_environment()
     if environment == "production":
         minimum_control = max(100, minimum_control)
         minimum_graph = max(100, minimum_graph)
+        minimum_rollback_control = max(20, minimum_rollback_control)
     settings = AutoTutorExecutorSettings.from_env()
     expected_commit = (expected_commit or commit).strip()
     expected_config_version = (expected_config_version or settings.config_version).strip()
@@ -167,7 +170,7 @@ def build_autotutor_canary_verification(
         blockers.append("runtime_schema_not_ready")
     if not settings.config_version:
         blockers.append("config_version_missing")
-    if not settings.bucket_salt:
+    if not settings.bucket_salt_configured:
         blockers.append("bucket_salt_missing")
     if not settings.comparator_enabled:
         blockers.append("comparator_disabled")
@@ -177,6 +180,11 @@ def build_autotutor_canary_verification(
         blockers.append("kill_switch_enabled")
     if settings.active_bps > 100:
         blockers.append("production_active_bps_exceeds_one_percent")
+    if evidence and int(evidence.get("schema_version") or 0) == 4:
+        if evidence.get("cohort_fingerprint") != settings.cohort_fingerprint:
+            blockers.append("cohort_fingerprint_mismatch")
+        if settings.active_bps == 0 and settings.mode != "legacy":
+            blockers.append("rollback_mode_not_legacy")
     if not settings.valid:
         blockers.extend(settings.reason_codes)
     if not health.get("ok"):
@@ -188,22 +196,41 @@ def build_autotutor_canary_verification(
     }
     blockers.extend(item for item in aggregate_blockers if item in always_hard)
     graph_count = int(aggregate.get("assigned_graph_count") or 0)
+    selected_graph = int(aggregate.get("selected_graph_count") or 0)
     committed_graph = int(aggregate.get("committed_graph_count") or 0)
     control_count = int(aggregate.get("assigned_control_count") or 0)
     if (settings.mode == "active_canary" or graph_count) and committed_graph >= minimum_graph:
         blockers.extend(item for item in aggregate_blockers if item != "insufficient_graph_samples")
     blockers = _unique(blockers)
 
+    evidence_stage = str(evidence.get("evidence_stage") or "legacy") if evidence else None
+    evidence_decision = str(evidence.get("decision") or "") if evidence else ""
+    legacy_candidate = bool(evidence and int(evidence.get("schema_version") or 0) == 3 and evidence_decision == "GO")
+    candidate_present = bool(evidence and evidence_decision == "CANDIDATE_GO")
+    final_present = bool(evidence and int(evidence.get("schema_version") or 0) == 4
+                         and evidence_stage == "final" and evidence_decision == "GO")
     hard_blocked = bool(blockers)
     if hard_blocked:
         phase, status, decision = "deployment_blocked", "BLOCKED", "NO_GO"
         next_action = "stop_canary" if settings.active_bps else "fix_deployment_contract"
     elif not cohort.get("ready"):
         phase, status, decision, next_action = "deployment_blocked", "NOT_READY", "NO_GO", "approve_verified_cohort"
-    elif evidence and evidence.get("decision") == "GO" and settings.active_bps == 0:
+    elif final_present and settings.active_bps == 0:
         phase, status, decision, next_action = "rollback_verified", "VERIFIED", "GO", "review_v150_entry"
-    elif evidence and evidence.get("decision") == "GO":
-        phase, status, decision, next_action = "production_verified", "VERIFIED", "GO", "restore_bps_zero"
+    elif legacy_candidate:
+        phase, status, decision, next_action = "legacy_evidence_requires_upgrade", "NOT_READY", "NO_GO", "capture_v4_canary_candidate"
+    elif candidate_present and settings.active_bps == 0:
+        if until is None:
+            phase, status, decision, next_action = "rollback_pending", "NOT_READY", "NO_GO", "capture_exact_rollback_window"
+        elif graph_count or selected_graph:
+            blockers = _unique([*blockers, "rollback_graph_traffic_detected"])
+            phase, status, decision, next_action = "rollback_blocked", "BLOCKED", "NO_GO", "investigate_graph_after_rollback"
+        elif control_count < minimum_rollback_control:
+            phase, status, decision, next_action = "rollback_collecting", "NOT_READY", "NO_GO", "collect_post_rollback_control"
+        else:
+            phase, status, decision, next_action = "rollback_ready_for_finalize", "READY", "GO", "finalize_evidence"
+    elif candidate_present:
+        phase, status, decision, next_action = "candidate_persisted", "READY", "GO", "restore_bps_zero"
     elif settings.mode != "active_canary" or settings.active_bps == 0:
         if control_count < minimum_control:
             phase, status, decision, next_action = "control_collecting", "NOT_READY", "NO_GO", "collect_control"
@@ -244,12 +271,22 @@ def build_autotutor_canary_verification(
             "committed_graph_transition_count": committed_graph,
             "minimum_control": minimum_control,
             "minimum_graph": minimum_graph,
+            "minimum_rollback_control": minimum_rollback_control,
+        },
+        "rollback": {
+            "exact_window": until is not None,
+            "assigned_control_count": control_count,
+            "assigned_graph_count": graph_count,
+            "selected_graph_count": selected_graph,
+            "minimum_control": minimum_rollback_control,
+            "verified": phase == "rollback_verified",
         },
         "window": {"start": since, "end": until, "exact": until is not None},
         "aggregate": aggregate,
         "evidence": {
             "present": evidence is not None,
             "decision": evidence.get("decision") if evidence else None,
+            "stage": evidence_stage,
             "sha256": evidence.get("evidence_sha256") if evidence else None,
             "drills": evidence.get("drills") if evidence else None,
         },
@@ -260,9 +297,11 @@ def build_autotutor_canary_snapshot(**kwargs: Any) -> dict[str, Any]:
     if not kwargs.get("window_start") or not kwargs.get("window_end"):
         raise ValueError("exact snapshot requires window_start and window_end")
     verification = build_autotutor_canary_verification(**kwargs)
+    snapshot_kind = "rollback" if verification["phase"].startswith("rollback_") else "canary"
     snapshot = {
         "schema_version": 1,
         "agent_type": "auto_tutor",
+        "snapshot_kind": snapshot_kind,
         "slice": verification["aggregate"].get("slice"),
         "deployment": verification["deployment"],
         "configuration": verification["configuration"],
@@ -271,6 +310,7 @@ def build_autotutor_canary_snapshot(**kwargs: Any) -> dict[str, Any]:
         "admission": verification["admission"],
         "observation_health": verification["observation_health"],
         "aggregate": verification["aggregate"],
+        "rollback": verification.get("rollback") or {},
         "phase": verification["phase"],
         "status": verification["status"],
         "decision": verification["decision"],

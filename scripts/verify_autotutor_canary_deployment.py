@@ -15,7 +15,10 @@ from typing import Any, Callable
 
 UrlOpen = Callable[..., Any]
 PHASES = {"preflight", "control_snapshot", "canary_snapshot", "rollback_verify"}
-FORBIDDEN_KEYS = {"token", "authorization", "bucket_salt", "email", "password", "student_id", "actor_id"}
+FORBIDDEN_KEYS = {
+    "token", "authorization", "password", "bucket_salt", "email", "student_id", "actor_id", "account_id",
+    "session_id", "trace_id", "effect_id", "transition_id", "question", "answer", "raw_prompt", "raw_response", "content",
+}
 
 
 def _assert_pii_free(value: Any) -> None:
@@ -83,6 +86,7 @@ def verify_remote(
     window_end: str | None = None,
     minimum_control: int = 100,
     minimum_graph: int = 100,
+    minimum_rollback_control: int = 20,
     urlopen: UrlOpen = urllib.request.urlopen,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
@@ -94,6 +98,7 @@ def verify_remote(
         "expected_config_version": expected_config_version,
         "minimum_control": str(minimum_control),
         "minimum_graph": str(minimum_graph),
+        "minimum_rollback_control": str(minimum_rollback_control),
     }
     if window_start:
         params["window_start"] = window_start
@@ -121,6 +126,7 @@ def verify_remote(
                 "window_end": window_end,
                 "minimum_control": minimum_control,
                 "minimum_graph": minimum_graph,
+                "minimum_rollback_control": minimum_rollback_control,
             },
             timeout=30,
             urlopen=urlopen,
@@ -180,6 +186,7 @@ def main() -> None:
     parser.add_argument("--window-end")
     parser.add_argument("--minimum-control", type=int, default=100)
     parser.add_argument("--minimum-graph", type=int, default=100)
+    parser.add_argument("--minimum-rollback-control", type=int, default=20)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-markdown", type=Path, required=True)
     args = parser.parse_args()
@@ -197,6 +204,7 @@ def main() -> None:
             window_end=args.window_end,
             minimum_control=max(1, args.minimum_control),
             minimum_graph=max(1, args.minimum_graph),
+            minimum_rollback_control=max(1, args.minimum_rollback_control),
         )
         code = _exit_code(artifact)
     except ValueError as exc:

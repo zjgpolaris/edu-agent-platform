@@ -13,6 +13,8 @@ def main() -> None:
     assert "environment: production-verification" in source and "timeout-minutes: 10" in source
     assert "git merge-base --is-ancestor" in source
     assert "--persist-url" in source and "--require-go" in source
+    assert "group: autotutor-production-verification" in source and "cancel-in-progress: false" in source
+    assert "--stage candidate" in source and "--stage final" in source
     assert "retention-days: 30" in source and "continue-on-error: true" in source
     assert "EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS" not in source
     print("autotutor_production_workflow_contract_smoke=PASS")

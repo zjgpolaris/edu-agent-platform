@@ -53,6 +53,7 @@ class AutoTutorExecutorSettings:
     active_bps: int
     config_version: str
     bucket_salt: str
+    bucket_salt_configured: bool
     kill_switch: bool
     comparator_enabled: bool
     fallback_enabled: bool
@@ -74,8 +75,9 @@ class AutoTutorExecutorSettings:
             errors.append("executor_mode_invalid")
             mode = "legacy"
         bps = _integer(env, "EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS")
-        config = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.4-production-verification")).strip()[:120]
-        salt = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "v1.49.4")).strip()[:120]
+        config = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.5-production-attestation")).strip()[:120]
+        salt_configured = bool(str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "")).strip())
+        salt = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "v1.49.5")).strip()[:120]
         kill_switch = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_KILL_SWITCH")
         comparator = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_COMPARATOR_ENABLED", True)
         fallback = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_FALLBACK_ENABLED", True)
@@ -92,7 +94,7 @@ class AutoTutorExecutorSettings:
                 errors.append("fallback_disabled")
             if not config:
                 errors.append("config_version_missing")
-            if not salt:
+            if not salt_configured:
                 errors.append("bucket_salt_missing")
             environment = str(env.get("EDU_AGENT_ENVIRONMENT", "") or (deployment_environment() if environ is None else "local"))
             commit = str(env.get("EDU_AGENT_DEPLOYED_COMMIT", "") or env.get("RENDER_GIT_COMMIT", "") or (deployed_commit() if environ is None else ""))
@@ -103,8 +105,9 @@ class AutoTutorExecutorSettings:
         return cls(
             mode=mode,  # type: ignore[arg-type]
             active_bps=max(0, min(bps, 1000)),
-            config_version=config or "v1.49.4-production-verification",
-            bucket_salt=salt or "v1.49.4",
+            config_version=config or "v1.49.5-production-attestation",
+            bucket_salt=salt or "v1.49.5",
+            bucket_salt_configured=salt_configured,
             kill_switch=kill_switch,
             comparator_enabled=comparator,
             fallback_enabled=fallback,
@@ -113,16 +116,26 @@ class AutoTutorExecutorSettings:
         )
 
     @property
-    def config_fingerprint(self) -> str:
+    def cohort_fingerprint(self) -> str:
+        payload = "\n".join((self.config_version, self.bucket_salt, "sha256-mod-10000-v1"))
+        return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @property
+    def runtime_state_fingerprint(self) -> str:
         payload = "\n".join((
             self.mode,
             str(self.active_bps),
             self.config_version,
-            self.bucket_salt,
+            str(self.kill_switch).lower(),
             str(self.comparator_enabled).lower(),
             str(self.fallback_enabled).lower(),
         ))
         return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @property
+    def config_fingerprint(self) -> str:
+        """Compatibility alias for the mutable runtime-state identity."""
+        return self.runtime_state_fingerprint
 
     def safe_summary(self) -> dict[str, object]:
         return {
@@ -130,6 +143,9 @@ class AutoTutorExecutorSettings:
             "active_bps": self.active_bps,
             "config_version": self.config_version,
             "config_fingerprint": self.config_fingerprint,
+            "cohort_fingerprint": self.cohort_fingerprint,
+            "runtime_state_fingerprint": self.runtime_state_fingerprint,
+            "cohort_salt_configured": self.bucket_salt_configured,
             "kill_switch": self.kill_switch,
             "comparator_enabled": self.comparator_enabled,
             "fallback_enabled": self.fallback_enabled,

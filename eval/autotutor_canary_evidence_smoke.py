@@ -7,7 +7,6 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = Path(tempfile.gettempdir()) / "edu-agent-autotutor-canary-evidence.sqlite3"
@@ -21,10 +20,14 @@ from sqlalchemy import text  # noqa: E402
 from agent_runtime.evidence_store import load_release_evidence, save_release_evidence  # noqa: E402
 from db.engine import engine, get_connection  # noqa: E402
 from db.schema import metadata  # noqa: E402
-from scripts.build_autotutor_canary_evidence import build_autotutor_canary_evidence  # noqa: E402
+from scripts.build_autotutor_canary_evidence import (  # noqa: E402
+    _snapshot_hash,
+    build_autotutor_canary_evidence,
+    build_autotutor_final_evidence,
+)
 
 COMMIT = "f" * 40
-CONFIG = "v1.49.4-evidence-smoke"
+CONFIG = "v1.49.5-evidence-smoke"
 START = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
 END = datetime.now(timezone.utc).isoformat()
 
@@ -49,32 +52,75 @@ def main() -> None:
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
         conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('016')"))
-    schema = {"status": "ready", "schema_ready": True, "alembic_version": "016"}
-    with patch("scripts.build_autotutor_canary_evidence.runtime_schema_readiness", return_value=schema), \
-         patch("scripts.build_autotutor_canary_evidence.aggregate_autotutor_transition_canary", return_value=_aggregate()):
-        evidence = build_autotutor_canary_evidence(
-            deployed_commit=COMMIT, config_version=CONFIG, environment="production",
-            window_start=START, window_end=END,
-            drills={"restart": "pass", "writer_failure": "pass", "kill_switch": "pass", "rollback": "pass"},
-        )
-    assert evidence["decision"] == "GO" and evidence["evidence_sha256"]
+    configuration = {
+        "config_version": CONFIG, "mode": "active_canary", "active_bps": 100,
+        "cohort_fingerprint": "sha256:" + "1" * 64,
+        "runtime_state_fingerprint": "sha256:" + "2" * 64,
+    }
+    canary_snapshot = {
+        "schema_version": 1, "agent_type": "auto_tutor", "snapshot_kind": "canary",
+        "slice": _aggregate()["slice"],
+        "deployment": {"deployed_commit": COMMIT, "environment": "production", "schema_revision": "016"},
+        "configuration": configuration, "schema": {"revision": "016"},
+        "aggregate": _aggregate(), "status": "READY", "decision": "GO", "blockers": [],
+    }
+    canary_payload = {"snapshot": canary_snapshot, "snapshot_sha256": _snapshot_hash(canary_snapshot)}
+    evidence = build_autotutor_canary_evidence(
+        deployed_commit=COMMIT, config_version=CONFIG, environment="production",
+        window_start=START, window_end=END,
+        drills={"restart": "pass", "writer_failure": "pass", "kill_switch": "pass"},
+        snapshot_payload=canary_payload,
+        drill_artifact={
+            "attestation_type": "environment_approved_operator", "deployed_commit": COMMIT,
+            "config_version": CONFIG, "environment": "production", "window": {"start": START, "end": END},
+            "results": {"restart": "pass", "writer_failure": "pass", "kill_switch": "pass"},
+        },
+    )
+    assert evidence["decision"] == "CANDIDATE_GO" and evidence["evidence_stage"] == "candidate"
     assert not any(field in json.dumps(evidence) for field in ("student_id", "session_id", "raw_answer", "question_text"))
-    saved = save_release_evidence(evidence)
-    loaded = load_release_evidence(evidence_sha256=evidence["evidence_sha256"])
-    assert loaded == saved == evidence
+    saved_candidate = save_release_evidence(evidence)
+    assert load_release_evidence(evidence_sha256=evidence["evidence_sha256"]) == saved_candidate
+
+    rollback_snapshot = {
+        "schema_version": 1, "agent_type": "auto_tutor", "snapshot_kind": "rollback",
+        "deployment": {"deployed_commit": COMMIT, "environment": "production", "schema_revision": "016"},
+        "configuration": {**configuration, "mode": "legacy", "active_bps": 0,
+                          "runtime_state_fingerprint": "sha256:" + "3" * 64},
+        "rollback": {"assigned_control_count": 20, "assigned_graph_count": 0,
+                     "selected_graph_count": 0, "minimum_control": 20},
+        "phase": "rollback_ready_for_finalize", "status": "READY", "decision": "GO", "blockers": [],
+    }
+    rollback_payload = {"snapshot": rollback_snapshot, "snapshot_sha256": _snapshot_hash(rollback_snapshot)}
+    final = build_autotutor_final_evidence(candidate=evidence, rollback_snapshot_payload=rollback_payload)
+    assert final["decision"] == "GO" and final["evidence_stage"] == "final"
+    saved = save_release_evidence(final)
+    loaded = load_release_evidence(evidence_sha256=final["evidence_sha256"])
+    assert loaded == saved == final
+    assert build_autotutor_final_evidence(candidate=final, rollback_snapshot_payload=rollback_payload) == final
+
+    empty_rollback = json.loads(json.dumps(rollback_snapshot))
+    empty_rollback["rollback"]["assigned_control_count"] = 0
+    empty_payload = {"snapshot": empty_rollback, "snapshot_sha256": _snapshot_hash(empty_rollback)}
+    try:
+        build_autotutor_final_evidence(candidate=evidence, rollback_snapshot_payload=empty_payload)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("zero-traffic rollback must not finalize evidence")
 
     not_ready = _aggregate()
     not_ready.update({"status": "NOT_READY", "decision": "NO_GO", "blockers": []})
-    with patch("scripts.build_autotutor_canary_evidence.runtime_schema_readiness", return_value=schema), \
-         patch("scripts.build_autotutor_canary_evidence.aggregate_autotutor_transition_canary", return_value=not_ready):
-        incomplete_drills = build_autotutor_canary_evidence(
-            deployed_commit=COMMIT, config_version=CONFIG, environment="production",
-            window_start=START, window_end=END,
-        )
+    incomplete_snapshot = dict(canary_snapshot)
+    incomplete_snapshot["aggregate"] = not_ready
+    incomplete_payload = {"snapshot": incomplete_snapshot, "snapshot_sha256": _snapshot_hash(incomplete_snapshot)}
+    incomplete_drills = build_autotutor_canary_evidence(
+        deployed_commit=COMMIT, config_version=CONFIG, environment="production",
+        window_start=START, window_end=END, snapshot_payload=incomplete_payload,
+    )
     assert incomplete_drills["decision"] == "NO_GO"
     assert "production_rehearsals_incomplete" in incomplete_drills["blockers"]
 
-    incomplete = json.loads(json.dumps(evidence))
+    incomplete = json.loads(json.dumps(final))
     incomplete["drills"]["kill_switch"] = "not_run"
     from agent_runtime.rollout_gate import seal_rollout_evidence
     incomplete = seal_rollout_evidence(incomplete)
@@ -87,9 +133,9 @@ def main() -> None:
 
     with get_connection() as conn:
         conn.execute(text("UPDATE agent_release_evidence SET payload_json='{}' WHERE evidence_sha256=:digest"), {
-            "digest": evidence["evidence_sha256"],
+            "digest": final["evidence_sha256"],
         })
-    assert load_release_evidence(evidence_sha256=evidence["evidence_sha256"]) is None
+    assert load_release_evidence(evidence_sha256=final["evidence_sha256"]) is None
     print("autotutor_canary_evidence_smoke=PASS")
 
 
