@@ -157,7 +157,7 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "git_commit": commit,
         "dirty": dirty,
-        "executor_config_version": "v1.49.2-canary-readiness",
+        "executor_config_version": "v1.49.3-canary-admission",
         "observation_schema": "v1.49.2-observation",
         "outcome_schema": "v1.49.2-outcome",
         "trajectory_kinds": [case[2].transition_kind for case in cases],

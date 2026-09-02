@@ -33,6 +33,7 @@ def main() -> None:
             "traffic_cohort", "rollout_eligible", "eligibility_reason",
             "assigned_executor", "selected_executor", "transition_id",
             "observation_schema_version", "outcome_schema_version", "commit_status",
+            "assignment_reason", "admission_status", "admission_reason", "admission_checked_at",
         } <= observation_columns
         assert "idx_rollout_observation_eligibility" in observation_indexes
         version = str(conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar_one())

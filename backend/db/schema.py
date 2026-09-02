@@ -511,6 +511,10 @@ agent_rollout_observations = Table(
     Column("observation_schema_version", Text),
     Column("outcome_schema_version", Text),
     Column("commit_status", Text),
+    Column("assignment_reason", Text),
+    Column("admission_status", Text),
+    Column("admission_reason", Text),
+    Column("admission_checked_at", Text),
     Column("comparator_matched", Integer),
     Column("fallback_reason", Text),
     Column("provider_latency_ms", Integer),
@@ -523,6 +527,7 @@ agent_rollout_observations = Table(
     Index("idx_rollout_observation_commit_created", "deployed_commit", "created_at"),
     Index("idx_rollout_observation_eligibility", "rollout_eligible", "eligibility_reason", "created_at"),
     Index("idx_rollout_observation_transition", "agent_type", "assigned_executor", "selected_executor", "transition_kind", "created_at"),
+    Index("idx_rollout_observation_admission", "agent_type", "admission_status", "created_at"),
 )
 
 agent_release_evidence = Table(

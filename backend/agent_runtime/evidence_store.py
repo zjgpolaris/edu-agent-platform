@@ -24,8 +24,10 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
     required = ("agent_type", "config_version", "runtime_mode", "deployed_commit", "environment")
     if any(not str(payload.get(field) or "").strip() for field in required):
         raise ValueError("release evidence provenance is incomplete")
-    if payload.get("runtime_mode") not in {"shadow", "active"}:
-        raise ValueError("release evidence runtime mode must be shadow or active")
+    is_autotutor = payload.get("agent_type") == "auto_tutor"
+    valid_modes = {"active_canary"} if is_autotutor else {"shadow", "active"}
+    if payload.get("runtime_mode") not in valid_modes:
+        raise ValueError("release evidence runtime mode is invalid")
     generated_at = payload.get("generated_at")
     try:
         generated = datetime.fromisoformat(str(generated_at).replace("Z", "+00:00"))
@@ -37,8 +39,49 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
     if not now - timedelta(days=7) <= generated.astimezone(timezone.utc) <= now + timedelta(minutes=5):
         raise ValueError("release evidence is stale or generated in the future")
     schema_version = int(payload.get("schema_version") or 1)
-    if schema_version not in {1, 2}:
+    if schema_version not in ({3} if is_autotutor else {1, 2}):
         raise ValueError("release evidence schema is unsupported")
+    if is_autotutor:
+        aggregate = payload.get("aggregate")
+        window = payload.get("window")
+        drills = payload.get("drills")
+        if (
+            not isinstance(aggregate, dict)
+            or not isinstance(window, dict)
+            or not window.get("start")
+            or not window.get("end")
+            or payload.get("cohort") != "verified"
+            or int(payload.get("migration_revision") or 0) < 16
+        ):
+            raise ValueError("AutoTutor release evidence provenance is incomplete")
+        try:
+            window_start = datetime.fromisoformat(str(window["start"]).replace("Z", "+00:00"))
+            window_end = datetime.fromisoformat(str(window["end"]).replace("Z", "+00:00"))
+            if window_start.tzinfo is None:
+                window_start = window_start.replace(tzinfo=timezone.utc)
+            if window_end.tzinfo is None:
+                window_end = window_end.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            raise ValueError("AutoTutor release evidence window is invalid") from None
+        if window_start >= window_end:
+            raise ValueError("AutoTutor release evidence window is invalid")
+        aggregate_slice = aggregate.get("slice") if isinstance(aggregate.get("slice"), dict) else {}
+        if (
+            aggregate_slice.get("deployed_commit") != payload.get("deployed_commit")
+            or aggregate_slice.get("config_version") != payload.get("config_version")
+            or aggregate_slice.get("environment") != payload.get("environment")
+            or aggregate_slice.get("traffic_cohort") != payload.get("cohort")
+            or aggregate_slice.get("since") != window.get("start")
+            or aggregate_slice.get("until") != window.get("end")
+        ):
+            raise ValueError("AutoTutor aggregate slice does not match evidence")
+        if payload.get("decision") == "GO":
+            if aggregate.get("status") != "GO" or aggregate.get("decision") != "GO":
+                raise ValueError("AutoTutor GO evidence requires a GO aggregate")
+            required_drills = {"restart", "writer_failure", "kill_switch"}
+            if not isinstance(drills, dict) or any(drills.get(name) != "pass" for name in required_drills):
+                raise ValueError("AutoTutor GO evidence drills are incomplete")
+        return _persist_release_evidence(payload, digest=digest, schema_version=schema_version)
     if schema_version == 2 and not str(payload.get("image_digest") or "").strip():
         raise ValueError("release evidence image digest is required for schema v2")
     profiles = payload.get("profiles")
@@ -73,6 +116,10 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
         or int(baseline.get("sample_count") or 0) <= 0
     ):
         raise ValueError("release evidence control baseline is invalid")
+    return _persist_release_evidence(payload, digest=digest, schema_version=schema_version)
+
+
+def _persist_release_evidence(payload: dict[str, Any], *, digest: str, schema_version: int) -> dict[str, Any]:
     evidence_id = f"evidence_{uuid4().hex}"
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     try:
@@ -81,6 +128,7 @@ def save_release_evidence(payload: dict[str, Any]) -> dict[str, Any]:
                 raise LookupError("release evidence schema is not migrated")
             if schema_version == 2:
                 from llm.capability_store import load_capability_manifest_by_hash
+                profiles = payload.get("profiles") if isinstance(payload.get("profiles"), dict) else {}
                 capability = profiles["llm_capabilities"]
                 manifest = load_capability_manifest_by_hash(str(capability["manifest_sha256"]), connection=conn)
                 if manifest is None:

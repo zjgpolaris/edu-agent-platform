@@ -20,6 +20,7 @@ import json
 import hashlib
 import threading
 import time
+from datetime import datetime, timezone
 from time import perf_counter
 from typing import Any, Iterator, Literal
 from uuid import uuid4
@@ -72,6 +73,7 @@ from agents.autotutor_execution import (
     select_executor,
 )
 from agents.autotutor_observations import DEFAULT_AUTOTUTOR_OBSERVATION_PROVIDER
+from agents.autotutor_canary_admission import evaluate_autotutor_canary_admission
 
 AGENT_NAME = "auto_tutor"
 
@@ -212,7 +214,12 @@ class AutoTutorState(BaseModel):
     executor_mode: Literal["legacy", "graph_active"] = "legacy"
     executor_assigned_mode: Literal["legacy", "graph_active"] | None = None
     executor_config_version: str | None = None
+    executor_deployed_commit: str | None = None
     executor_bucket: int | None = None
+    executor_assignment_reason: str | None = None
+    executor_admission_status: Literal["admitted", "denied", "unknown"] | None = None
+    executor_admission_reasons: list[str] = Field(default_factory=list)
+    executor_admission_checked_at: str | None = None
     executor_fallback_reason: str | None = None
     revision: int = 0
     created_at: float = 0.0
@@ -402,6 +409,10 @@ def _record_executor_observation(
             observation_schema_version="v1.49.2-observation" if outcome else None,
             outcome_schema_version=outcome.schema_version if outcome else None,
             commit_status=status,
+            assignment_reason=state.executor_assignment_reason,
+            admission_status=state.executor_admission_status,
+            admission_reason=",".join(state.executor_admission_reasons) or None,
+            admission_checked_at=state.executor_admission_checked_at,
             comparator_matched=outcome.diagnostics.comparator_matched if comparator_observed and outcome else None,
             fallback_reason=state.executor_fallback_reason,
             provider_latency_ms=round(outcome.diagnostics.provider_latency_ms) if outcome else None,
@@ -558,6 +569,39 @@ def _restore_state(payload: dict[str, Any]) -> AutoTutorState:
             state.phase = "content_blocked"
     state._sequence = max((step.sequence for step in state.runtime_steps), default=0)
     return state
+
+
+def _apply_existing_session_canary_admission(
+    state: AutoTutorState,
+    *,
+    context: AutoTutorExecutionContext,
+    settings: AutoTutorExecutorSettings,
+) -> None:
+    """Permanently downgrade a selected Graph session before Provider execution."""
+    if state.executor_assigned_mode != "graph_active" or state.executor_mode != "graph_active":
+        return
+    if settings.kill_switch:
+        state.executor_admission_status = "denied"
+        state.executor_admission_reasons = ["kill_switch_enabled"]
+        state.executor_admission_checked_at = datetime.now(timezone.utc).isoformat()
+        state.executor_mode = "legacy"
+        state.executor_fallback_reason = "kill_switch_enabled"
+        return
+    if context.environment != "production":
+        return
+    snapshot = evaluate_autotutor_canary_admission(settings=settings, context=context)
+    reasons = list(snapshot.reason_codes)
+    if state.executor_config_version and state.executor_config_version != settings.config_version:
+        reasons.append("executor_config_drift")
+    if not state.executor_deployed_commit or state.executor_deployed_commit != context.deployed_commit:
+        reasons.append("executor_commit_drift")
+    state.executor_admission_status = "denied" if reasons else snapshot.status
+    state.executor_admission_reasons = list(dict.fromkeys(reasons))
+    state.executor_admission_checked_at = snapshot.checked_at
+    if reasons or not snapshot.admitted:
+        reason = state.executor_admission_reasons[0] if state.executor_admission_reasons else "admission_unknown"
+        state.executor_mode = "legacy"
+        state.executor_fallback_reason = f"admission_revoked:{reason}"[:120]
 
 
 def _persist_session(state: AutoTutorState, *, start_idempotency_key: str | None = None) -> None:
@@ -2005,12 +2049,24 @@ def start_session(
         eligibility_reason=eligibility_reason,
         internal_force_graph=internal_force_graph,
     )
-    decision = select_executor(subject=actor_id or student_id, context=execution_context)
+    settings = AutoTutorExecutorSettings.from_env()
+    admission = evaluate_autotutor_canary_admission(settings=settings, context=execution_context)
+    decision = select_executor(
+        subject=actor_id or student_id,
+        context=execution_context,
+        settings=settings,
+        admission=admission,
+    )
     state.executor_mode = decision.mode
     state.executor_assigned_mode = decision.mode
     state.executor_config_version = decision.config_version
+    state.executor_deployed_commit = execution_context.deployed_commit or None
     state.executor_bucket = decision.bucket
-    state.executor_fallback_reason = decision.fallback_reason
+    state.executor_assignment_reason = decision.assignment_reason
+    state.executor_admission_status = admission.status
+    state.executor_admission_reasons = list(admission.reason_codes)
+    state.executor_admission_checked_at = admission.checked_at
+    state.executor_fallback_reason = None
     selected_outcome = _execute_selected_transition(
         state,
         transition_kind="start",
@@ -2262,9 +2318,7 @@ def _submit_answer_locked(
         eligibility_reason=eligibility_reason,
     )
     settings = AutoTutorExecutorSettings.from_env()
-    if state.executor_mode == "graph_active" and settings.kill_switch:
-        state.executor_mode = "legacy"
-        state.executor_fallback_reason = "kill_switch_enabled"
+    _apply_existing_session_canary_admission(state, context=execution_context, settings=settings)
     set_trace_id(state.trace_id)
     previous_sequence = max((step.sequence for step in state.runtime_steps), default=0)
     try:

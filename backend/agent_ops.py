@@ -49,11 +49,13 @@ def _build_runtime_v2_summary(*, since: str, data_scope: str, window_hours: int 
             runtime_audits = []
             rollout_observation_rows = conn.execute(text("""SELECT agent_type, config_version, runtime_mode,
                     assigned_executor, selected_executor, transition_kind, comparator_matched,
-                    commit_status, status, COUNT(*) AS count
+                    commit_status, assignment_reason, admission_status, admission_reason,
+                    status, COUNT(*) AS count
                 FROM agent_rollout_observations
                 WHERE created_at>=:since AND data_scope=:data_scope
                 GROUP BY agent_type, config_version, runtime_mode, assigned_executor,
-                    selected_executor, transition_kind, comparator_matched, commit_status, status
+                    selected_executor, transition_kind, comparator_matched, commit_status,
+                    assignment_reason, admission_status, admission_reason, status
                 ORDER BY agent_type, config_version, runtime_mode, assigned_executor,
                     selected_executor, transition_kind, status"""), {
                     "since": since,

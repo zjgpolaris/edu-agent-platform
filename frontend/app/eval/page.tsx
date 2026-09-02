@@ -54,6 +54,28 @@ type SuiteResult = {
 };
 type AgentOpsSummary = {
   status: string;
+  runtime_v2?: {
+    autotutor_transition_canary?: {
+      status?: string;
+      decision?: string;
+      blockers?: string[];
+      assigned_graph_count?: number;
+      selected_graph_count?: number;
+      committed_graph_count?: number;
+      fallback_count?: number;
+      fallback_rate?: number | null;
+      comparator_match_rate?: number | null;
+      comparator_unknown_count?: number;
+      unauthorized_graph_count?: number;
+      duplicate_effect_count?: number;
+      transition_kind_coverage?: string[];
+      provenance_coverage?: number | null;
+      latency?: { latency?: { p95_ms?: number | null } };
+      control_latency?: { p95_ms?: number | null };
+      observation_write_health?: { status?: string; failure_count?: number | null };
+      slice?: { deployed_commit?: string; config_version?: string; environment?: string };
+    } | null;
+  };
   runtime_rollout?: {
     phase?: string;
     status?: string;
@@ -1079,6 +1101,7 @@ function AgentOpsPanel({ summary, error }: { summary: AgentOpsSummary | null; er
             <OpsCard label="受限计划步骤" value={String(runtime?.plan_step_count ?? "--")} hint={`${runtime?.routing_count ?? 0} routed requests`} />
             <OpsCard label="Repair 成功率" value={runtime?.repair_count ? `${Math.round((runtime.repair_success_rate ?? 0) * 100)}%` : "--"} hint={`${runtime?.repair_success_count ?? 0}/${runtime?.repair_count ?? 0} repairs · rate ${Math.round((runtime?.repair_rate ?? 0) * 100)}%`} />
           </div>
+          {summary?.runtime_v2?.autotutor_transition_canary ? <AutoTutorCanaryPanel canary={summary.runtime_v2.autotutor_transition_canary} /> : null}
           {summary?.runtime_rollout?.deployment?.runtime_enabled ? <RuntimeRolloutPanel rollout={summary.runtime_rollout} /> : null}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
             <Rollup title="Top actions" items={summary?.audit?.by_action} />
@@ -1161,6 +1184,38 @@ function RuntimeRolloutPanel({ rollout }: { rollout?: AgentOpsSummary["runtime_r
       {blockers.length ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.55rem" }}>
           {blockers.slice(0, 8).map((blocker) => <Badge key={blocker}>{blocker}</Badge>)}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function AutoTutorCanaryPanel({ canary }: { canary: NonNullable<NonNullable<AgentOpsSummary["runtime_v2"]>["autotutor_transition_canary"]> }) {
+  const blockers = canary.blockers || [];
+  const statusColor = canary.decision === "GO" ? "var(--jade-dark)" : canary.status === "NOT_READY" ? "#7a5524" : "var(--cinnabar-dark)";
+  return (
+    <section aria-label="AutoTutor Canary" style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "0.85rem", background: "var(--paper-strong)", marginBottom: "0.85rem" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", marginBottom: "0.7rem" }}>
+        <strong style={{ color: "var(--ink)" }}>AutoTutor Transition Canary</strong>
+        <Badge>{canary.status || "UNKNOWN"}</Badge>
+        <span style={{ color: statusColor, fontSize: "0.78rem", fontWeight: 700 }}>{canary.decision || "NO_GO"}</span>
+        <span style={{ color: "var(--muted)", fontSize: "0.72rem", marginLeft: "auto" }}>
+          {(canary.slice?.deployed_commit || "").slice(0, 8) || "no commit"} · {canary.slice?.config_version || "no config"}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: "0.6rem" }}>
+        <OpsCard label="Graph Assigned" value={String(canary.assigned_graph_count ?? 0)} hint={`${canary.selected_graph_count ?? 0} selected`} />
+        <OpsCard label="Graph Committed" value={String(canary.committed_graph_count ?? 0)} hint={`${canary.fallback_count ?? 0} fallback`} />
+        <OpsCard label="Comparator" value={percent(canary.comparator_match_rate)} hint={`${canary.comparator_unknown_count ?? 0} unknown`} />
+        <OpsCard label="Fallback Rate" value={percent(canary.fallback_rate)} hint="must stay below 1%" />
+        <OpsCard label="Provenance" value={percent(canary.provenance_coverage)} hint={(canary.transition_kind_coverage || []).join(" · ") || "no coverage"} />
+        <OpsCard label="Active p95" value={canary.latency?.latency?.p95_ms != null ? `${Math.round(canary.latency.latency.p95_ms)}ms` : "--"} hint={`control ${canary.control_latency?.p95_ms != null ? `${Math.round(canary.control_latency.p95_ms)}ms` : "--"}`} />
+        <OpsCard label="Observation" value={canary.observation_write_health?.status || "unknown"} hint={`${canary.observation_write_health?.failure_count ?? "--"} failures`} />
+        <OpsCard label="Safety" value={String((canary.duplicate_effect_count ?? 0) + (canary.unauthorized_graph_count ?? 0))} hint="duplicate + unauthorized" />
+      </div>
+      {blockers.length ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.55rem" }}>
+          {blockers.slice(0, 10).map((blocker) => <Badge key={blocker}>{blocker}</Badge>)}
         </div>
       ) : null}
     </section>

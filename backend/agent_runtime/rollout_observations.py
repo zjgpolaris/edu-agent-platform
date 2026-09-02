@@ -5,6 +5,7 @@ import math
 import os
 import threading
 import time
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
@@ -39,6 +40,16 @@ def _percentile(values: list[int], percentile: float) -> float | None:
     return round(float(ordered[index]), 2)
 
 
+def _distribution(values: list[int]) -> dict[str, float | int | None]:
+    return {
+        "count": len(values),
+        "min": min(values) if values else None,
+        "p50": _percentile(values, 0.50),
+        "p95": _percentile(values, 0.95),
+        "max": max(values) if values else None,
+    }
+
+
 def deployment_metadata() -> dict[str, str]:
     return {
         "deployed_commit": deployed_commit(),
@@ -68,6 +79,10 @@ def record_rollout_observation(
     observation_schema_version: str | None = None,
     outcome_schema_version: str | None = None,
     commit_status: str | None = None,
+    assignment_reason: str | None = None,
+    admission_status: str | None = None,
+    admission_reason: str | None = None,
+    admission_checked_at: str | None = None,
     comparator_matched: bool | None = None,
     fallback_reason: str | None = None,
     provider_latency_ms: int | None = None,
@@ -110,6 +125,7 @@ def record_rollout_observation(
             , traffic_cohort, rollout_eligible, eligibility_reason
             , assigned_executor, selected_executor, transition_kind, transition_id
             , observation_schema_version, outcome_schema_version, commit_status
+            , assignment_reason, admission_status, admission_reason, admission_checked_at
             , comparator_matched, fallback_reason
             , provider_latency_ms, executor_latency_ms, comparator_latency_ms
             , observation_external_calls, effect_intent_count
@@ -119,6 +135,7 @@ def record_rollout_observation(
             , :traffic_cohort, :rollout_eligible, :eligibility_reason
             , :assigned_executor, :selected_executor, :transition_kind, :transition_id
             , :observation_schema_version, :outcome_schema_version, :commit_status
+            , :assignment_reason, :admission_status, :admission_reason, :admission_checked_at
             , :comparator_matched, :fallback_reason
             , :provider_latency_ms, :executor_latency_ms, :comparator_latency_ms
             , :observation_external_calls, :effect_intent_count
@@ -144,6 +161,10 @@ def record_rollout_observation(
             "observation_schema_version": str(observation_schema_version)[:60] if observation_schema_version else None,
             "outcome_schema_version": str(outcome_schema_version)[:60] if outcome_schema_version else None,
             "commit_status": str(commit_status)[:40] if commit_status else None,
+            "assignment_reason": str(assignment_reason)[:120] if assignment_reason else None,
+            "admission_status": str(admission_status)[:20] if admission_status else None,
+            "admission_reason": str(admission_reason)[:240] if admission_reason else None,
+            "admission_checked_at": str(admission_checked_at)[:80] if admission_checked_at else None,
             "comparator_matched": None if comparator_matched is None else (1 if comparator_matched else 0),
             "fallback_reason": str(fallback_reason)[:120] if fallback_reason else None,
             "provider_latency_ms": max(0, int(provider_latency_ms)) if provider_latency_ms is not None else None,
@@ -400,17 +421,19 @@ def aggregate_autotutor_transition_canary(
               AND created_at>=:since{where_until}
               AND (assigned_executor='graph_active' OR selected_executor='graph_active')
               AND (data_scope!=:data_scope OR traffic_cohort!=:traffic_cohort OR rollout_eligible!=1)"""), params).scalar_one())
-        duplicate_effect_count = 0
+        effect_rows = []
         if "learning_events" in set(sa_inspect(conn).get_table_names()):
-            duplicate_effect_count = int(conn.execute(text(f"""SELECT COUNT(*) FROM (
-                SELECT effect_key FROM learning_events
-                WHERE effect_key IS NOT NULL AND created_at>=:since{where_until}
-                GROUP BY effect_key HAVING COUNT(*)>1
-            ) duplicate_effects"""), params).scalar_one())
+            effect_rows = conn.execute(text(f"""SELECT effect_key, metadata_json FROM learning_events
+                WHERE feature='auto_tutor' AND effect_key IS NOT NULL
+                  AND created_at>=:since{where_until}"""), params).mappings().all()
 
     graph_rows = [row for row in rows if str(row.get("assigned_executor") or "") == "graph_active"]
     control_rows = [row for row in rows if str(row.get("assigned_executor") or "") == "legacy"]
     selected_graph = [row for row in graph_rows if str(row.get("selected_executor") or "") == "graph_active"]
+    committed_graph = [
+        row for row in selected_graph
+        if str(row.get("commit_status") or "") in {"committed", "completed"}
+    ]
     fallback_rows = [
         row for row in graph_rows
         if str(row.get("selected_executor") or "") != "graph_active" or bool(row.get("fallback_reason"))
@@ -418,6 +441,18 @@ def aggregate_autotutor_transition_canary(
     compared = [row for row in graph_rows if row.get("comparator_matched") is not None]
     mismatches = [row for row in compared if int(row.get("comparator_matched") or 0) != 1]
     provider_calls = sum(int(row.get("observation_external_calls") or 0) for row in graph_rows)
+    eligible_trace_ids = {str(row.get("trace_id")) for row in rows if row.get("trace_id")}
+    exact_effect_keys: list[str] = []
+    for row in effect_rows:
+        try:
+            metadata = json.loads(row.get("metadata_json") or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        if str(metadata.get("trace_id") or "") in eligible_trace_ids:
+            exact_effect_keys.append(str(row.get("effect_key") or ""))
+    duplicate_effect_count = sum(1 for count in Counter(exact_effect_keys).values() if count > 1)
+    transition_ids = [str(row.get("transition_id")) for row in rows if row.get("transition_id")]
+    duplicate_observation_count = sum(1 for count in Counter(transition_ids).values() if count > 1)
     latencies: dict[str, dict[str, float | None]] = {}
     for field in ("provider_latency_ms", "executor_latency_ms", "comparator_latency_ms", "latency_ms"):
         values = [int(row[field]) for row in graph_rows if row.get(field) is not None]
@@ -428,7 +463,7 @@ def aggregate_autotutor_transition_canary(
 
     denominator = len(graph_rows)
     fallback_rate = round(len(fallback_rows) / denominator, 6) if denominator else None
-    comparator_match_rate = round((len(compared) - len(mismatches)) / len(compared), 6) if compared else None
+    comparator_match_rate = round((len(compared) - len(mismatches)) / denominator, 6) if denominator else None
     covered_kinds = sorted({str(row.get("transition_kind") or "") for row in graph_rows if row.get("transition_kind")})
     required_kinds = {"start", "lesson_answer", "exit_ticket_answer"}
     missing_kinds = sorted(required_kinds - set(covered_kinds))
@@ -440,11 +475,11 @@ def aggregate_autotutor_transition_canary(
         and str(row.get("commit_status") or "") in {"committed", "completed", "fallback"}
     ]
     blockers: list[str] = []
-    if denominator < max(1, int(minimum_graph_transitions)):
+    if len(committed_graph) < max(1, int(minimum_graph_transitions)):
         blockers.append("insufficient_graph_samples")
     if len(compared) != denominator or mismatches:
         blockers.append("comparator_not_exact")
-    if fallback_rate is None or fallback_rate > 0.01:
+    if fallback_rate is None or fallback_rate >= 0.01:
         blockers.append("fallback_rate_above_one_percent")
     if unauthorized:
         blockers.append("unauthorized_graph_traffic")
@@ -452,6 +487,8 @@ def aggregate_autotutor_transition_canary(
         blockers.append("transition_kind_coverage_incomplete")
     if duplicate_effect_count:
         blockers.append("duplicate_effects_detected")
+    if duplicate_observation_count:
+        blockers.append("duplicate_transition_observations_detected")
     if control_p95 is None:
         blockers.append("control_baseline_missing")
     elif active_p95 is not None and (active_p95 > control_p95 * 1.20 or active_p95 - control_p95 > 50):
@@ -462,6 +499,8 @@ def aggregate_autotutor_transition_canary(
         blockers.append("outcome_schema_mismatch")
     if any(not row.get("transition_id") or str(row.get("commit_status") or "") not in {"committed", "completed", "fallback"} for row in graph_rows):
         blockers.append("transition_provenance_incomplete")
+    if any(str(row.get("admission_status") or "") != "admitted" for row in graph_rows):
+        blockers.append("admission_provenance_incomplete")
     health = observation_write_health(
         config_version=config_version,
         deployed_commit=deployed_commit,
@@ -472,8 +511,11 @@ def aggregate_autotutor_transition_canary(
     if not health.get("ok"):
         blockers.append("observation_write_failure")
 
+    hard_blockers = set(blockers) - {"insufficient_graph_samples", "transition_kind_coverage_incomplete"}
+    status = "GO" if not blockers else "NOT_READY" if "insufficient_graph_samples" in blockers and not hard_blockers else "NO_GO"
     return {
-        "decision": "GO" if not blockers else "NO_GO",
+        "status": status,
+        "decision": "GO" if status == "GO" else "NO_GO",
         "blockers": blockers,
         "slice": {
             "agent_type": "auto_tutor", "config_version": config_version,
@@ -487,10 +529,12 @@ def aggregate_autotutor_transition_canary(
         "assigned_control_count": len(control_rows),
         "assigned_graph_count": denominator,
         "selected_graph_count": len(selected_graph),
+        "committed_graph_count": len(committed_graph),
         "fallback_count": len(fallback_rows),
         "fallback_rate": fallback_rate,
         "comparator_observed_count": len(compared),
         "comparator_mismatch_count": len(mismatches),
+        "comparator_unknown_count": denominator - len(compared),
         "comparator_match_rate": comparator_match_rate,
         "transition_kind_coverage": covered_kinds,
         "missing_transition_kinds": missing_kinds,
@@ -499,11 +543,21 @@ def aggregate_autotutor_transition_canary(
             reason: sum(1 for row in fallback_rows if str(row.get("fallback_reason") or "unknown") == reason)
             for reason in sorted({str(row.get("fallback_reason") or "unknown") for row in fallback_rows})
         },
+        "assignment_by_reason": dict(Counter(str(row.get("assignment_reason") or "unknown") for row in rows)),
+        "admission_by_status": dict(Counter(str(row.get("admission_status") or "unknown") for row in rows)),
+        "commit_status_distribution": dict(Counter(str(row.get("commit_status") or "unknown") for row in rows)),
         "unauthorized_graph_count": unauthorized,
         "observation_external_calls": provider_calls,
         "effect_intent_count": sum(int(row.get("effect_intent_count") or 0) for row in graph_rows),
+        "observation_external_call_distribution": _distribution([int(row.get("observation_external_calls") or 0) for row in graph_rows]),
+        "effect_intent_distribution": _distribution([int(row.get("effect_intent_count") or 0) for row in graph_rows]),
         "duplicate_effect_count": duplicate_effect_count,
+        "duplicate_transition_observation_count": duplicate_observation_count,
         "control_latency": {"p50_ms": _percentile(control_total, 0.50), "p95_ms": control_p95},
+        "latency_regression": {
+            "relative": round(active_p95 / control_p95, 6) if active_p95 is not None and control_p95 else None,
+            "absolute_ms": round(active_p95 - control_p95, 2) if active_p95 is not None and control_p95 is not None else None,
+        },
         "latency": latencies,
         "observation_write_health": health,
     }

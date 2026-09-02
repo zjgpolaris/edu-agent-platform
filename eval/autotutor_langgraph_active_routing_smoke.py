@@ -49,6 +49,7 @@ def main() -> None:
     first = select_executor(subject=subject, context=_context(), settings=settings)
     second = select_executor(subject=subject, context=_context(), settings=settings)
     assert first == second and first.mode == "graph_active"
+    assert first.assignment_reason == "graph_bucket_selected"
     for cohort, scope, role in (
         ("demo", "runtime", "student"),
         ("unverified", "runtime", "student"),
@@ -68,6 +69,7 @@ def main() -> None:
             settings=settings,
         )
         assert decision.mode == "legacy"
+        assert decision.assignment_reason
     unsafe = AutoTutorExecutorSettings.from_env({**active_env, "EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS": "1001"})
     assert not unsafe.valid
     assert select_executor(subject=subject, context=_context(), settings=unsafe).mode == "legacy"
@@ -82,6 +84,15 @@ def main() -> None:
     })
     assert not production_unsafe.valid
     assert "production_active_bps_exceeds_one_percent" in production_unsafe.reason_codes
+    production_safe = AutoTutorExecutorSettings.from_env({
+        **active_env,
+        "EDU_AGENT_ENVIRONMENT": "production",
+        "EDU_AGENT_DEPLOYED_COMMIT": "a" * 40,
+        "EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS": "100",
+    })
+    missing_admission = select_executor(subject=subject, context=_context(environment="production"), settings=production_safe)
+    assert missing_admission.mode == "legacy"
+    assert missing_admission.assignment_reason == "admission_denied:canary_admission_missing"
     print("autotutor_langgraph_active_routing_smoke=PASS")
 
 

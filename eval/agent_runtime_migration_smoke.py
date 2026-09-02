@@ -97,6 +97,7 @@ def _assert_v2(db_path: Path) -> None:
             "traffic_cohort", "rollout_eligible", "eligibility_reason",
             "assigned_executor", "selected_executor", "transition_kind", "transition_id",
             "observation_schema_version", "outcome_schema_version", "commit_status",
+            "assignment_reason", "admission_status", "admission_reason", "admission_checked_at",
         } <= rollout_columns
         assert {"account_status", "traffic_cohort", "updated_at"} <= account_columns
         assert "uq_agent_release_evidence_hash" in release_indexes

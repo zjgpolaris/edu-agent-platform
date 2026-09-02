@@ -74,8 +74,8 @@ class AutoTutorExecutorSettings:
             errors.append("executor_mode_invalid")
             mode = "legacy"
         bps = _integer(env, "EDU_AGENT_AUTOTUTOR_GRAPH_ACTIVE_BPS")
-        config = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.2-canary")).strip()[:120]
-        salt = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "v1.49.2")).strip()[:120]
+        config = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.3-canary")).strip()[:120]
+        salt = str(env.get("EDU_AGENT_AUTOTUTOR_GRAPH_BUCKET_SALT", "v1.49.3")).strip()[:120]
         kill_switch = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_KILL_SWITCH")
         comparator = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_COMPARATOR_ENABLED", True)
         fallback = _enabled(env, "EDU_AGENT_AUTOTUTOR_GRAPH_FALLBACK_ENABLED", True)
@@ -103,8 +103,8 @@ class AutoTutorExecutorSettings:
         return cls(
             mode=mode,  # type: ignore[arg-type]
             active_bps=max(0, min(bps, 1000)),
-            config_version=config or "v1.49.2-canary",
-            bucket_salt=salt or "v1.49.2",
+            config_version=config or "v1.49.3-canary",
+            bucket_salt=salt or "v1.49.3",
             kill_switch=kill_switch,
             comparator_enabled=comparator,
             fallback_enabled=fallback,
@@ -123,7 +123,7 @@ class AutoTutorExecutorDecision:
     mode: ExecutorMode
     config_version: str | None
     bucket: int | None
-    fallback_reason: str | None
+    assignment_reason: str
 
 
 def select_executor(
@@ -131,17 +131,21 @@ def select_executor(
     subject: str,
     context: AutoTutorExecutionContext,
     settings: AutoTutorExecutorSettings | None = None,
+    admission: Any | None = None,
 ) -> AutoTutorExecutorDecision:
     settings = settings or AutoTutorExecutorSettings.from_env()
     bucket = stable_executor_bucket(subject, salt=settings.bucket_salt)
     if context.internal_force_graph and context.environment != "production":
-        return AutoTutorExecutorDecision("graph_active", settings.config_version, bucket, None)
+        return AutoTutorExecutorDecision("graph_active", settings.config_version, bucket, "development_force_graph")
     if settings.mode != "active_canary":
-        return AutoTutorExecutorDecision("legacy", settings.config_version, bucket, None)
+        return AutoTutorExecutorDecision("legacy", settings.config_version, bucket, "executor_mode_not_active_canary")
     if not settings.valid:
         return AutoTutorExecutorDecision("legacy", settings.config_version, bucket, settings.reason_codes[0])
     if settings.kill_switch:
         return AutoTutorExecutorDecision("legacy", settings.config_version, bucket, "kill_switch_enabled")
+    if context.environment == "production" and (admission is None or not admission.admitted):
+        reason = (admission.reason_codes[0] if admission and admission.reason_codes else "canary_admission_missing")
+        return AutoTutorExecutorDecision("legacy", settings.config_version, bucket, f"admission_denied:{reason}")
     trusted = (
         context.account_status == "active"
         and context.traffic_cohort == "verified"
@@ -152,7 +156,7 @@ def select_executor(
         return AutoTutorExecutorDecision("legacy", settings.config_version, bucket, context.eligibility_reason or "rollout_ineligible")
     if bucket >= settings.active_bps:
         return AutoTutorExecutorDecision("legacy", settings.config_version, bucket, "bucket_not_selected")
-    return AutoTutorExecutorDecision("graph_active", settings.config_version, bucket, None)
+    return AutoTutorExecutorDecision("graph_active", settings.config_version, bucket, "graph_bucket_selected")
 
 
 class AutoTutorObservationBundle(BaseModel):

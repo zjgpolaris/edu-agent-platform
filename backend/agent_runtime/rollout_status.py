@@ -65,8 +65,27 @@ def build_rollout_status(
     if agent_type == "auto_tutor":
         commit = deployed_commit()
         environment = deployment_environment()
-        config = os.getenv("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.2-canary").strip()
+        config = os.getenv("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.3-canary").strip()
         since = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+        schema = runtime_schema_readiness()
+        from agents.autotutor_canary_admission import evaluate_autotutor_canary_admission
+        from agents.autotutor_execution import AutoTutorExecutionContext, AutoTutorExecutorSettings
+
+        settings = AutoTutorExecutorSettings.from_env()
+        admission = evaluate_autotutor_canary_admission(
+            settings=settings,
+            context=AutoTutorExecutionContext(
+                actor_id="rollout-status-probe",
+                actor_role="student",
+                account_status="active",
+                traffic_cohort="verified",
+                data_scope="runtime",
+                rollout_eligible=True,
+                eligibility_reason="verified_runtime_actor",
+                environment=environment,
+                deployed_commit=commit,
+            ),
+        )
         try:
             aggregate = aggregate_autotutor_transition_canary(
                 config_version=config,
@@ -84,15 +103,54 @@ def build_rollout_status(
             }
         decision = str(aggregate["decision"])
         insufficient = "insufficient_graph_samples" in aggregate["blockers"]
+        evidence = load_release_evidence(
+            agent_type="auto_tutor",
+            config_version=config,
+            runtime_mode="active_canary",
+            deployed_commit=commit,
+            environment=environment,
+        )
+        bps_zero = settings.mode != "active_canary" or settings.active_bps == 0
+        if not schema.get("schema_ready"):
+            phase, status, next_action = "deployment_blocked", "NO_GO", "fix_deployment_contract"
+        elif bps_zero and not aggregate.get("assigned_control_count"):
+            phase, status, next_action = "deployed_bps_zero", "NOT_READY", "collect_control_baseline"
+        elif bps_zero and insufficient:
+            phase, status, next_action = "control_ready", "NOT_READY", "enable_verified_one_percent"
+        elif insufficient:
+            phase, status, next_action = "collecting_canary", "NOT_READY", "continue_collecting_canary"
+        elif decision != "GO":
+            phase, status, next_action = "canary_blocked", "NO_GO", "stop_rollout"
+        elif not evidence or evidence.get("decision") != "GO":
+            phase, status, next_action = "canary_ready_for_review", "GO", "build_autotutor_evidence"
+        else:
+            phase, status, next_action = "production_verified", "GO", "review_v150_entry"
         return {
             "schema_version": 1,
             "agent_type": "auto_tutor",
-            "phase": "collecting_canary" if insufficient else "canary_evaluated",
-            "status": "NOT_READY" if insufficient else decision,
-            "decision": decision,
+            "phase": phase,
+            "status": status,
+            "decision": "GO" if status == "GO" else "NO_GO",
             "blockers": aggregate["blockers"],
+            "next_action": next_action,
             "deployment": {"commit": commit or None, "config_version": config or None, "environment": environment or None},
+            "schema": schema,
+            "admission": {
+                "status": admission.status,
+                "reason_codes": list(admission.reason_codes),
+                "schema_revision": admission.schema_revision,
+                "observation_health": admission.observation_health,
+                "active_bps": admission.active_bps,
+                "checked_at": admission.checked_at,
+                "expires_at": admission.expires_at,
+            },
             "autotutor_transition_canary": aggregate,
+            "evidence": {
+                "present": evidence is not None,
+                "decision": evidence.get("decision") if evidence else None,
+                "evidence_sha256": evidence.get("evidence_sha256") if evidence else None,
+                "drills": evidence.get("drills") if evidence else None,
+            },
         }
     settings = RuntimeV2Settings.from_env()
     commit = deployed_commit()
