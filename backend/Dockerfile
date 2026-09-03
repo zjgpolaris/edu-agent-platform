@@ -21,6 +21,8 @@ COPY textbooks/structured/ ./textbooks/structured/
 # .dockerignore 已放行 knowledge_base/history；loader 会在 /app/knowledge_base/history 查找。
 COPY knowledge_base/ ./knowledge_base/
 RUN test -f /app/knowledge_base/history/autotutor_content.json
+RUN test -f /app/knowledge_base/history/entities.json \
+    && python -c "from rag.history_query import parse_history_query; q = parse_history_query('戊戌变法失败原因'); assert q.entity == '戊戌变法' and q.aspect == 'cause', q"
 
 RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /app/.data \

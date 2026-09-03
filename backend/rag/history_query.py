@@ -59,8 +59,17 @@ class HistoryQuery(BaseModel):
     reason_codes: list[str] = Field(default_factory=list)
 
 
-ROOT = Path(__file__).resolve().parents[2]
-ENTITY_CATALOG_PATH = ROOT / "knowledge_base" / "history" / "entities.json"
+def _resolve_entity_catalog_path(module_file: Path | None = None) -> Path:
+    """Resolve the entity catalog in source-tree and flattened Docker layouts."""
+    module_path = (module_file or Path(__file__)).resolve()
+    relative = Path("knowledge_base/history/entities.json")
+    # Source tree: <repo>/backend/rag/*.py -> <repo>/knowledge_base.
+    # Docker:      /app/rag/*.py          -> /app/knowledge_base.
+    candidates = (module_path.parents[2] / relative, module_path.parents[1] / relative)
+    return next((candidate for candidate in candidates if candidate.is_file()), candidates[0])
+
+
+ENTITY_CATALOG_PATH = _resolve_entity_catalog_path()
 
 _ASPECT_TERMS: tuple[tuple[HistoryAspect, tuple[str, ...]], ...] = (
     ("comparison", ("比较", "区别", "相同点", "不同点", "异同")),
