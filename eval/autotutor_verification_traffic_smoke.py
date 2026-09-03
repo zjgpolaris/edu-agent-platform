@@ -10,7 +10,10 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
 from agents.autotutor_execution import stable_executor_bucket  # noqa: E402
-from scripts.run_autotutor_canary_verification_traffic import run_traffic  # noqa: E402
+from scripts.run_autotutor_canary_verification_traffic import (  # noqa: E402
+    _assert_operational_safety,
+    run_traffic,
+)
 
 COMMIT = "b" * 40
 CONFIG = "v1.49.9-production-canary"
@@ -34,6 +37,25 @@ class Response:
 
 
 def main() -> None:
+    _assert_operational_safety({
+        "aggregate": {
+            "assigned_graph_count": 0,
+            "blockers": ["comparator_not_exact", "fallback_rate_above_one_percent"],
+        },
+        "observation_health": {"ok": True},
+    })
+    try:
+        _assert_operational_safety({
+            "aggregate": {
+                "assigned_graph_count": 1,
+                "blockers": ["fallback_rate_above_one_percent"],
+            },
+            "observation_health": {"ok": True},
+        })
+        raise AssertionError("observed Graph fallback rate did not stop traffic")
+    except RuntimeError as exc:
+        assert str(exc) == "verification_safety_stop:fallback_rate_above_one_percent"
+
     actor = next(
         f"verification-{index}" for index in range(10_000)
         if stable_executor_bucket(f"verification-{index}", salt=SALT) < 100

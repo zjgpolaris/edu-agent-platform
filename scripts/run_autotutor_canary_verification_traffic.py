@@ -122,10 +122,19 @@ def _assert_operational_safety(payload: dict[str, Any]) -> None:
     aggregate = fact.get("aggregate") or {}
     blockers = set(str(item) for item in aggregate.get("blockers") or [])
     stop_blockers = {
-        "comparator_not_exact", "fallback_rate_above_one_percent", "unauthorized_graph_traffic",
-        "duplicate_effects_detected", "duplicate_transition_observations_detected",
-        "observation_write_failure", "active_latency_regression",
+        "unauthorized_graph_traffic", "duplicate_effects_detected",
+        "duplicate_transition_observations_detected", "observation_write_failure",
     }
+    # Comparator, fallback-rate and active-latency checks have no denominator
+    # before the first Graph observation. The aggregate intentionally reports
+    # them as not ready, but treating that state as a traffic safety stop would
+    # make both the initial Legacy baseline and the first Canary sample
+    # impossible to collect. Once Graph traffic exists, these become hard stops.
+    if int(aggregate.get("assigned_graph_count") or 0) > 0:
+        stop_blockers.update({
+            "comparator_not_exact", "fallback_rate_above_one_percent",
+            "active_latency_regression",
+        })
     matched = sorted(blockers & stop_blockers)
     if matched:
         raise RuntimeError(f"verification_safety_stop:{matched[0]}")
