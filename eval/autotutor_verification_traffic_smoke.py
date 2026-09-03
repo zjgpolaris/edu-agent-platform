@@ -102,9 +102,38 @@ def main() -> None:
         assert secret not in serialized
     transition_requests = [request for request in requests if "/api/autotutor/" in request.full_url]
     assert len(transition_requests) == 2
+    start_payload = json.loads(transition_requests[0].data.decode("utf-8"))
+    assert start_payload["focus_tags"] == ["戊戌变法失败原因"]
     attestations = [request.headers.get("X-autotutor-verification-attestation") for request in transition_requests]
     assert all(attestations) and len(set(attestations)) == 2
     assert all(request.headers.get("X-autotutor-verification-run") for request in transition_requests)
+
+    blocked_states = iter([
+        {"session_id": "blocked-session", "status": "needs_content", "revision": 1},
+    ])
+
+    def blocked_urlopen(request, timeout=30):
+        url = request.full_url
+        if "/verification?" in url:
+            return Response({
+                "deployment": {"environment": "production", "deployed_commit": COMMIT},
+                "configuration": {"mode": "active_canary", "active_bps": 100,
+                                  "config_version": CONFIG, "kill_switch": False},
+            })
+        if url.endswith("/api/auth/login"):
+            return Response({"role": "student", "actor_id": actor, "token": "student-jwt"})
+        return Response(next(blocked_states))
+
+    try:
+        run_traffic(
+            api_base="https://edu.example", expected_commit=COMMIT,
+            expected_config_version=CONFIG, phase="canary", target_transitions=2,
+            maximum_sessions=2, timeout_seconds=30, env=env,
+            urlopen=blocked_urlopen, sleep=lambda _: None,
+        )
+        raise AssertionError("unusable verification content did not stop traffic")
+    except RuntimeError as exc:
+        assert str(exc) == "verification_content_target_unavailable"
     print("autotutor_verification_traffic_smoke=PASS")
 
 

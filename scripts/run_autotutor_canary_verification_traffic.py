@@ -281,7 +281,11 @@ def run_traffic(
             state = transition("/api/autotutor/start", {
                 "student_id": account["actor_id"],
                 "grade": "八年级上册",
-                "focus_tags": ["戊戌变法", "失败原因"],
+                # AutoTutor consumes only the first explicit focus tag. Keep the
+                # entity and aspect together so this resolves to the curated
+                # history:戊戌变法:cause:v1 objective instead of an unreviewed
+                # generic "戊戌变法" objective that is blocked by the content gate.
+                "focus_tags": ["戊戌变法失败原因"],
                 "focus_reason": "production release verification",
                 "idempotency_key": f"{run_id}-start-{sessions}",
             })
@@ -302,6 +306,8 @@ def run_traffic(
                 })
             if state.get("status") == "completed":
                 completed += 1
+            elif state.get("status") == "needs_content":
+                raise RuntimeError("verification_content_target_unavailable")
             safety = _request_json(preflight_url, headers={
                 "Authorization": f"Bearer {machine_token}",
                 "X-AutoTutor-Bootstrap-SHA256": bootstrap,
@@ -310,10 +316,14 @@ def run_traffic(
                 safety, expected_commit=expected_commit, expected_config_version=expected_config_version, phase=phase
             )
             _assert_operational_safety(safety)
-        except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError):
+        except RuntimeError:
             failed += 1
-            if server_errors >= 3:
-                raise
+            # RuntimeError is reserved for safety stops, repeated server
+            # failures and unusable verification content. None of these may be
+            # swallowed while production traffic continues.
+            raise
+        except (urllib.error.URLError, TimeoutError, ValueError):
+            failed += 1
     receipt = {
         "schema_version": 1,
         "receipt_type": "autotutor_verification_traffic",
