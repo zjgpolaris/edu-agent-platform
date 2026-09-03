@@ -13,8 +13,9 @@ venv
 .chroma
 # 真正重的是 .chroma 向量库与 BGE 模型；knowledge_base/history 下只是小数据
 # （corpus.json 2.3MB + geo_events 60K），是历史地图与游戏 LLM 出题的上下文源，需进镜像。
-knowledge_base
+knowledge_base/*
 !knowledge_base/history
+!knowledge_base/history/**
 # textbooks 的原始 PDF/OCR 不进镜像，但结构化教材 YAML 是教材同步学习页的数据源，必须打进后端镜像
 textbooks/*
 !textbooks/structured

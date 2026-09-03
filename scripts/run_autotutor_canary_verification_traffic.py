@@ -307,7 +307,10 @@ def run_traffic(
             if state.get("status") == "completed":
                 completed += 1
             elif state.get("status") == "needs_content":
-                raise RuntimeError("verification_content_target_unavailable")
+                blocked = state.get("content_blocked") if isinstance(state.get("content_blocked"), dict) else {}
+                raw_reason = str(blocked.get("reason") or "unknown")
+                safe_reason = re.sub(r"[^a-z0-9_-]+", "_", raw_reason.lower()).strip("_")[:64] or "unknown"
+                raise RuntimeError(f"verification_content_target_unavailable:{safe_reason}")
             safety = _request_json(preflight_url, headers={
                 "Authorization": f"Bearer {machine_token}",
                 "X-AutoTutor-Bootstrap-SHA256": bootstrap,

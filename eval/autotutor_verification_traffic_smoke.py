@@ -39,6 +39,11 @@ class Response:
 
 
 def main() -> None:
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    dockerfile = (ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
+    assert "!knowledge_base/history/**" in dockerignore
+    assert "test -f /app/knowledge_base/history/autotutor_content.json" in dockerfile
+
     with TemporaryDirectory() as directory:
         app_root = Path(directory) / "app"
         flattened_content = app_root / "knowledge_base/history/autotutor_content.json"
@@ -119,7 +124,10 @@ def main() -> None:
     assert all(request.headers.get("X-autotutor-verification-run") for request in transition_requests)
 
     blocked_states = iter([
-        {"session_id": "blocked-session", "status": "needs_content", "revision": 1},
+        {
+            "session_id": "blocked-session", "status": "needs_content", "revision": 1,
+            "content_blocked": {"reason": "missing_reviewed_content"},
+        },
     ])
 
     def blocked_urlopen(request, timeout=30):
@@ -143,7 +151,7 @@ def main() -> None:
         )
         raise AssertionError("unusable verification content did not stop traffic")
     except RuntimeError as exc:
-        assert str(exc) == "verification_content_target_unavailable"
+        assert str(exc) == "verification_content_target_unavailable:missing_reviewed_content"
     print("autotutor_verification_traffic_smoke=PASS")
 
 

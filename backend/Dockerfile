@@ -20,6 +20,7 @@ COPY textbooks/structured/ ./textbooks/structured/
 # 历史时空地图与游戏 LLM 出题所需的小数据（geo_events.json + corpus.json）。
 # .dockerignore 已放行 knowledge_base/history；loader 会在 /app/knowledge_base/history 查找。
 COPY knowledge_base/ ./knowledge_base/
+RUN test -f /app/knowledge_base/history/autotutor_content.json
 
 RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /app/.data \
