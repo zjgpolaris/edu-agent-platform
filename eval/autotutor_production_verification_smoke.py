@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from agent_runtime.autotutor_canary_verification import (  # noqa: E402
+    _summarize_content_blocks,
     build_autotutor_canary_snapshot,
     build_autotutor_canary_verification,
     validate_autotutor_canary_snapshot,
@@ -57,11 +58,33 @@ def _build(aggregate: dict, **kwargs: object) -> dict:
          patch("agent_runtime.autotutor_canary_verification.observation_write_health", return_value={"status": "ok", "ok": True, "failure_count": 0}), \
          patch("agent_runtime.autotutor_canary_verification.aggregate_autotutor_transition_canary", return_value=aggregate), \
          patch("agent_runtime.autotutor_canary_verification.load_release_evidence", return_value=None), \
+         patch("agent_runtime.autotutor_canary_verification._content_block_diagnostics", return_value={"status": "available", "total": 0, "latest_reason": None, "latest_at": None, "by_reason": {}}), \
          patch("agent_runtime.autotutor_canary_verification._admission", return_value={"status": "admitted", "reason_codes": []}):
         return build_autotutor_canary_verification(expected_commit=COMMIT, expected_config_version=CONFIG, **kwargs)
 
 
 def main() -> None:
+    content_diagnostics = _summarize_content_blocks([
+        {
+            "student_id": "must-not-escape",
+            "session_id": "must-not-escape",
+            "created_at": "2026-09-03T08:24:00+00:00",
+            "metadata": {"traffic_source": "release_verification", "reason": "assessment_not_independent"},
+        },
+        {
+            "created_at": "2026-09-03T08:20:00+00:00",
+            "metadata": {"traffic_source": "organic", "reason": "private-organic-reason"},
+        },
+    ])
+    assert content_diagnostics == {
+        "status": "available",
+        "total": 1,
+        "latest_reason": "assessment_not_independent",
+        "latest_at": "2026-09-03T08:24:00+00:00",
+        "by_reason": {"assessment_not_independent": 1},
+    }
+    assert "must-not-escape" not in json.dumps(content_diagnostics)
+
     ready = _build(_aggregate())
     assert ready["phase"] == "ready_for_manual_one_percent" and ready["decision"] == "GO", ready
     encoded = json.dumps(ready)
@@ -76,6 +99,7 @@ def main() -> None:
          patch("agent_runtime.autotutor_canary_verification.observation_write_health", return_value={"status": "ok", "ok": True}), \
          patch("agent_runtime.autotutor_canary_verification.aggregate_autotutor_transition_canary", return_value=_aggregate(graph=1, blockers=["insufficient_graph_samples", "transition_kind_coverage_incomplete"])), \
          patch("agent_runtime.autotutor_canary_verification.load_release_evidence", return_value=None), \
+         patch("agent_runtime.autotutor_canary_verification._content_block_diagnostics", return_value={"status": "available", "total": 0, "latest_reason": None, "latest_at": None, "by_reason": {}}), \
          patch("agent_runtime.autotutor_canary_verification._admission", return_value={"status": "admitted", "reason_codes": []}):
         active = build_autotutor_canary_verification(expected_commit=COMMIT, expected_config_version=CONFIG, minimum_graph=1)
     assert active["progress"]["minimum_graph"] == 100
