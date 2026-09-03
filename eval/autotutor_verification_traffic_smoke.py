@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from agents.autotutor_execution import stable_executor_bucket  # noqa: E402
 from agents.autotutor_content import _resolve_content_path  # noqa: E402
 from scripts.run_autotutor_canary_verification_traffic import (  # noqa: E402
+    _answer_key,
     _assert_operational_safety,
     run_traffic,
 )
@@ -43,6 +44,10 @@ def main() -> None:
     dockerfile = (ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
     assert "!knowledge_base/history/**" in dockerignore
     assert "test -f /app/knowledge_base/history/autotutor_content.json" in dockerfile
+
+    answers = _answer_key()
+    assert answers["wuxu-cause-practice-3"] == "C"
+    assert answers["wuxu-cause-exit-1"] == "C"
 
     with TemporaryDirectory() as directory:
         app_root = Path(directory) / "app"
@@ -119,6 +124,8 @@ def main() -> None:
     assert len(transition_requests) == 2
     start_payload = json.loads(transition_requests[0].data.decode("utf-8"))
     assert start_payload["focus_tags"] == ["戊戌变法失败原因"]
+    answer_payload = json.loads(transition_requests[1].data.decode("utf-8"))
+    assert answer_payload["answer"] == answers["wuxu-cause-practice-1"]
     attestations = [request.headers.get("X-autotutor-verification-attestation") for request in transition_requests]
     assert all(attestations) and len(set(attestations)) == 2
     assert all(request.headers.get("X-autotutor-verification-run") for request in transition_requests)

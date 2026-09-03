@@ -158,9 +158,19 @@ def _answer_key() -> dict[str, str]:
     result: dict[str, str] = {}
     for item in payload.get("items") or []:
         for assessment in (item.get("practice_items") or []) + (item.get("exit_ticket_items") or []):
-            correct = next((option.get("option_id") for option in assessment.get("options") or [] if option.get("is_correct")), None)
-            if assessment.get("assessment_id") and correct:
-                result[str(assessment["assessment_id"])] = str(correct)
+            assessment_id = str(assessment.get("assessment_id") or "")
+            options = list(assessment.get("options") or [])
+            correct_index = next((index for index, option in enumerate(options) if option.get("is_correct")), None)
+            if not assessment_id or correct_index is None:
+                continue
+            # The API applies autotutor_content._stable_option_order before it
+            # exposes a question. Mirror that dependency-free transformation so
+            # controlled traffic answers the public A-D labels, not the source
+            # pack labels that existed before rotation.
+            if len(options) == 4:
+                offset = int(hashlib.sha256(assessment_id.encode("utf-8")).hexdigest()[:8], 16) % 4
+                correct_index = (correct_index - offset) % 4
+            result[assessment_id] = "ABCD"[correct_index]
     return result
 
 
