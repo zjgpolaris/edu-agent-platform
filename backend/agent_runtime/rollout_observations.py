@@ -22,6 +22,7 @@ VALID_ELIGIBILITY_REASONS = {
     "verified_runtime_actor", "demo_actor", "unverified_actor", "operator_actor",
     "eval_scope", "demo_scope", "anonymous_actor", "legacy_untrusted",
 }
+VALID_TRAFFIC_SOURCES = {"organic", "release_verification"}
 BASELINE_STATUSES = {"completed", "partial", "failed"}
 OBSERVATION_FAILURE_ACTION = "agent_runtime.rollout_observation_write_failed"
 _failure_audit_lock = threading.Lock()
@@ -90,6 +91,8 @@ def record_rollout_observation(
     comparator_latency_ms: int | None = None,
     observation_external_calls: int | None = None,
     effect_intent_count: int | None = None,
+    traffic_source: str = "organic",
+    verification_run_id: str | None = None,
 ) -> str:
     if runtime_mode not in VALID_MODES:
         raise ValueError("runtime_mode must be control, shadow or active")
@@ -115,6 +118,14 @@ def record_rollout_observation(
         reason = "eval_scope" if scope == "eval" else "demo_scope"
     if not config or not commit:
         raise ValueError("deployment commit and runtime config version are required")
+    source = str(traffic_source or "organic").strip().lower()
+    if source not in VALID_TRAFFIC_SOURCES:
+        raise ValueError("traffic_source must be organic or release_verification")
+    verification_id = str(verification_run_id or "").strip()
+    if source == "release_verification" and not verification_id:
+        raise ValueError("release verification traffic requires verification_run_id")
+    if source == "organic" and verification_id:
+        raise ValueError("organic traffic cannot have verification_run_id")
     observation_id = f"obs_{uuid4().hex}"
     with get_connection() as conn:
         if "agent_rollout_observations" not in set(sa_inspect(conn).get_table_names()):
@@ -129,6 +140,7 @@ def record_rollout_observation(
             , comparator_matched, fallback_reason
             , provider_latency_ms, executor_latency_ms, comparator_latency_ms
             , observation_external_calls, effect_intent_count
+            , traffic_source, verification_run_id
         ) VALUES (
             :observation_id, :agent_type, :config_version, :runtime_mode, :deployed_commit,
             :environment, :status, :latency_ms, :trace_id, :data_scope, :created_at
@@ -139,6 +151,7 @@ def record_rollout_observation(
             , :comparator_matched, :fallback_reason
             , :provider_latency_ms, :executor_latency_ms, :comparator_latency_ms
             , :observation_external_calls, :effect_intent_count
+            , :traffic_source, :verification_run_id
         )"""), {
             "observation_id": observation_id,
             "agent_type": agent_type[:80],
@@ -172,6 +185,8 @@ def record_rollout_observation(
             "comparator_latency_ms": max(0, int(comparator_latency_ms)) if comparator_latency_ms is not None else None,
             "observation_external_calls": max(0, int(observation_external_calls)) if observation_external_calls is not None else None,
             "effect_intent_count": max(0, int(effect_intent_count)) if effect_intent_count is not None else None,
+            "traffic_source": source,
+            "verification_run_id": verification_id[:80] if verification_id else None,
         })
     return observation_id
 
@@ -461,6 +476,28 @@ def aggregate_autotutor_transition_canary(
     control_p95 = _percentile(control_total, 0.95)
     active_p95 = latencies["latency"]["p95_ms"]
 
+    def source_counts(source: str | None = None) -> dict[str, int]:
+        selected = [
+            row for row in rows
+            if source is None or str(row.get("traffic_source") or "organic") == source
+        ]
+        return {
+            "control": sum(str(row.get("assigned_executor") or "") == "legacy" for row in selected),
+            "graph": sum(str(row.get("assigned_executor") or "") == "graph_active" for row in selected),
+            "committed_graph": sum(
+                str(row.get("assigned_executor") or "") == "graph_active"
+                and str(row.get("selected_executor") or "") == "graph_active"
+                and str(row.get("commit_status") or "") in {"committed", "completed"}
+                for row in selected
+            ),
+        }
+
+    traffic_sources = {
+        "organic": source_counts("organic"),
+        "release_verification": source_counts("release_verification"),
+        "total": source_counts(),
+    }
+
     denominator = len(graph_rows)
     fallback_rate = round(len(fallback_rows) / denominator, 6) if denominator else None
     comparator_match_rate = round((len(compared) - len(mismatches)) / denominator, 6) if denominator else None
@@ -526,6 +563,7 @@ def aggregate_autotutor_transition_canary(
         "transition_count": len(rows),
         "observed_transition_count": observed_count,
         "eligible_transition_count": len(rows),
+        "traffic_sources": traffic_sources,
         "assigned_control_count": len(control_rows),
         "assigned_graph_count": denominator,
         "selected_graph_count": len(selected_graph),

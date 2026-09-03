@@ -61,7 +61,7 @@ def main() -> None:
     assert start_source.index("evaluate_autotutor_canary_admission(") < start_source.index("_execute_selected_transition(")
     assert answer_source.index("_apply_existing_session_canary_admission(") < answer_source.index("_execute_selected_transition(")
 
-    schema = {"status": "ready", "schema_ready": True, "alembic_version": "016"}
+    schema = {"status": "ready", "schema_ready": True, "alembic_version": "017"}
     health = {"status": "ok", "ok": True, "failure_count": 0}
     clear_autotutor_canary_admission_cache()
     with patch("agent_runtime.readiness.runtime_schema_readiness", return_value=schema) as schema_read, \

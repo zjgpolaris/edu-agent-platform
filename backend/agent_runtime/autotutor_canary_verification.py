@@ -168,7 +168,7 @@ def build_autotutor_canary_verification(
         schema_revision = int(str(schema.get("alembic_version") or "0"))
     except ValueError:
         schema_revision = 0
-    if not schema.get("schema_ready") or schema_revision < 16:
+    if not schema.get("schema_ready") or schema_revision < 17:
         blockers.append("runtime_schema_not_ready")
     if not settings.config_version:
         blockers.append("config_version_missing")
@@ -301,6 +301,11 @@ def build_autotutor_canary_verification(
         "progress": {
             "control_transition_count": control_count,
             "committed_graph_transition_count": committed_graph,
+            "traffic_sources": aggregate.get("traffic_sources") or {
+                "organic": {"control": 0, "graph": 0, "committed_graph": 0},
+                "release_verification": {"control": 0, "graph": 0, "committed_graph": 0},
+                "total": {"control": control_count, "graph": graph_count, "committed_graph": committed_graph},
+            },
             "minimum_control": minimum_control,
             "minimum_graph": minimum_graph,
             "minimum_rollback_control": minimum_rollback_control,

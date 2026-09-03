@@ -23,7 +23,7 @@ def main() -> None:
     with get_connection() as conn:
         assert conn.dialect.name == "postgresql"
         tables = set(sa_inspect(conn).get_table_names())
-        assert {"agent_rollout_observations", "agent_release_evidence", "llm_capability_manifests", "agent_runs", "review_mastery_state"} <= tables
+        assert {"agent_rollout_observations", "agent_release_evidence", "llm_capability_manifests", "agent_runs", "review_mastery_state", "autotutor_verification_nonces"} <= tables
         inspector = sa_inspect(conn)
         account_columns = {column["name"] for column in inspector.get_columns("accounts")}
         observation_columns = {column["name"] for column in inspector.get_columns("agent_rollout_observations")}
@@ -34,6 +34,7 @@ def main() -> None:
             "assigned_executor", "selected_executor", "transition_id",
             "observation_schema_version", "outcome_schema_version", "commit_status",
             "assignment_reason", "admission_status", "admission_reason", "admission_checked_at",
+            "traffic_source", "verification_run_id",
         } <= observation_columns
         assert "idx_rollout_observation_eligibility" in observation_indexes
         version = str(conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar_one())

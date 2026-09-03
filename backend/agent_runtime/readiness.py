@@ -6,7 +6,7 @@ from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
 
-RUNTIME_SCHEMA_HEAD = "016"
+RUNTIME_SCHEMA_HEAD = "017"
 RUNTIME_TABLES = {
     "autotutor_sessions",
     "agent_runs",
@@ -18,6 +18,7 @@ RUNTIME_TABLES = {
     "agent_release_evidence",
     "llm_capability_manifests",
     "weakpoint_evidence",
+    "autotutor_verification_nonces",
 }
 
 
@@ -53,6 +54,7 @@ def runtime_schema_readiness() -> dict[str, Any]:
                     "assigned_executor", "transition_id", "observation_schema_version",
                     "outcome_schema_version", "commit_status",
                     "assignment_reason", "admission_status", "admission_reason", "admission_checked_at",
+                    "traffic_source", "verification_run_id",
                 ):
                     if column not in observation_columns:
                         missing_columns.append(f"agent_rollout_observations.{column}")

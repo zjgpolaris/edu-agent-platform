@@ -122,6 +122,8 @@ v1.49.7 为上述 workflow 增加最小权限机器身份：原始 token（至�
 
 v1.49.8 将机器调用与已审核 bootstrap attestation 绑定：同一份 `attestation_sha256` 必须同时配置为 GitHub Environment variable `AUTOTUTOR_PRODUCTION_BOOTSTRAP_SHA256` 和 Render 的 `EDU_AGENT_AUTOTUTOR_VERIFICATION_BOOTSTRAP_SHA256`。workflow 通过 `X-AutoTutor-Bootstrap-SHA256` 发送公开完整性引用，服务端对机器身份执行恒定时间比较；缺失、格式错误或不一致均以 403 fail-closed，管理员 JWT 不受影响。schema-v2 workflow receipt 会封存该引用，但 API readiness 与审计不输出 digest。详见 `docs/20260902-autotutor-production-ceremony-attestation-binding-v1498-spec.md`。
 
+v1.49.9 增加受控生产验证流量闭环。`production-verification` Environment 可显式运行有 QPS、会话数、transition 数和 wall-time 上限的 traffic runner；学生请求必须携带绑定 actor、phase、commit、config、过期时间和一次性 nonce 的签名。migration 017 将 observation 区分为 `organic` 与 `release_verification`，Canary snapshot、candidate/final evidence 和 AgentOps 均披露来源分布；验证事件会被学生周报、教师活动和 AutoTutor 效果统计排除。生产默认仍为 Legacy/BPS 0，workflow 不拥有 Render 配置写权限。需要分别在 Render 配置验证 student allowlist/签名密钥，并在 GitHub Environment 保存学生凭据、同一签名密钥、bucket salt 和 API machine token。完整执行合同见 `docs/20260903-autotutor-production-canary-execution-v1499-spec.md`。
+
 ---
 
 ## 本地开发

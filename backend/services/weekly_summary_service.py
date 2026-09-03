@@ -38,6 +38,7 @@ def _collect_metrics(student_id: str, today: _date) -> dict:
             text(
                 "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS cnt "
                 "FROM learning_events WHERE student_id = :sid AND created_at >= :since "
+                "AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%' "
                 "GROUP BY day"
             ),
             {"sid": student_id, "since": since},
@@ -49,7 +50,8 @@ def _collect_metrics(student_id: str, today: _date) -> dict:
         all_days_rows = conn.execute(
             text(
                 "SELECT DISTINCT substr(created_at, 1, 10) AS day "
-                "FROM learning_events WHERE student_id = :sid"
+                "FROM learning_events WHERE student_id = :sid "
+                "AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%'"
             ),
             {"sid": student_id},
         ).mappings().fetchall()
@@ -104,7 +106,8 @@ def _collect_metrics(student_id: str, today: _date) -> dict:
             text(
                 "SELECT COUNT(*) AS cnt FROM learning_events "
                 "WHERE student_id = :sid AND feature = 'auto_tutor' "
-                "AND event_type = 'session_complete' AND created_at >= :since"
+                "AND event_type = 'session_complete' AND created_at >= :since "
+                "AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%'"
             ),
             {"sid": student_id, "since": since},
         ).mappings().fetchone()

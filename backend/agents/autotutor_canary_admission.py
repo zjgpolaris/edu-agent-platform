@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-REQUIRED_SCHEMA_REVISION = 16
+REQUIRED_SCHEMA_REVISION = 17
 _CACHE_TTL_SECONDS = 10.0
 _cache_lock = threading.Lock()
 _cache: dict[tuple[str, str, str], tuple[float, "AutoTutorCanaryAdmissionSnapshot"]] = {}

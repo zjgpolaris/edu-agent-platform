@@ -65,7 +65,7 @@ def build_rollout_status(
     if agent_type == "auto_tutor":
         commit = deployed_commit()
         environment = deployment_environment()
-        config = os.getenv("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.8-attestation-binding").strip()
+        config = os.getenv("EDU_AGENT_AUTOTUTOR_GRAPH_CONFIG_VERSION", "v1.49.9-production-canary").strip()
         since = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
         schema = runtime_schema_readiness()
         from agents.autotutor_canary_admission import evaluate_autotutor_canary_admission

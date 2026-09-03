@@ -19,7 +19,17 @@ on:
       expected_config_version:
         description: Expected AutoTutor config version
         required: true
-        default: v1.49.8-attestation-binding
+        default: v1.49.9-production-canary
+        type: string
+      generate_controlled_traffic:
+        description: Generate bounded production verification transitions before the snapshot
+        required: true
+        default: false
+        type: boolean
+      target_transitions:
+        description: Maximum controlled transitions to generate
+        required: true
+        default: '100'
         type: string
       window_start:
         description: Exact UTC window start (required for snapshot actions)
@@ -123,6 +133,38 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Generate controlled AutoTutor traffic
+        if: steps.ci.outputs.verified == 'true' && inputs.generate_controlled_traffic && inputs.action != 'preflight'
+        env:
+          AUTOTUTOR_VERIFICATION_ENVIRONMENT: production-verification
+          AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON: ${{ secrets.AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON }}
+          AUTOTUTOR_VERIFICATION_TRAFFIC_SECRET: ${{ secrets.AUTOTUTOR_VERIFICATION_TRAFFIC_SECRET }}
+          AUTOTUTOR_GRAPH_BUCKET_SALT: ${{ secrets.AUTOTUTOR_GRAPH_BUCKET_SALT }}
+          AUTOTUTOR_PRODUCTION_API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
+          AUTOTUTOR_PRODUCTION_BOOTSTRAP_SHA256: ${{ vars.AUTOTUTOR_PRODUCTION_BOOTSTRAP_SHA256 }}
+          API_BASE: ${{ vars.AUTOTUTOR_PRODUCTION_API_BASE }}
+          AUTOTUTOR_PRODUCTION_ALLOWED_HOSTS: ${{ vars.AUTOTUTOR_PRODUCTION_ALLOWED_HOSTS }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
+          TARGET_TRANSITIONS: ${{ inputs.target_transitions }}
+          VERIFY_ACTION: ${{ inputs.action }}
+        run: |
+          case "$VERIFY_ACTION" in
+            control_snapshot) phase=control ;;
+            canary_snapshot) phase=canary ;;
+            rollback_verify) phase=rollback ;;
+            *) exit 2 ;;
+          esac
+          python3 scripts/run_autotutor_canary_verification_traffic.py \
+            --api-base "$API_BASE" \
+            --expected-commit "$EXPECTED_COMMIT" \
+            --expected-config-version "$EXPECTED_CONFIG" \
+            --phase "$phase" \
+            --target-transitions "$TARGET_TRANSITIONS" \
+            --maximum-sessions 100 \
+            --timeout-seconds 900 \
+            --receipt-output /tmp/autotutor-traffic-receipt.json
 
       - name: Run read-only AutoTutor verification
         if: steps.ci.outputs.verified == 'true'
@@ -238,6 +280,7 @@ jobs:
           path: |
             /tmp/autotutor-verification.json
             /tmp/autotutor-verification.md
+            /tmp/autotutor-traffic-receipt.json
             /tmp/autotutor-snapshot.json
             /tmp/autotutor-drills.json
             /tmp/autotutor-evidence.json

@@ -27,6 +27,11 @@ type CountMetric = { passed: number; total: number };
 type ScalarMetric = { value: number };
 type MetricEntry = CountMetric | ScalarMetric;
 type SuiteOption = { id: string; label: string; category?: string; kind?: string; priority?: string };
+type TrafficSourceCounts = {
+  organic?: { control?: number; graph?: number; committed_graph?: number };
+  release_verification?: { control?: number; graph?: number; committed_graph?: number };
+  total?: { control?: number; graph?: number; committed_graph?: number };
+};
 type FailedCase = {
   name: string;
   reason?: string;
@@ -66,7 +71,7 @@ type AgentOpsSummary = {
       verification_identity?: { required?: boolean; configured?: boolean; valid?: boolean; rotation_state?: string; bootstrap_attested?: boolean; errors?: string[] };
       trusted_cohort?: { ready?: boolean; verified_actor_count?: number };
       observation_health?: { status?: string; failure_count?: number | null };
-      progress?: { control_transition_count?: number; committed_graph_transition_count?: number; minimum_control?: number; minimum_graph?: number; minimum_rollback_control?: number };
+      progress?: { control_transition_count?: number; committed_graph_transition_count?: number; minimum_control?: number; minimum_graph?: number; minimum_rollback_control?: number; traffic_sources?: TrafficSourceCounts };
       rollback?: { exact_window?: boolean; assigned_control_count?: number; assigned_graph_count?: number; selected_graph_count?: number; minimum_control?: number; verified?: boolean };
       evidence?: { present?: boolean; decision?: string | null; stage?: string | null; candidate_sha256?: string | null; final_sha256?: string | null; drills?: Record<string, string> | null };
       operations?: { ci_provenance?: string; environment_bootstrap?: string; api_credential?: string; credential_rotation?: string };
@@ -93,6 +98,7 @@ type AgentOpsSummary = {
       latency?: { latency?: { p95_ms?: number | null } };
       control_latency?: { p95_ms?: number | null };
       observation_write_health?: { status?: string; failure_count?: number | null };
+      traffic_sources?: TrafficSourceCounts;
       slice?: { deployed_commit?: string; config_version?: string; environment?: string };
     } | null;
   };
@@ -1227,6 +1233,7 @@ function AutoTutorCanaryPanel({ canary }: { canary: NonNullable<NonNullable<Agen
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: "0.6rem" }}>
         <OpsCard label="Graph Assigned" value={String(canary.assigned_graph_count ?? 0)} hint={`${canary.selected_graph_count ?? 0} selected`} />
         <OpsCard label="Graph Committed" value={String(canary.committed_graph_count ?? 0)} hint={`${canary.fallback_count ?? 0} fallback`} />
+        <OpsCard label="Organic / Verify" value={`${canary.traffic_sources?.organic?.committed_graph ?? 0}/${canary.traffic_sources?.release_verification?.committed_graph ?? 0}`} hint="committed Graph source split" />
         <OpsCard label="Comparator" value={percent(canary.comparator_match_rate)} hint={`${canary.comparator_unknown_count ?? 0} unknown`} />
         <OpsCard label="Fallback Rate" value={percent(canary.fallback_rate)} hint="must stay below 1%" />
         <OpsCard label="Provenance" value={percent(canary.provenance_coverage)} hint={(canary.transition_kind_coverage || []).join(" · ") || "no coverage"} />
@@ -1263,6 +1270,7 @@ function AutoTutorVerificationPanel({ verification }: { verification: NonNullabl
         <OpsCard label="Executor" value={config?.mode || "unknown"} hint={`${config?.active_bps ?? 0} BPS · ${config?.kill_switch ? "kill on" : "kill off"}`} />
         <OpsCard label="Control" value={`${progress?.control_transition_count ?? 0}/${progress?.minimum_control ?? 100}`} hint="verified transitions" />
         <OpsCard label="Graph Committed" value={`${progress?.committed_graph_transition_count ?? 0}/${progress?.minimum_graph ?? 100}`} hint="exact production slice" />
+        <OpsCard label="Organic / Verify" value={`${progress?.traffic_sources?.organic?.committed_graph ?? 0}/${progress?.traffic_sources?.release_verification?.committed_graph ?? 0}`} hint="committed Graph source split" />
         <OpsCard label="Schema" value={deployment?.schema_revision || "missing"} hint={deployment?.environment || "unknown environment"} />
         <OpsCard label="Deployment" value={deployment?.converged ? "CONVERGED" : "UNVERIFIED"} hint="commit/config/environment" />
         <OpsCard label="Trusted Cohort" value={verification.trusted_cohort?.ready ? "READY" : "MISSING"} hint={`${verification.trusted_cohort?.verified_actor_count ?? 0} verified actors`} />

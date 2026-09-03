@@ -94,6 +94,7 @@ def get_student_tutor_effectiveness(
                        'auto_tutor_practice_answered', 'auto_tutor_exit_ticket_answered',
                        'auto_tutor_verified_mastery', 'auto_tutor_content_blocked'
                    )
+                   AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%'
                    AND created_at >= datetime('now', :since)
                  ORDER BY created_at DESC"""),
             {"sid": student_id, "since": f"-{days} days"},
@@ -264,6 +265,7 @@ def get_class_tutor_effectiveness(
                        'auto_tutor_practice_answered', 'auto_tutor_exit_ticket_answered',
                        'auto_tutor_verified_mastery', 'auto_tutor_content_blocked'
                    )
+                   AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%'
                    AND created_at >= datetime('now', :since)"""),
             {"since": f"-{days} days"},
         ).mappings().fetchall()

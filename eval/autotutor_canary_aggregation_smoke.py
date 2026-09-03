@@ -61,7 +61,7 @@ def main() -> None:
     metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('016')"))
+        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('017')"))
     for index in range(100):
         _record(index)
         _record(index, matched=None, assigned="legacy", selected="legacy")

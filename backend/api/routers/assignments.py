@@ -357,14 +357,14 @@ async def student_learning_report(student_id: str, days: int = 14, actor: Actor 
                 hw_trend.append({"date": (r["created_at"] or "")[:10], "score": round(float(score), 1) if score is not None else None})
             valid_scores = [h["score"] for h in hw_trend if h["score"] is not None]
             report.update(homework_trend=hw_trend, homework_count=len(hw_trend), homework_avg_score=round(sum(valid_scores) / len(valid_scores), 1) if valid_scores else None)
-            ev_rows = conn.execute(text("SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS cnt FROM learning_events WHERE student_id = :sid AND created_at >= :since GROUP BY day ORDER BY day"), {"sid": student_id, "since": since}).mappings().fetchall()
+            ev_rows = conn.execute(text("SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS cnt FROM learning_events WHERE student_id = :sid AND created_at >= :since AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%' GROUP BY day ORDER BY day"), {"sid": student_id, "since": since}).mappings().fetchall()
             activity_by_day = {r["day"]: int(r["cnt"]) for r in ev_rows}
             streak, check = 0, today
             while check.isoformat() in activity_by_day:
                 streak += 1
                 check -= _td(days=1)
             report.update(activity_by_day=activity_by_day, active_days=len(activity_by_day), streak_days=streak)
-            t_row = conn.execute(text("SELECT COUNT(*) AS cnt FROM learning_events WHERE student_id = :sid AND feature = 'auto_tutor' AND event_type = 'session_complete'"), {"sid": student_id}).mappings().fetchone()
+            t_row = conn.execute(text("SELECT COUNT(*) AS cnt FROM learning_events WHERE student_id = :sid AND feature = 'auto_tutor' AND event_type = 'session_complete' AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%'"), {"sid": student_id}).mappings().fetchone()
             report["autotutor_sessions"] = int(t_row["cnt"]) if t_row else 0
         wps = _get_wps(student_id)
         report.update(weakpoint_count=len(wps), top_weakpoints=[{"tag": w["knowledge_tag"], "count": w["wrong_count"]} for w in wps[:5]])

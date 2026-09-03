@@ -39,6 +39,22 @@ def _snapshot_hash(snapshot: dict) -> str:
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _validate_traffic_source_distribution(aggregate: dict) -> dict:
+    sources = aggregate.get("traffic_sources")
+    if not isinstance(sources, dict):
+        raise ValueError("production snapshot traffic source distribution is missing")
+    for field in ("control", "graph", "committed_graph"):
+        try:
+            organic = int(sources["organic"][field])
+            verification = int(sources["release_verification"][field])
+            total = int(sources["total"][field])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("production snapshot traffic source distribution is invalid") from exc
+        if min(organic, verification, total) < 0 or organic + verification != total:
+            raise ValueError("production snapshot traffic source distribution is invalid")
+    return sources
+
+
 def persist_remote_evidence(
     url: str,
     evidence: dict,
@@ -116,12 +132,12 @@ def build_autotutor_canary_evidence(
             raise ValueError("production snapshot provenance does not match evidence inputs")
         aggregate = production_snapshot.get("aggregate")
         revision = str((production_snapshot.get("schema") or {}).get("revision") or "")
-        schema = {"schema_ready": int(revision or 0) >= 16, "alembic_version": revision}
+        schema = {"schema_ready": int(revision or 0) >= 17, "alembic_version": revision}
     else:
         schema = runtime_schema_readiness()
         revision = str(schema.get("alembic_version") or "")
-        if not schema.get("schema_ready") or int(revision or 0) < 16:
-            raise ValueError("AutoTutor evidence requires runtime schema revision 016")
+        if not schema.get("schema_ready") or int(revision or 0) < 17:
+            raise ValueError("AutoTutor evidence requires runtime schema revision 017")
         aggregate = aggregate_autotutor_transition_canary(
             config_version=config_version,
             deployed_commit=deployed_commit,
@@ -145,6 +161,7 @@ def build_autotutor_canary_evidence(
         }
     if not isinstance(aggregate, dict):
         raise ValueError("production snapshot aggregate is missing")
+    _validate_traffic_source_distribution(aggregate)
     snapshot_config = production_snapshot.get("configuration") or {}
     cohort_fingerprint = str(snapshot_config.get("cohort_fingerprint") or "")
     runtime_state_fingerprint = str(snapshot_config.get("runtime_state_fingerprint") or "")
@@ -230,6 +247,8 @@ def build_autotutor_final_evidence(*, candidate: dict, rollback_snapshot_payload
     deployment = rollback_snapshot.get("deployment") or {}
     configuration = rollback_snapshot.get("configuration") or {}
     rollback = rollback_snapshot.get("rollback") or {}
+    rollback_aggregate = rollback_snapshot.get("aggregate") or {}
+    _validate_traffic_source_distribution(rollback_aggregate)
     if (
         rollback_snapshot.get("snapshot_kind") != "rollback"
         or rollback_snapshot.get("phase") != "rollback_ready_for_finalize"

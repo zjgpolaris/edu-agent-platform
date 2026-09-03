@@ -28,7 +28,7 @@ def main() -> None:
                 "cohort_fingerprint": AutoTutorExecutorSettings.from_env(env).cohort_fingerprint,
                 "drills": {"restart": "pass", "writer_failure": "pass", "kill_switch": "pass", "rollback": "pass"}}
     with patch.dict(os.environ, env, clear=True), \
-         patch("agent_runtime.autotutor_canary_verification.runtime_schema_readiness", return_value={"schema_ready": True, "alembic_version": "016"}), \
+         patch("agent_runtime.autotutor_canary_verification.runtime_schema_readiness", return_value={"schema_ready": True, "alembic_version": "017"}), \
          patch("agent_runtime.autotutor_canary_verification.trusted_rollout_cohort_status", return_value={"ready": True, "verified_actor_count": 1}), \
          patch("agent_runtime.autotutor_canary_verification.observation_write_health", return_value={"status": "ok", "ok": True}), \
          patch("agent_runtime.autotutor_canary_verification.aggregate_autotutor_transition_canary", return_value=aggregate), \

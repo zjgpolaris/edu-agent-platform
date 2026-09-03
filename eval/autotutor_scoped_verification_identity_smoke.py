@@ -183,7 +183,7 @@ def main() -> None:
         "selected_graph_count": 0, "committed_graph_count": 0,
     }
     common_patches = (
-        patch("agent_runtime.autotutor_canary_verification.runtime_schema_readiness", return_value={"schema_ready": True, "alembic_version": "016"}),
+        patch("agent_runtime.autotutor_canary_verification.runtime_schema_readiness", return_value={"schema_ready": True, "alembic_version": "017"}),
         patch("agent_runtime.autotutor_canary_verification.trusted_rollout_cohort_status", return_value={"ready": True, "verified_actor_count": 1}),
         patch("agent_runtime.autotutor_canary_verification.observation_write_health", return_value={"status": "ok", "ok": True, "failure_count": 0}),
         patch("agent_runtime.autotutor_canary_verification.aggregate_autotutor_transition_canary", return_value=aggregate),

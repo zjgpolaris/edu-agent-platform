@@ -45,6 +45,7 @@ def ensure_runtime_tables() -> None:
         agent_checkpoints,
         agent_release_evidence,
         agent_rollout_observations,
+        autotutor_verification_nonces,
         agent_run_artifacts,
         agent_run_events,
         agent_runs,
@@ -59,6 +60,7 @@ def ensure_runtime_tables() -> None:
             required = {
                 "agent_runs", "agent_run_events", "agent_run_artifacts", "agent_checkpoints",
                 "agent_side_effects", "agent_rollout_observations", "agent_release_evidence",
+                "autotutor_verification_nonces",
             }
             missing = sorted(required - existing)
             if missing:
@@ -67,6 +69,7 @@ def ensure_runtime_tables() -> None:
         for table in (
             agent_runs, agent_run_events, agent_run_artifacts, agent_checkpoints,
             agent_side_effects, agent_rollout_observations, agent_release_evidence,
+            autotutor_verification_nonces,
         ):
             table.create(bind=conn, checkfirst=True)
 

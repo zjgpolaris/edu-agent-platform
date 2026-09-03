@@ -1,6 +1,6 @@
 """学习助手 + AutoTutor 路由"""
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -540,16 +540,27 @@ async def learning_assistant_chat(req: LearningAssistantRequest, actor: Actor = 
 
 
 @router.post("/api/autotutor/start")
-async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Depends(require_auth)):
+async def autotutor_start_session(
+    req: AutoTutorStartRequest,
+    actor: Actor = Depends(require_auth),
+    verification_run_id: str | None = Header(default=None, alias="X-AutoTutor-Verification-Run"),
+    verification_attestation: str | None = Header(default=None, alias="X-AutoTutor-Verification-Attestation"),
+):
     from agents.auto_tutor import AutoTutorUnavailableError, start_session as autotutor_start
     from agent_runtime.context import rollout_eligibility
     from agent_runtime.models import default_data_scope
     from security.auth import auth_required
+    from security.autotutor_verification_auth import resolve_autotutor_verification_traffic
     assert_student_access(actor, req.student_id)
     check_rate_limit(f"autotutor:{req.student_id}", limit=40, window_seconds=3600)
     actor_role = "student" if not auth_required() else actor.role
     data_scope = default_data_scope()
     eligible, eligibility_reason = rollout_eligibility(actor, data_scope)
+    verification_traffic = resolve_autotutor_verification_traffic(
+        actor=actor,
+        verification_run_id=verification_run_id,
+        attestation=verification_attestation,
+    )
     with trace_context(name="POST /api/autotutor/start", metadata=trace_meta("auto_tutor", "/api/autotutor/start", student_id=req.student_id, grade=req.grade), user_id=req.student_id, input_data={"student_id": req.student_id}):
         trace_id = current_trace_id()
         record_audit_event(actor_id=actor.actor_id, action="autotutor.start", resource_type="student", resource_id=req.student_id, metadata={"grade": req.grade})
@@ -565,6 +576,8 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
                 data_scope=data_scope,
                 rollout_eligible=eligible,
                 eligibility_reason=eligibility_reason,
+                traffic_source=verification_traffic.traffic_source,
+                verification_run_id=verification_traffic.verification_run_id,
                 trace_id=trace_id,
                 focus_tags=req.focus_tags or None,
                 focus_reason=req.focus_reason or None,
@@ -594,7 +607,12 @@ async def autotutor_start_session(req: AutoTutorStartRequest, actor: Actor = Dep
 
 
 @router.post("/api/autotutor/answer")
-async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = Depends(require_auth)):
+async def autotutor_submit_answer(
+    req: AutoTutorAnswerRequest,
+    actor: Actor = Depends(require_auth),
+    verification_run_id: str | None = Header(default=None, alias="X-AutoTutor-Verification-Run"),
+    verification_attestation: str | None = Header(default=None, alias="X-AutoTutor-Verification-Attestation"),
+):
     from agents.auto_tutor import (
         AutoTutorIdempotencyConflict,
         get_session as autotutor_get,
@@ -603,6 +621,7 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
     from security.auth import auth_required
     from agent_runtime.context import rollout_eligibility
     from agent_runtime.models import default_data_scope
+    from security.autotutor_verification_auth import resolve_autotutor_verification_traffic
     try:
         session = await run_in_threadpool(autotutor_get, req.session_id)
     except LookupError:
@@ -614,6 +633,11 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
     actor_role = "student" if not auth_required() else actor.role
     data_scope = default_data_scope()
     eligible, eligibility_reason = rollout_eligibility(actor, data_scope)
+    verification_traffic = resolve_autotutor_verification_traffic(
+        actor=actor,
+        verification_run_id=verification_run_id,
+        attestation=verification_attestation,
+    )
     record_audit_event(actor_id=actor.actor_id, action="autotutor.answer", resource_type="student", resource_id=session_student_id, metadata={"session_id": req.session_id})
     try:
         result = await run_in_threadpool(
@@ -627,6 +651,8 @@ async def autotutor_submit_answer(req: AutoTutorAnswerRequest, actor: Actor = De
             data_scope=data_scope,
             rollout_eligible=eligible,
             eligibility_reason=eligibility_reason,
+            traffic_source=verification_traffic.traffic_source,
+            verification_run_id=verification_traffic.verification_run_id,
             expected_revision=req.expected_revision,
             idempotency_key=req.idempotency_key,
         )

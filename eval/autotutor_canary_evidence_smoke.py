@@ -42,6 +42,11 @@ def _aggregate() -> dict:
             "since": START, "until": END,
         },
         "assigned_graph_count": 100, "committed_graph_count": 100,
+        "traffic_sources": {
+            "organic": {"control": 0, "graph": 40, "committed_graph": 40},
+            "release_verification": {"control": 0, "graph": 60, "committed_graph": 60},
+            "total": {"control": 0, "graph": 100, "committed_graph": 100},
+        },
         "comparator_match_rate": 1.0, "fallback_rate": 0.0,
         "observation_write_health": {"status": "ok", "ok": True, "failure_count": 0},
     }
@@ -51,7 +56,7 @@ def main() -> None:
     metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('016')"))
+        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('017')"))
     configuration = {
         "config_version": CONFIG, "mode": "active_canary", "active_bps": 100,
         "cohort_fingerprint": "sha256:" + "1" * 64,
@@ -60,8 +65,8 @@ def main() -> None:
     canary_snapshot = {
         "schema_version": 1, "agent_type": "auto_tutor", "snapshot_kind": "canary",
         "slice": _aggregate()["slice"],
-        "deployment": {"deployed_commit": COMMIT, "environment": "production", "schema_revision": "016"},
-        "configuration": configuration, "schema": {"revision": "016"},
+        "deployment": {"deployed_commit": COMMIT, "environment": "production", "schema_revision": "017"},
+        "configuration": configuration, "schema": {"revision": "017"},
         "aggregate": _aggregate(), "status": "READY", "decision": "GO", "blockers": [],
     }
     canary_payload = {"snapshot": canary_snapshot, "snapshot_sha256": _snapshot_hash(canary_snapshot)}
@@ -83,16 +88,23 @@ def main() -> None:
 
     rollback_snapshot = {
         "schema_version": 1, "agent_type": "auto_tutor", "snapshot_kind": "rollback",
-        "deployment": {"deployed_commit": COMMIT, "environment": "production", "schema_revision": "016"},
+        "deployment": {"deployed_commit": COMMIT, "environment": "production", "schema_revision": "017"},
         "configuration": {**configuration, "mode": "legacy", "active_bps": 0,
                           "runtime_state_fingerprint": "sha256:" + "3" * 64},
         "rollback": {"assigned_control_count": 20, "assigned_graph_count": 0,
                      "selected_graph_count": 0, "minimum_control": 20},
+        "aggregate": {"traffic_sources": {
+            "organic": {"control": 5, "graph": 0, "committed_graph": 0},
+            "release_verification": {"control": 15, "graph": 0, "committed_graph": 0},
+            "total": {"control": 20, "graph": 0, "committed_graph": 0},
+        }},
         "phase": "rollback_ready_for_finalize", "status": "READY", "decision": "GO", "blockers": [],
     }
     rollback_payload = {"snapshot": rollback_snapshot, "snapshot_sha256": _snapshot_hash(rollback_snapshot)}
     final = build_autotutor_final_evidence(candidate=evidence, rollback_snapshot_payload=rollback_payload)
     assert final["decision"] == "GO" and final["evidence_stage"] == "final"
+    assert final["aggregate"]["traffic_sources"]["release_verification"]["committed_graph"] == 60
+    assert final["rollback_snapshot"]["aggregate"]["traffic_sources"]["release_verification"]["control"] == 15
     saved = save_release_evidence(final)
     loaded = load_release_evidence(evidence_sha256=final["evidence_sha256"])
     assert loaded == saved == final

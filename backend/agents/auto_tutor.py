@@ -242,6 +242,8 @@ def _execution_context(
     rollout_eligible: bool,
     eligibility_reason: str,
     internal_force_graph: bool = False,
+    traffic_source: str = "organic",
+    verification_run_id: str | None = None,
 ) -> AutoTutorExecutionContext:
     from deployment import deployed_commit, deployment_environment
 
@@ -256,6 +258,8 @@ def _execution_context(
         environment=deployment_environment(),
         deployed_commit=deployed_commit(),
         internal_force_graph=internal_force_graph,
+        traffic_source=traffic_source,
+        verification_run_id=verification_run_id,
     )
 
 
@@ -424,9 +428,25 @@ def _record_executor_observation(
                 + len(outcome.weakpoint_evidence)
                 + (1 if outcome.review_memory else 0)
             ) if outcome else None,
+            traffic_source=context.traffic_source,
+            verification_run_id=context.verification_run_id,
         )
     except Exception:
         return
+
+
+def _tag_verification_learning_events(state: AutoTutorState, context: AutoTutorExecutionContext) -> None:
+    """Keep controlled traffic identifiable in downstream learning-event reports."""
+    if context.traffic_source != "release_verification":
+        return
+    for intent in state._pending_learning_events:
+        intent.event.metadata = {
+            **intent.event.metadata,
+            "traffic_source": "release_verification",
+            "verification_run_fingerprint": hashlib.sha256(
+                str(context.verification_run_id or "").encode("utf-8")
+            ).hexdigest(),
+        }
 
 
 # --------------------------------------------------------------------------- #
@@ -2006,6 +2026,8 @@ def start_session(
     rollout_eligible: bool = False,
     eligibility_reason: str = "anonymous_actor",
     internal_force_graph: bool = False,
+    traffic_source: str = "organic",
+    verification_run_id: str | None = None,
     trace_id: str | None = None,
     focus_tags: list[str] | None = None,
     focus_reason: str | None = None,
@@ -2048,6 +2070,8 @@ def start_session(
         rollout_eligible=rollout_eligible,
         eligibility_reason=eligibility_reason,
         internal_force_graph=internal_force_graph,
+        traffic_source=traffic_source,
+        verification_run_id=verification_run_id,
     )
     settings = AutoTutorExecutorSettings.from_env()
     admission = evaluate_autotutor_canary_admission(settings=settings, context=execution_context)
@@ -2086,6 +2110,7 @@ def start_session(
             state.run_id = None
     start_result = _public_state(state)
     _ensure_session_table()
+    _tag_verification_learning_events(state, execution_context)
     start_effects = AutoTutorTransitionEffects(
         session_id=state.session_id,
         claimed_revision=0,
@@ -2140,6 +2165,8 @@ def submit_answer(
     data_scope: str = "runtime",
     rollout_eligible: bool = False,
     eligibility_reason: str = "anonymous_actor",
+    traffic_source: str = "organic",
+    verification_run_id: str | None = None,
     expected_revision: int | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
@@ -2156,6 +2183,8 @@ def submit_answer(
             data_scope=data_scope,
             rollout_eligible=rollout_eligible,
             eligibility_reason=eligibility_reason,
+            traffic_source=traffic_source,
+            verification_run_id=verification_run_id,
             expected_revision=expected_revision,
             idempotency_key=idempotency_key,
         )
@@ -2209,7 +2238,9 @@ def _commit_claimed_answer_transition(
     transition_key: str,
     request_hash: str,
     result: dict[str, Any],
+    execution_context: AutoTutorExecutionContext,
 ) -> dict[str, Any]:
+    _tag_verification_learning_events(state, execution_context)
     effects = AutoTutorTransitionEffects(
         session_id=state.session_id,
         claimed_revision=claimed_revision,
@@ -2263,6 +2294,8 @@ def _submit_answer_locked(
     data_scope: str = "runtime",
     rollout_eligible: bool = False,
     eligibility_reason: str = "anonymous_actor",
+    traffic_source: str = "organic",
+    verification_run_id: str | None = None,
     expected_revision: int | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
@@ -2316,6 +2349,8 @@ def _submit_answer_locked(
         data_scope=data_scope,
         rollout_eligible=rollout_eligible,
         eligibility_reason=eligibility_reason,
+        traffic_source=traffic_source,
+        verification_run_id=verification_run_id,
     )
     settings = AutoTutorExecutorSettings.from_env()
     _apply_existing_session_canary_admission(state, context=execution_context, settings=settings)
@@ -2340,6 +2375,7 @@ def _submit_answer_locked(
             transition_key=transition_key,
             request_hash=request_hash,
             result=result,
+            execution_context=execution_context,
         )
         _mirror_transition_trace(state, from_sequence=previous_sequence)
         _record_executor_observation(

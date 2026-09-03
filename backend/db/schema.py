@@ -522,12 +522,25 @@ agent_rollout_observations = Table(
     Column("comparator_latency_ms", Integer),
     Column("observation_external_calls", Integer),
     Column("effect_intent_count", Integer),
+    Column("traffic_source", Text, nullable=False, server_default="organic"),
+    Column("verification_run_id", Text),
     Column("created_at", Text, nullable=False),
     Index("idx_rollout_observation_slice_created", "agent_type", "config_version", "runtime_mode", "data_scope", "created_at"),
     Index("idx_rollout_observation_commit_created", "deployed_commit", "created_at"),
     Index("idx_rollout_observation_eligibility", "rollout_eligible", "eligibility_reason", "created_at"),
     Index("idx_rollout_observation_transition", "agent_type", "assigned_executor", "selected_executor", "transition_kind", "created_at"),
     Index("idx_rollout_observation_admission", "agent_type", "admission_status", "created_at"),
+    Index("idx_rollout_observation_traffic_source", "agent_type", "traffic_source", "verification_run_id", "created_at"),
+)
+
+autotutor_verification_nonces = Table(
+    "autotutor_verification_nonces", metadata,
+    Column("nonce_sha256", Text, primary_key=True),
+    Column("verification_run_id", Text, nullable=False),
+    Column("actor_id_sha256", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Index("idx_autotutor_verification_nonces_expires", "expires_at"),
 )
 
 agent_release_evidence = Table(

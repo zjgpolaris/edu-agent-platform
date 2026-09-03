@@ -51,7 +51,7 @@ def teacher_student_events(student_id: str, limit: int = 50, actor: Actor = Depe
     init_db()
     with get_connection() as conn:
         rows = conn.execute(
-            text("SELECT * FROM learning_events WHERE student_id = :student_id ORDER BY created_at DESC LIMIT :limit"),
+            text("SELECT * FROM learning_events WHERE student_id = :student_id AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%' ORDER BY created_at DESC LIMIT :limit"),
             {"student_id": student_id, "limit": limit},
         ).mappings().fetchall()
     return [dict(r) for r in rows]
@@ -71,7 +71,7 @@ async def teacher_class_analytics(actor: Actor = Depends(require_auth)):
         students = conn.execute(text("SELECT DISTINCT student_id FROM student_profiles")).mappings().fetchall()
         student_ids = [row["student_id"] for row in students]
         active_rows = conn.execute(
-            text("SELECT DISTINCT student_id FROM learning_events WHERE created_at >= :since"),
+            text("SELECT DISTINCT student_id FROM learning_events WHERE created_at >= :since AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%'"),
             {"since": seven_days_ago},
         ).mappings().fetchall()
         active_ids = {row["student_id"] for row in active_rows}
@@ -98,7 +98,7 @@ async def teacher_class_analytics(actor: Actor = Depends(require_auth)):
             for topic in _json_load(row["strong_topics_json"], []) or []:
                 strong_dist[str(topic)] = strong_dist.get(str(topic), 0) + 1
         activity_rows = conn.execute(
-            text("SELECT substr(created_at, 1, 10) as date, COUNT(DISTINCT student_id) as count FROM learning_events WHERE created_at >= :since GROUP BY substr(created_at, 1, 10)"),
+            text("SELECT substr(created_at, 1, 10) as date, COUNT(DISTINCT student_id) as count FROM learning_events WHERE created_at >= :since AND COALESCE(metadata_json, '') NOT LIKE '%release_verification%' GROUP BY substr(created_at, 1, 10)"),
             {"since": seven_days_ago},
         ).mappings().fetchall()
         activity_by_day = {row["date"]: row["count"] for row in activity_rows}
