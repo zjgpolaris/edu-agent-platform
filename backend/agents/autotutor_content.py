@@ -24,8 +24,17 @@ DIFFICULTY_RANK: dict[Difficulty, int] = {"easy": 0, "medium": 1, "hard": 2}
 COGNITIVE_RANK: dict[CognitiveAction, int] = {"recall": 0, "explain": 1, "compare": 2, "apply": 3}
 APPROVED_REVIEW_STATUSES = {"teacher_reviewed", "curriculum_reviewed"}
 FORBIDDEN_PLACEHOLDERS = ("基本史实", "与史实不符", "张冠李戴", "完全无关")
-ROOT = Path(__file__).resolve().parents[2]
-CONTENT_PATH = ROOT / "knowledge_base" / "history" / "autotutor_content.json"
+def _resolve_content_path(module_file: Path | None = None) -> Path:
+    """Resolve curated content in both source-tree and flattened Docker layouts."""
+    module_path = (module_file or Path(__file__)).resolve()
+    relative = Path("knowledge_base/history/autotutor_content.json")
+    # Source tree: <repo>/backend/agents/*.py -> <repo>/knowledge_base.
+    # Docker:      /app/agents/*.py          -> /app/knowledge_base.
+    candidates = (module_path.parents[2] / relative, module_path.parents[1] / relative)
+    return next((candidate for candidate in candidates if candidate.is_file()), candidates[0])
+
+
+CONTENT_PATH = _resolve_content_path()
 
 
 class LearningObjective(BaseModel):

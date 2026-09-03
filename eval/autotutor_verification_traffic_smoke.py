@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
 from agents.autotutor_execution import stable_executor_bucket  # noqa: E402
+from agents.autotutor_content import _resolve_content_path  # noqa: E402
 from scripts.run_autotutor_canary_verification_traffic import (  # noqa: E402
     _assert_operational_safety,
     run_traffic,
@@ -37,6 +39,14 @@ class Response:
 
 
 def main() -> None:
+    with TemporaryDirectory() as directory:
+        app_root = Path(directory) / "app"
+        flattened_content = app_root / "knowledge_base/history/autotutor_content.json"
+        flattened_content.parent.mkdir(parents=True)
+        flattened_content.write_text("{}", encoding="utf-8")
+        module_path = app_root / "agents/autotutor_content.py"
+        assert _resolve_content_path(module_path) == flattened_content.resolve()
+
     _assert_operational_safety({
         "aggregate": {
             "assigned_graph_count": 0,
