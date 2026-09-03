@@ -15,7 +15,14 @@ except FileNotFoundError:
     pass
 sys.path.insert(0, str(ROOT / "backend"))
 
-from agents.auto_tutor import _load_persisted_session, _persist_session, start_session, submit_answer  # noqa: E402
+from agents import auto_tutor as autotutor_module  # noqa: E402
+from agents.auto_tutor import (  # noqa: E402
+    ReflectionRecord,
+    _load_persisted_session,
+    _persist_session,
+    start_session,
+    submit_answer,
+)
 from agents.autotutor_content import build_learning_objective, find_curated_content, prepare_content  # noqa: E402
 from services.weakpoint_service import get_weakpoints  # noqa: E402
 
@@ -111,6 +118,41 @@ def main() -> None:
         assert blocked.assessment is None
         assert "no_fresh_assessment_for_target_difficulty" in blocked.validation.reason_codes
 
+    original_reflection = autotutor_module._acquire_reflection_observation
+    autotutor_module._acquire_reflection_observation = lambda step, answer, step_index: ReflectionRecord(
+        step_index=step_index,
+        knowledge_point=step.knowledge_point,
+        diagnosis="需要换一个例子",
+        adjustment="change_example",
+        explanation="换一个例子后再检验。",
+        decision_provenance={"decision_source": "deterministic_fallback"},
+    )
+    try:
+        change_example_start = start_session(
+            "adaptive-change-example",
+            grade="八年级上册",
+            focus_tags=["戊戌变法失败原因"],
+        )
+        first_question = change_example_start["current_question"]
+        assert first_question["difficulty"] == "medium"
+        change_example_result = submit_answer(
+            change_example_start["session_id"],
+            _wrong_answer(change_example_start["session_id"]),
+            expected_revision=change_example_start["revision"],
+            idempotency_key="adaptive-change-example-answer",
+        )
+    finally:
+        autotutor_module._acquire_reflection_observation = original_reflection
+    fallback_question = change_example_result["current_question"]
+    fallback_ok = bool(
+        change_example_result["status"] == "awaiting_answer"
+        and fallback_question
+        and fallback_question["difficulty"] == "easy"
+        and fallback_question["assessment_id"] != first_question["assessment_id"]
+    )
+    print(("OK" if fallback_ok else "FAIL"), "change_example_exhausted_medium_falls_back_to_easy")
+    passed += int(fallback_ok)
+
     blocked_start = start_session(
         "adaptive-blocked",
         grade="八年级上册",
@@ -141,7 +183,7 @@ def main() -> None:
     print(("OK" if blocked_ok else "FAIL"), "no_fresh_remedial_item_fail_closed")
     passed += int(blocked_ok)
 
-    total = len(PILOTS) + 1
+    total = len(PILOTS) + 2
     print(f"autotutor_adaptive_difficulty={passed}/{total}")
     if passed != total:
         raise SystemExit(1)

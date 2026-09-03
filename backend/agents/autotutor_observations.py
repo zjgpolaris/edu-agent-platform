@@ -76,6 +76,26 @@ def _acquire_content_observation(
         preferred_cognitive_actions=["recall", "explain"] if step.replanned else None,
         selection_seed=f"{before.session_id}:{step_index}:{step.attempts}",
     )
+    if (
+        step.replanned
+        and prepared.blocked_reason == "no_fresh_assessment_for_target_difficulty"
+        and step.difficulty in {"hard", "medium"}
+    ):
+        # A model-selected ``change_example`` may intentionally keep the current
+        # difficulty. If the reviewed pack has no fresh item at that exact level,
+        # retry one level lower before failing closed. This keeps remediation
+        # useful without reusing a question or accepting unreviewed content.
+        fallback_difficulty = {"hard": "medium", "medium": "easy"}[step.difficulty]
+        prepared = at.prepare_content(
+            step.objective,
+            retrieval_data,
+            kind="practice",
+            variant_index=step.attempts,
+            target_difficulty=fallback_difficulty,
+            excluded_assessment_ids=set(step.assessment_history),
+            preferred_cognitive_actions=["recall", "explain"],
+            selection_seed=f"{before.session_id}:{step_index}:{step.attempts}:lower",
+        )
     step.evidence_decision = prepared.evidence
     step.content_validation = prepared.validation
     step.content_version = prepared.content_version
