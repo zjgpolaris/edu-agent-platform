@@ -152,7 +152,7 @@ def _select_account(accounts: list[dict[str, str]], *, phase: str, salt: str, ac
     return selected[0]
 
 
-def _answer_key() -> dict[str, str]:
+def _reviewed_answer_texts() -> dict[str, str]:
     path = REPO_ROOT / "knowledge_base" / "history" / "autotutor_content.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
     result: dict[str, str] = {}
@@ -160,18 +160,36 @@ def _answer_key() -> dict[str, str]:
         for assessment in (item.get("practice_items") or []) + (item.get("exit_ticket_items") or []):
             assessment_id = str(assessment.get("assessment_id") or "")
             options = list(assessment.get("options") or [])
-            correct_index = next((index for index, option in enumerate(options) if option.get("is_correct")), None)
-            if not assessment_id or correct_index is None:
+            correct = next((option for option in options if option.get("is_correct")), None)
+            if not assessment_id or not isinstance(correct, dict) or not str(correct.get("text") or "").strip():
                 continue
-            # The API applies autotutor_content._stable_option_order before it
-            # exposes a question. Mirror that dependency-free transformation so
-            # controlled traffic answers the public A-D labels, not the source
-            # pack labels that existed before rotation.
-            if len(options) == 4:
-                offset = int(hashlib.sha256(assessment_id.encode("utf-8")).hexdigest()[:8], 16) % 4
-                correct_index = (correct_index - offset) % 4
-            result[assessment_id] = "ABCD"[correct_index]
+            result[assessment_id] = str(correct["text"]).strip()
     return result
+
+
+def _answer_for_public_question(question: dict[str, Any], reviewed_answers: dict[str, str]) -> str:
+    """Resolve the answer from the labels actually exposed by the student API."""
+    assessment_id = str(question.get("assessment_id") or "")
+    correct_text = reviewed_answers.get(assessment_id)
+    if not correct_text:
+        raise RuntimeError("verification_assessment_not_in_reviewed_pack")
+    normalized_correct = "".join(correct_text.split())
+    for raw_option in question.get("options") or []:
+        match = re.match(r"^\s*([ABCD])[.．、]\s*(.+?)\s*$", str(raw_option))
+        if match and "".join(match.group(2).split()) == normalized_correct:
+            return match.group(1)
+    raise RuntimeError("verification_public_answer_mapping_unavailable")
+
+
+def _safe_blocked_reason(state: dict[str, Any]) -> str:
+    blocked = state.get("content_blocked") if isinstance(state.get("content_blocked"), dict) else {}
+    raw_reason = str(blocked.get("reason") or "unknown")
+    feedback = state.get("answer_feedback") if isinstance(state.get("answer_feedback"), dict) else {}
+    if raw_reason == "unknown" and feedback.get("is_correct") is True:
+        raw_reason = "exit_ticket_unavailable_after_correct_practice"
+    elif raw_reason == "unknown" and feedback.get("is_correct") is False:
+        raw_reason = "remediation_unavailable_after_wrong_practice"
+    return re.sub(r"[^a-z0-9_-]+", "_", raw_reason.lower()).strip("_")[:64] or "unknown"
 
 
 def _assert_receipt_safe(value: Any) -> None:
@@ -243,7 +261,7 @@ def run_traffic(
         raise ValueError("verification_student_identity_mismatch")
     student_token = str(login["token"])
     run_id = "avr_" + uuid4().hex
-    answers = _answer_key()
+    reviewed_answers = _reviewed_answer_texts()
     deadline = monotonic() + max(1, timeout_seconds)
     transitions = 0
     sessions = 0
@@ -302,7 +320,7 @@ def run_traffic(
             answer_index = 0
             while transitions < target_transitions and state.get("status") == "awaiting_answer" and monotonic() < deadline:
                 question = state.get("current_question") or {}
-                answer = answers.get(str(question.get("assessment_id") or ""), "A")
+                answer = _answer_for_public_question(question, reviewed_answers)
                 # Every third session exercises the reflection path once.
                 if sessions % 3 == 0 and answer_index == 0:
                     answer = next((candidate for candidate in ("A", "B", "C", "D") if candidate != answer), "B")
@@ -317,9 +335,7 @@ def run_traffic(
             if state.get("status") == "completed":
                 completed += 1
             elif state.get("status") == "needs_content":
-                blocked = state.get("content_blocked") if isinstance(state.get("content_blocked"), dict) else {}
-                raw_reason = str(blocked.get("reason") or "unknown")
-                safe_reason = re.sub(r"[^a-z0-9_-]+", "_", raw_reason.lower()).strip("_")[:64] or "unknown"
+                safe_reason = _safe_blocked_reason(state)
                 raise RuntimeError(f"verification_content_target_unavailable:{safe_reason}")
             safety = _request_json(preflight_url, headers={
                 "Authorization": f"Bearer {machine_token}",

@@ -13,8 +13,10 @@ sys.path.insert(0, str(ROOT / "backend"))
 from agents.autotutor_execution import stable_executor_bucket  # noqa: E402
 from agents.autotutor_content import _resolve_content_path  # noqa: E402
 from scripts.run_autotutor_canary_verification_traffic import (  # noqa: E402
-    _answer_key,
+    _answer_for_public_question,
     _assert_operational_safety,
+    _reviewed_answer_texts,
+    _safe_blocked_reason,
     run_traffic,
 )
 
@@ -45,9 +47,25 @@ def main() -> None:
     assert "!knowledge_base/history/**" in dockerignore
     assert "test -f /app/knowledge_base/history/autotutor_content.json" in dockerfile
 
-    answers = _answer_key()
-    assert answers["wuxu-cause-practice-3"] == "C"
-    assert answers["wuxu-cause-exit-1"] == "C"
+    reviewed_answers = _reviewed_answer_texts()
+    public_question = {
+        "assessment_id": "wuxu-cause-practice-3",
+        "options": [
+            "A. 干扰项一",
+            "B. 干扰项二",
+            f"C. {reviewed_answers['wuxu-cause-practice-3']}",
+            "D. 干扰项三",
+        ],
+    }
+    assert _answer_for_public_question(public_question, reviewed_answers) == "C"
+    assert _safe_blocked_reason({
+        "content_blocked": {"message": "redacted"},
+        "answer_feedback": {"is_correct": True},
+    }) == "exit_ticket_unavailable_after_correct_practice"
+    assert _safe_blocked_reason({
+        "content_blocked": {"message": "redacted"},
+        "answer_feedback": {"is_correct": False},
+    }) == "remediation_unavailable_after_wrong_practice"
 
     with TemporaryDirectory() as directory:
         app_root = Path(directory) / "app"
@@ -83,7 +101,7 @@ def main() -> None:
     requests = []
     states = iter([
         {"session_id": "private-session", "status": "awaiting_answer", "revision": 1,
-         "current_question": {"assessment_id": "wuxu-cause-practice-1"}},
+         "current_question": public_question},
         {"session_id": "private-session", "status": "completed", "revision": 2},
     ])
 
@@ -125,7 +143,7 @@ def main() -> None:
     start_payload = json.loads(transition_requests[0].data.decode("utf-8"))
     assert start_payload["focus_tags"] == ["戊戌变法失败原因"]
     answer_payload = json.loads(transition_requests[1].data.decode("utf-8"))
-    assert answer_payload["answer"] == answers["wuxu-cause-practice-1"]
+    assert answer_payload["answer"] == "C"
     attestations = [request.headers.get("X-autotutor-verification-attestation") for request in transition_requests]
     assert all(attestations) and len(set(attestations)) == 2
     assert all(request.headers.get("X-autotutor-verification-run") for request in transition_requests)
