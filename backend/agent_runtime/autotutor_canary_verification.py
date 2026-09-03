@@ -12,6 +12,7 @@ from agent_runtime.readiness import runtime_schema_readiness
 from agent_runtime.rollout_observations import aggregate_autotutor_transition_canary, observation_write_health
 from agents.autotutor_canary_admission import evaluate_autotutor_canary_admission
 from agents.autotutor_execution import AutoTutorExecutionContext, AutoTutorExecutorSettings
+from agents.autotutor_content import load_curated_content
 from deployment import deployed_commit, deployment_environment
 from security.accounts import trusted_rollout_cohort_status
 from security.autotutor_verification_auth import AutoTutorVerificationIdentitySettings
@@ -65,6 +66,11 @@ def _safe_reason(value: Any) -> str:
     return normalized or "unknown"
 
 
+def _safe_dimension(value: Any) -> str:
+    normalized = re.sub(r"[^\w:.-]+", "_", str(value or "unknown"), flags=re.UNICODE).strip("_")[:160]
+    return normalized or "unknown"
+
+
 def _summarize_content_blocks(events: list[dict[str, Any]], *, until: str | None = None) -> dict[str, Any]:
     """Return only operational enums and timestamps; never actor/session fields."""
     rows: list[dict[str, str]] = []
@@ -73,17 +79,28 @@ def _summarize_content_blocks(events: list[dict[str, Any]], *, until: str | None
         created_at = str(event.get("created_at") or "")
         if metadata.get("traffic_source") != "release_verification" or (until and created_at >= until):
             continue
-        rows.append({"reason": _safe_reason(metadata.get("reason")), "created_at": created_at})
+        rows.append({
+            "reason": _safe_reason(metadata.get("reason")),
+            "objective_id": _safe_dimension(metadata.get("objective_id")),
+            "aspect": _safe_reason(metadata.get("aspect")),
+            "created_at": created_at,
+        })
     rows.sort(key=lambda item: item["created_at"], reverse=True)
     by_reason: dict[str, int] = {}
+    by_objective_id: dict[str, int] = {}
+    by_aspect: dict[str, int] = {}
     for row in rows:
         by_reason[row["reason"]] = by_reason.get(row["reason"], 0) + 1
+        by_objective_id[row["objective_id"]] = by_objective_id.get(row["objective_id"], 0) + 1
+        by_aspect[row["aspect"]] = by_aspect.get(row["aspect"], 0) + 1
     return {
         "status": "available",
         "total": len(rows),
         "latest_reason": rows[0]["reason"] if rows else None,
         "latest_at": rows[0]["created_at"] if rows else None,
         "by_reason": dict(sorted(by_reason.items())),
+        "by_objective_id": dict(sorted(by_objective_id.items())),
+        "by_aspect": dict(sorted(by_aspect.items())),
     }
 
 
@@ -99,6 +116,16 @@ def _content_block_diagnostics(*, since: str, until: str | None) -> dict[str, An
     except Exception as exc:
         return {"status": "unavailable", "error_type": exc.__class__.__name__}
     return _summarize_content_blocks(events, until=until)
+
+
+def _content_catalog_diagnostics() -> dict[str, Any]:
+    entries = load_curated_content()
+    return {
+        "status": "available" if entries else "empty",
+        "entry_count": len(entries),
+        "objective_ids": sorted(_safe_dimension(entry.objective_id) for entry in entries),
+        "review_statuses": sorted({_safe_reason(entry.review_status) for entry in entries}),
+    }
 
 
 def _admission(settings: AutoTutorExecutorSettings, *, environment: str, commit: str) -> dict[str, Any]:
@@ -198,6 +225,7 @@ def build_autotutor_canary_verification(
     except Exception as exc:
         admission = {"status": "denied", "reason_codes": ["admission_check_failed"], "error_type": exc.__class__.__name__}
     content_blocks = _content_block_diagnostics(since=since, until=until)
+    content_catalog = _content_catalog_diagnostics()
     blockers: list[str] = []
     if environment != "production":
         blockers.append("environment_not_production")
@@ -341,7 +369,10 @@ def build_autotutor_canary_verification(
             **({"error_type": cohort["error_type"]} if cohort.get("error_type") else {}),
         },
         "observation_health": health,
-        "diagnostics": {"release_verification_content_blocks": content_blocks},
+        "diagnostics": {
+            "release_verification_content_blocks": content_blocks,
+            "content_catalog": content_catalog,
+        },
         "progress": {
             "control_transition_count": control_count,
             "committed_graph_transition_count": committed_graph,

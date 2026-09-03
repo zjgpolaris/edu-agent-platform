@@ -69,7 +69,12 @@ def main() -> None:
             "student_id": "must-not-escape",
             "session_id": "must-not-escape",
             "created_at": "2026-09-03T08:24:00+00:00",
-            "metadata": {"traffic_source": "release_verification", "reason": "assessment_not_independent"},
+            "metadata": {
+                "traffic_source": "release_verification",
+                "reason": "assessment_not_independent",
+                "objective_id": "history:戊戌变法:cause:v1",
+                "aspect": "cause",
+            },
         },
         {
             "created_at": "2026-09-03T08:20:00+00:00",
@@ -82,6 +87,8 @@ def main() -> None:
         "latest_reason": "assessment_not_independent",
         "latest_at": "2026-09-03T08:24:00+00:00",
         "by_reason": {"assessment_not_independent": 1},
+        "by_objective_id": {"history:戊戌变法:cause:v1": 1},
+        "by_aspect": {"cause": 1},
     }
     assert "must-not-escape" not in json.dumps(content_diagnostics)
 
