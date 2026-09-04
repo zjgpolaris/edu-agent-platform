@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+import urllib.error
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
@@ -166,6 +167,69 @@ def main() -> None:
     attestations = [request.headers.get("X-autotutor-verification-attestation") for request in transition_requests]
     assert all(attestations) and len(set(attestations)) == 2
     assert all(request.headers.get("X-autotutor-verification-run") for request in transition_requests)
+
+    flaky_requests = []
+    flaky_states = iter([
+        {"session_id": "retry-session", "status": "awaiting_answer", "revision": 1,
+         "current_question": public_question},
+        {"session_id": "retry-session", "status": "completed", "revision": 2},
+    ])
+    transient_failures = 0
+
+    def flaky_urlopen(request, timeout=30):
+        nonlocal transient_failures
+        url = request.full_url
+        if "/verification?" in url:
+            return Response({
+                "deployment": {"environment": "production", "deployed_commit": COMMIT},
+                "configuration": {"mode": "active_canary", "active_bps": 100,
+                                  "config_version": CONFIG, "kill_switch": False},
+            })
+        if url.endswith("/api/auth/login"):
+            return Response({"role": "student", "actor_id": actor, "token": "student-jwt"})
+        flaky_requests.append(request)
+        if transient_failures < 2:
+            transient_failures += 1
+            raise urllib.error.HTTPError(url, 502, "Bad Gateway", None, None)
+        return Response(next(flaky_states))
+
+    retry_receipt = run_traffic(
+        api_base="https://edu.example", expected_commit=COMMIT,
+        expected_config_version=CONFIG, phase="canary", target_transitions=2,
+        maximum_sessions=2, timeout_seconds=30, env=env, urlopen=flaky_urlopen, sleep=lambda _: None,
+    )
+    assert retry_receipt["target_reached"] is True and retry_receipt["transitions_sent"] == 2
+    assert len(flaky_requests) == 4
+    retried_start_payloads = [request.data for request in flaky_requests[:3]]
+    assert len(set(retried_start_payloads)) == 1
+
+    failed_requests = []
+
+    def unavailable_urlopen(request, timeout=30):
+        url = request.full_url
+        if "/verification?" in url:
+            return Response({
+                "deployment": {"environment": "production", "deployed_commit": COMMIT},
+                "configuration": {"mode": "active_canary", "active_bps": 100,
+                                  "config_version": CONFIG, "kill_switch": False},
+            })
+        if url.endswith("/api/auth/login"):
+            return Response({"role": "student", "actor_id": actor, "token": "student-jwt"})
+        failed_requests.append(request)
+        raise urllib.error.HTTPError(url, 502, "Bad Gateway", None, None)
+
+    try:
+        run_traffic(
+            api_base="https://edu.example", expected_commit=COMMIT,
+            expected_config_version=CONFIG, phase="canary", target_transitions=2,
+            maximum_sessions=2, timeout_seconds=30, env=env,
+            urlopen=unavailable_urlopen, sleep=lambda _: None,
+        )
+        raise AssertionError("three consecutive server errors did not stop traffic")
+    except RuntimeError as exc:
+        assert str(exc) == "consecutive_server_errors"
+    assert len(failed_requests) == 3
+    assert len(set(request.data for request in failed_requests)) == 1
 
     blocked_states = iter([
         {

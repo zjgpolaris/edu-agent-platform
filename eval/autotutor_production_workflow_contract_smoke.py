@@ -40,6 +40,11 @@ def main() -> None:
     assert "run_autotutor_canary_verification_traffic.py" in source
     assert "AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON" in source
     assert "AUTOTUTOR_VERIFICATION_TRAFFIC_SECRET" in source
+    traffic_step = source.split("- name: Generate controlled AutoTutor traffic", 1)[1].split(
+        "- name: Run read-only AutoTutor verification", 1
+    )[0]
+    assert "id: traffic" in traffic_step and "continue-on-error: true" in traffic_step
+    assert "Controlled traffic outcome" in source
     render = (ROOT / "render.yaml").read_text(encoding="utf-8")
     assert "EDU_AGENT_AUTOTUTOR_VERIFICATION_MACHINE_REQUIRED" in render
     assert "EDU_AGENT_AUTOTUTOR_VERIFICATION_TOKEN_SHA256" in render

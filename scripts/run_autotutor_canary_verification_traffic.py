@@ -304,8 +304,24 @@ def run_traffic(
                     server_errors += 1
                     if server_errors >= 3:
                         raise RuntimeError("consecutive_server_errors") from exc
-                    raise
+                    if monotonic() >= deadline:
+                        raise TimeoutError("verification_traffic_timeout") from exc
+                    sleep(float(2 ** retry))
+                    retry += 1
+                    # Retry the same payload and idempotency key. A gateway may
+                    # time out after the application committed the transition;
+                    # starting a new session here would duplicate work.
+                    continue
                 raise PermissionError("verification_transition_rejected") from exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                server_errors += 1
+                if server_errors >= 3:
+                    raise RuntimeError("consecutive_server_errors") from exc
+                if monotonic() >= deadline:
+                    raise TimeoutError("verification_traffic_timeout") from exc
+                sleep(float(2 ** retry))
+                retry += 1
+                continue
         transitions += 1
         if transitions < target_transitions:
             sleep(1.0)

@@ -140,6 +140,8 @@ jobs:
           python-version: '3.12'
 
       - name: Generate controlled AutoTutor traffic
+        id: traffic
+        continue-on-error: true
         if: steps.ci.outputs.verified == 'true' && inputs.generate_controlled_traffic && inputs.action != 'preflight'
         env:
           AUTOTUTOR_VERIFICATION_ENVIRONMENT: production-verification
@@ -211,7 +213,10 @@ jobs:
 
       - name: Publish PII-free job summary
         if: always() && steps.ci.outputs.verified == 'true'
+        env:
+          TRAFFIC_OUTCOME: ${{ steps.traffic.outcome }}
         run: |
+          echo "Controlled traffic outcome: \`${TRAFFIC_OUTCOME:-skipped}\`" >> "$GITHUB_STEP_SUMMARY"
           if [ -f /tmp/autotutor-verification.md ]; then
             sed -n '1,40p' /tmp/autotutor-verification.md >> "$GITHUB_STEP_SUMMARY"
           fi
