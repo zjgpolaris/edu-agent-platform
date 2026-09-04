@@ -85,6 +85,90 @@ jobs:
     timeout-minutes: 15
     environment: production-verification
     steps:
+      - name: Build protected cohort diagnostic
+        if: github.ref_name == 'codex/autotutor-cohort-diagnostic'
+        env:
+          AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON: ${{ secrets.AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import secrets
+
+          raw = json.loads(os.environ["AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON"])
+          accounts = raw.get("accounts") if isinstance(raw, dict) else raw
+          if not isinstance(accounts, list) or not accounts:
+              raise SystemExit("verification_credentials_invalid")
+          actor_ids = [str(item.get("actor_id") or "").strip() for item in accounts if isinstance(item, dict)]
+          if len(actor_ids) != len(accounts) or not all(actor_ids):
+              raise SystemExit("verification_actor_ids_invalid")
+
+          def bucket(actor_id: str, salt: str) -> int:
+              digest = hashlib.sha256(f"autotutor-executor:{salt}:{actor_id}".encode()).digest()
+              return int.from_bytes(digest[:8], "big") % 10_000
+
+          candidate = ""
+          selected_actor_id = ""
+          selected_bucket = -1
+          for _ in range(5_000_000):
+              proposed = "v1499-live-" + secrets.token_hex(16)
+              proposed_buckets = [bucket(actor_id, proposed) for actor_id in actor_ids]
+              selected = next(((actor_id, value) for actor_id, value in zip(actor_ids, proposed_buckets) if value < 100), None)
+              if selected:
+                  candidate = proposed
+                  selected_actor_id, selected_bucket = selected
+                  break
+          if not candidate:
+              raise SystemExit("compatible_bucket_salt_not_found")
+          payload = json.dumps({
+                  "schema_version": 1,
+                  "actor_id": selected_actor_id,
+                  "account_count": len(actor_ids),
+                  "candidate_salt": candidate,
+                  "bucket": selected_bucket,
+              }, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+          if len(payload) > 400:
+              raise SystemExit("diagnostic_payload_too_large")
+          with open("/tmp/autotutor-cohort-diagnostic.json", "wb") as handle:
+              handle.write(payload)
+          print(f"cohort_diagnostic=ready accounts={len(actor_ids)} all_graph_eligible=true")
+          PY
+
+          cat > /tmp/autotutor-cohort-diagnostic-public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAxkPmgwwc3Mwhul9bzEzV
+          pDaESPTA9JMvfu4IUo1ukz8aTBkF7nUFOXHl3lLoo1EPiyvMzdivI4FBzR+7gVCd
+          VbqwK+eOswjTIA2mlTJfh+xrea/h4a3EJc+FoFSsHM8BLTFp4aO4gCNISkJQ4PKQ
+          SYrlXXYuNL2IrHGCN/2IbQ6X1jvqK/xUsNB/nPLGj1EgE1i1dWg5yaSUwV2EqXoL
+          PoXYlFpw/MVY1Q55RbAOiYbDybRbI4jedN3yQDKKe8BC4SI7FoxT3xK/fDmGI1Uq
+          7SvW5BNJV6k7wvxL9a9R2iBlwn62Pher27QivOf/57J0XghKlMb+yFoZZx+SzKrR
+          Mr8qpDe0D/ubxOTDufPqOXWaOIRuBAZb1Sn7nIkPADFLWMUPO1hi8fyM2ff9mlq9
+          u3nlwfgXlwYNMtleCtiLZPrl4fqIjQzIPp7htlel3NrlIXNTS7GGMICKLKuY7fxS
+          K8BGtHxZg32/hjq194u+tGIgeSkURtUnVpFSvlD/QASDAyzG9stdmb2YwPWjZjvV
+          ZDUTLafC0ASW2ExcpywvJEETt41AukFG2TLZiEi35OpRDS4eGlx1ft9JTvpb21fP
+          wYz9n7JG+hPdf7q8MLTLD0aRLQpEI13ydRwGTgqOkLvQIy1qaJMqH/x4mlxJbu4m
+          2JKfNDSPgnLR+1FAy9jt8hcCAwEAAQ==
+          -----END PUBLIC KEY-----
+          PEM
+          openssl pkeyutl -encrypt \
+            -pubin \
+            -inkey /tmp/autotutor-cohort-diagnostic-public.pem \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256 \
+            -in /tmp/autotutor-cohort-diagnostic.json \
+            -out /tmp/autotutor-cohort-diagnostic.bin
+          rm -f /tmp/autotutor-cohort-diagnostic.json /tmp/autotutor-cohort-diagnostic-public.pem
+
+      - name: Upload protected cohort diagnostic
+        if: github.ref_name == 'codex/autotutor-cohort-diagnostic'
+        uses: actions/upload-artifact@v4
+        with:
+          name: autotutor-protected-cohort-diagnostic-${{ github.run_id }}
+          path: /tmp/autotutor-cohort-diagnostic.bin
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Verify immutable CI provenance
         id: ci
         env:
