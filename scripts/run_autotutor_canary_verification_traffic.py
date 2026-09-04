@@ -392,13 +392,13 @@ def main() -> int:
     parser.add_argument("--phase", choices=sorted(PHASES), required=True)
     parser.add_argument("--target-transitions", type=int, default=100)
     parser.add_argument("--maximum-sessions", type=int, default=100)
-    parser.add_argument("--timeout-seconds", type=int, default=900)
+    parser.add_argument("--timeout-seconds", type=int, default=3300)
     parser.add_argument("--receipt-output", required=True)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     if args.target_transitions < 1 or args.maximum_sessions < 1 or args.timeout_seconds < 1:
         parser.error("limits must be positive")
-    if args.target_transitions > 1000 or args.maximum_sessions > 100 or args.timeout_seconds > 1800:
+    if args.target_transitions > 1000 or args.maximum_sessions > 100 or args.timeout_seconds > 3600:
         parser.error("limits exceed the production verification safety budget")
     if args.dry_run:
         receipt = {

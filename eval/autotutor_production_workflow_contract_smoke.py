@@ -10,7 +10,9 @@ def main() -> None:
     source = (ROOT / ".github" / "workflows" / "autotutor-production-verification.yml").read_text(encoding="utf-8")
     assert "workflow_dispatch:" in source and "schedule:" not in source and "push:" not in source
     assert "permissions:\n  contents: read\n  actions: read" in source
-    assert "environment: production-verification" in source and "timeout-minutes: 15" in source
+    assert "environment: production-verification" in source and "timeout-minutes: 60" in source
+    assert "traffic_timeout_seconds:" in source and "default: '3300'" in source
+    assert '--timeout-seconds "$TRAFFIC_TIMEOUT_SECONDS"' in source
     assert "default: v1.49.9-production-canary" in source
     assert "git merge-base --is-ancestor" in source
     assert "--persist-url" in source and "--require-go" in source

@@ -31,6 +31,11 @@ on:
         required: true
         default: '100'
         type: string
+      traffic_timeout_seconds:
+        description: Bounded controlled-traffic deadline (maximum 3600 seconds)
+        required: true
+        default: '3300'
+        type: string
       window_start:
         description: Exact UTC window start (required for snapshot actions)
         required: false
@@ -82,7 +87,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     environment: production-verification
     steps:
       - name: Verify immutable CI provenance
@@ -148,6 +153,7 @@ jobs:
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
           TARGET_TRANSITIONS: ${{ inputs.target_transitions }}
+          TRAFFIC_TIMEOUT_SECONDS: ${{ inputs.traffic_timeout_seconds }}
           VERIFY_ACTION: ${{ inputs.action }}
         run: |
           case "$VERIFY_ACTION" in
@@ -163,7 +169,7 @@ jobs:
             --phase "$phase" \
             --target-transitions "$TARGET_TRANSITIONS" \
             --maximum-sessions 100 \
-            --timeout-seconds 900 \
+            --timeout-seconds "$TRAFFIC_TIMEOUT_SECONDS" \
             --receipt-output /tmp/autotutor-traffic-receipt.json
 
       - name: Run read-only AutoTutor verification
