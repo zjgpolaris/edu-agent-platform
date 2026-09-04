@@ -94,6 +94,25 @@ def main() -> None:
     except RuntimeError as exc:
         assert str(exc) == "verification_safety_stop:fallback_rate_above_one_percent"
 
+    _assert_operational_safety({
+        "aggregate": {
+            "assigned_graph_count": 19,
+            "blockers": ["active_latency_regression"],
+        },
+        "observation_health": {"ok": True},
+    })
+    try:
+        _assert_operational_safety({
+            "aggregate": {
+                "assigned_graph_count": 20,
+                "blockers": ["active_latency_regression"],
+            },
+            "observation_health": {"ok": True},
+        })
+        raise AssertionError("mature Graph latency regression did not stop traffic")
+    except RuntimeError as exc:
+        assert str(exc) == "verification_safety_stop:active_latency_regression"
+
     actor = next(
         f"verification-{index}" for index in range(10_000)
         if stable_executor_bucket(f"verification-{index}", salt=SALT) < 100

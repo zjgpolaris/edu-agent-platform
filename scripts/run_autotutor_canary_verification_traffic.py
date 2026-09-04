@@ -21,6 +21,7 @@ from uuid import uuid4
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UrlOpen = Callable[..., Any]
 PHASES = {"control", "canary", "rollback"}
+MINIMUM_LATENCY_SAFETY_SAMPLES = 20
 FORBIDDEN_RECEIPT_KEYS = {
     "actor_id", "student_id", "username", "password", "token", "secret", "salt",
     "session_id", "answer", "question", "attestation", "authorization",
@@ -129,12 +130,19 @@ def _assert_operational_safety(payload: dict[str, Any]) -> None:
     # before the first Graph observation. The aggregate intentionally reports
     # them as not ready, but treating that state as a traffic safety stop would
     # make both the initial Legacy baseline and the first Canary sample
-    # impossible to collect. Once Graph traffic exists, these become hard stops.
-    if int(aggregate.get("assigned_graph_count") or 0) > 0:
+    # impossible to collect. Correctness and fallback invariants become hard
+    # stops with the first Graph sample; latency uses the p95 sample floor below.
+    assigned_graph_count = int(aggregate.get("assigned_graph_count") or 0)
+    if assigned_graph_count > 0:
         stop_blockers.update({
             "comparator_not_exact", "fallback_rate_above_one_percent",
-            "active_latency_regression",
         })
+    # A p95 estimate needs at least 20 observations to contain one tail
+    # sample. Keep collecting below that floor while every correctness and
+    # fallback safety invariant remains enforced; otherwise a single slow
+    # transition can permanently prevent the canary from becoming measurable.
+    if assigned_graph_count >= MINIMUM_LATENCY_SAFETY_SAMPLES:
+        stop_blockers.add("active_latency_regression")
     matched = sorted(blockers & stop_blockers)
     if matched:
         raise RuntimeError(f"verification_safety_stop:{matched[0]}")
