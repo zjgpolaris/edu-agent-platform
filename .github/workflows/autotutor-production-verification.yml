@@ -164,6 +164,8 @@ jobs:
             rollback_verify) phase=rollback ;;
             *) exit 2 ;;
           esac
+          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          set +e
           python3 scripts/run_autotutor_canary_verification_traffic.py \
             --api-base "$API_BASE" \
             --expected-commit "$EXPECTED_COMMIT" \
@@ -173,6 +175,30 @@ jobs:
             --maximum-sessions 100 \
             --timeout-seconds "$TRAFFIC_TIMEOUT_SECONDS" \
             --receipt-output /tmp/autotutor-traffic-receipt.json
+          traffic_exit=$?
+          set -e
+          echo "finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          exit "$traffic_exit"
+
+      - name: Resolve exact verification window
+        if: steps.ci.outputs.verified == 'true'
+        id: window
+        env:
+          GENERATE_TRAFFIC: ${{ inputs.generate_controlled_traffic }}
+          VERIFY_ACTION: ${{ inputs.action }}
+          REQUESTED_START: ${{ inputs.window_start }}
+          REQUESTED_END: ${{ inputs.window_end }}
+          TRAFFIC_STARTED_AT: ${{ steps.traffic.outputs.started_at }}
+          TRAFFIC_FINISHED_AT: ${{ steps.traffic.outputs.finished_at }}
+        run: |
+          effective_start="$REQUESTED_START"
+          effective_end="$REQUESTED_END"
+          if [ "$GENERATE_TRAFFIC" = "true" ] && [ "$VERIFY_ACTION" != "preflight" ]; then
+            effective_start="$TRAFFIC_STARTED_AT"
+            effective_end="$TRAFFIC_FINISHED_AT"
+          fi
+          echo "start=$effective_start" >> "$GITHUB_OUTPUT"
+          echo "end=$effective_end" >> "$GITHUB_OUTPUT"
 
       - name: Run read-only AutoTutor verification
         if: steps.ci.outputs.verified == 'true'
@@ -188,8 +214,8 @@ jobs:
           MINIMUM_CONTROL: ${{ inputs.minimum_control }}
           MINIMUM_GRAPH: ${{ inputs.minimum_graph }}
           MINIMUM_ROLLBACK: ${{ inputs.minimum_rollback_control }}
-          WINDOW_START: ${{ inputs.window_start }}
-          WINDOW_END: ${{ inputs.window_end }}
+          WINDOW_START: ${{ steps.window.outputs.start }}
+          WINDOW_END: ${{ steps.window.outputs.end }}
         run: |
           args=(
             --api-base "$API_BASE"
@@ -229,8 +255,8 @@ jobs:
           KILL_RESULT: ${{ inputs.kill_switch_rehearsal }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
-          WINDOW_END: ${{ inputs.window_end }}
-          WINDOW_START: ${{ inputs.window_start }}
+          WINDOW_END: ${{ steps.window.outputs.end }}
+          WINDOW_START: ${{ steps.window.outputs.start }}
           MINIMUM_GRAPH: ${{ inputs.minimum_graph }}
           API_BASE: ${{ vars.AUTOTUTOR_PRODUCTION_API_BASE }}
           API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
@@ -259,8 +285,8 @@ jobs:
           API_BOOTSTRAP_SHA256: ${{ vars.AUTOTUTOR_PRODUCTION_BOOTSTRAP_SHA256 }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
-          WINDOW_START: ${{ inputs.window_start }}
-          WINDOW_END: ${{ inputs.window_end }}
+          WINDOW_START: ${{ steps.window.outputs.start }}
+          WINDOW_END: ${{ steps.window.outputs.end }}
         run: |
           python3 -c 'import json,os,urllib.request; r=urllib.request.Request(os.environ["API_BASE"].rstrip("/")+"/api/admin/agent-runtime/autotutor-canary/evidence?include_payload=true",headers={"Authorization":"Bearer "+os.environ["API_TOKEN"],"X-AutoTutor-Bootstrap-SHA256":os.environ["API_BOOTSTRAP_SHA256"],"Accept":"application/json"}); json.dump(json.load(urllib.request.urlopen(r,timeout=30)),open("/tmp/autotutor-candidate.json","w"))'
           python3 -c 'import json; p=json.load(open("/tmp/autotutor-verification.json")); json.dump(p["result"],open("/tmp/autotutor-rollback-snapshot.json","w"))'

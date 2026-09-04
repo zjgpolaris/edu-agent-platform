@@ -45,6 +45,11 @@ def main() -> None:
     )[0]
     assert "id: traffic" in traffic_step and "continue-on-error: true" in traffic_step
     assert "Controlled traffic outcome" in source
+    assert "Resolve exact verification window" in source and "id: window" in source
+    assert 'echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"' in traffic_step
+    assert 'echo "finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"' in traffic_step
+    assert source.count("${{ steps.window.outputs.start }}") == 3
+    assert source.count("${{ steps.window.outputs.end }}") == 3
     render = (ROOT / "render.yaml").read_text(encoding="utf-8")
     assert "EDU_AGENT_AUTOTUTOR_VERIFICATION_MACHINE_REQUIRED" in render
     assert "EDU_AGENT_AUTOTUTOR_VERIFICATION_TOKEN_SHA256" in render
