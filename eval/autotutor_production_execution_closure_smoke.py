@@ -100,6 +100,28 @@ def main() -> None:
     assert _exit_code(artifact) == 0
     assert "never-exported" not in json.dumps(artifact)
 
+    snapshot_responses = [{"ok": True}, _verification(COMMIT)]
+
+    def snapshot_stub(_request, timeout=0):
+        assert timeout > 0
+        return Response(snapshot_responses.pop(0))
+
+    snapshot_artifact = verify_remote(
+        api_base="https://example.invalid",
+        token="never-exported",
+        expected_commit=COMMIT,
+        expected_config_version=CONFIG,
+        phase="control_snapshot",
+        window_start="2026-09-02T00:00:00Z",
+        window_end="2026-09-02T01:00:00Z",
+        wait_for_deployment=True,
+        deployment_timeout_seconds=300,
+        urlopen=snapshot_stub,
+        sleep=lambda _seconds: None,
+    )
+    assert snapshot_artifact["deployment_attempts"] == 1
+    assert snapshot_responses == []
+
     receipt = build_workflow_receipt(
         artifact,
         expected_commit=COMMIT,

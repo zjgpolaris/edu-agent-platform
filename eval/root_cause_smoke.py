@@ -20,11 +20,24 @@ except FileNotFoundError:
 sys.path.insert(0, str(ROOT / "backend"))
 
 from services.root_cause_service import (
+    _root_cause_table_ddl,
     analyze_root_cause,
     get_latest_root_cause,
     get_root_cause_summary,
     RootCause,
 )
+
+
+def test_dialect_specific_table_ddl():
+    """C0: production PostgreSQL DDL must not contain SQLite-only syntax."""
+    postgres = _root_cause_table_ddl("postgresql")
+    sqlite = _root_cause_table_ddl("sqlite")
+    assert "BIGSERIAL PRIMARY KEY" in postgres
+    assert "TIMESTAMPTZ NOT NULL DEFAULT now()" in postgres
+    assert "AUTOINCREMENT" not in postgres
+    assert "datetime('now')" not in postgres
+    assert "INTEGER PRIMARY KEY AUTOINCREMENT" in sqlite
+    assert "datetime('now')" in sqlite
 
 
 def run_case(name: str, fn):
@@ -168,6 +181,7 @@ def test_rule_based_fallback():
 
 def main():
     print("root_cause_smoke.py — 薄弱点根因诊断 smoke test")
+    run_case("C0: PostgreSQL/SQLite 建表方言兼容", test_dialect_specific_table_ddl)
     run_case("C1: 分析概念模糊类错误", test_analyze_concept_error)
     run_case("C2: 分析知识遗忘类错误", test_analyze_memory_error)
     run_case("C3: 分析粗心大意类错误", test_analyze_careless_error)
@@ -176,7 +190,7 @@ def main():
     run_case("C6: 获取根因分布统计", test_get_root_cause_summary)
     run_case("C7: 同一知识点多次分析", test_multiple_analyses_same_tag)
     run_case("C8: 规则降级分类仍可用", test_rule_based_fallback)
-    print("✅ 8/8 all passed")
+    print("✅ 9/9 all passed")
     return 0
 
 

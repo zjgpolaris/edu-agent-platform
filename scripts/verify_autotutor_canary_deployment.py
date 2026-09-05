@@ -244,7 +244,13 @@ def verify_remote(
             else:
                 stable_count = stable_count + 1 if signature == stable_signature else 1
                 stable_signature = signature
-                if not wait_for_deployment or stable_count >= 2:
+                # Exact snapshot responses already carry and validate the immutable
+                # deployment slice. Repeating the expensive snapshot request only
+                # increases the chance of a gateway timeout and cannot make that
+                # same response more trustworthy. Keep the two-read convergence
+                # guard for preflight, but accept the first matching snapshot.
+                required_stable_reads = 2 if phase == "preflight" and wait_for_deployment else 1
+                if stable_count >= required_stable_reads:
                     break
         except urllib.error.HTTPError:
             raise

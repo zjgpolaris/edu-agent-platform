@@ -5,10 +5,14 @@ from __future__ import annotations
 
 import json
 from enum import Enum
+from threading import Lock
 
 from sqlalchemy import text
 
-from db.engine import get_connection
+from db.engine import engine, get_connection
+
+_TABLE_READY = False
+_TABLE_LOCK = Lock()
 
 # 错误根因分类
 class RootCause(str, Enum):
@@ -33,22 +37,41 @@ REMEDIAL_TIPS = {
 }
 
 
+def _root_cause_table_ddl(dialect_name: str) -> str:
+    if dialect_name == "postgresql":
+        id_column = "BIGSERIAL PRIMARY KEY"
+        analyzed_at_column = "TIMESTAMPTZ NOT NULL DEFAULT now()"
+    else:
+        id_column = "INTEGER PRIMARY KEY AUTOINCREMENT"
+        analyzed_at_column = "TEXT NOT NULL DEFAULT (datetime('now'))"
+    return f"""
+        CREATE TABLE IF NOT EXISTS root_cause_records (
+            id {id_column},
+            student_id TEXT NOT NULL,
+            knowledge_tag TEXT NOT NULL,
+            question_text TEXT,
+            student_answer TEXT,
+            correct_answer TEXT,
+            root_cause TEXT NOT NULL,
+            confidence REAL DEFAULT 0.8,
+            analyzed_at {analyzed_at_column}
+        )
+    """
+
+
 def _ensure_table():
-    with get_connection() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS root_cause_records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_id TEXT NOT NULL,
-                knowledge_tag TEXT NOT NULL,
-                question_text TEXT,
-                student_answer TEXT,
-                correct_answer TEXT,
-                root_cause TEXT NOT NULL,
-                confidence REAL DEFAULT 0.8,
-                analyzed_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-        """))
-        conn.commit()
+    global _TABLE_READY
+    if _TABLE_READY:
+        return
+    with _TABLE_LOCK:
+        if _TABLE_READY:
+            return
+        dialect_name = engine.dialect.name
+        with get_connection() as conn:
+            if dialect_name == "postgresql":
+                conn.execute(text("SELECT pg_advisory_xact_lock(hashtext('edu_agent_root_cause_table'))"))
+            conn.execute(text(_root_cause_table_ddl(dialect_name)))
+        _TABLE_READY = True
 
 
 def analyze_root_cause(
