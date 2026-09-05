@@ -2,6 +2,8 @@
 
 所有阶段使用同一个完整 commit SHA、生产配置版本和已批准 cohort。代码变更并部署新 commit 后，应重新采集该 commit 的 control 基线。不要用旧版本证据替代。
 
+Canary 和 rollback 任务会先安装被验证 commit 的受约束 runtime 依赖并检查 evidence builder 能否导入，再开始流量采集。如果只需修复工作流编排，可以从环境已允许的独立分支手动运行修复后的 workflow，`expected_commit` 仍指定当前线上版本：工作流会检查该线上版本的成功 push CI、checkout 该完整 SHA，并验证其属于 main 历史。仅当修复没有改变受验证的应用代码时使用这种方式，且不得省略 production-verification 人工审批。若环境只允许 main，不得自行放宽分支规则；需要管理员明确授权特定分支，或按 main 发布流程处理。
+
 1. 在 Render 使用 `legacy`、`active_bps=0`，等待部署完成并核对 commit。
 2. 运行 `control_snapshot`，`generate_controlled_traffic=true`、`target_transitions=100`。检查 traffic receipt 的 `target_reached=true`，以及验证 artifact 中至少 100 条 control。记录 `autotutor-verification.json` 的 `result.snapshot.slice.since`。
 3. 同 commit 切换 `active_canary`、`active_bps=100`（1%）。运行 `canary_snapshot`，生成至少 100 条受控转换，**将上一步的 `slice.since` 填入 `window_start`**。生成流量时 `window_end` 由本轮结束时间产生。

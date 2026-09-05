@@ -47,6 +47,12 @@ def main() -> None:
     assert "Controlled traffic outcome" in source
     assert "Resolve exact verification window" in source and "id: window" in source
     assert "Validate verification window inputs" in source
+    assert "Prepare immutable evidence builder" in source
+    assert source.index("Prepare immutable evidence builder") < source.index("Generate controlled AutoTutor traffic")
+    builder_setup = source.split("- name: Prepare immutable evidence builder", 1)[1].split("- name:", 1)[0]
+    assert "--constraint constraints-runtime.txt --requirement backend/requirements-runtime.txt" in builder_setup
+    assert "python3 scripts/build_autotutor_canary_evidence.py --help" in builder_setup
+    assert "inputs.action == 'canary_snapshot' || inputs.action == 'rollback_verify'" in builder_setup
     assert "python3 -m scripts.autotutor_verification_window" in source
     assert '--control-window-start "$CONTROL_WINDOW_START"' in source
     assert "steps.traffic.outcome != 'success'" in source

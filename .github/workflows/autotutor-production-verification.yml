@@ -148,6 +148,12 @@ jobs:
           REQUESTED_END: ${{ inputs.window_end }}
         run: python3 -m scripts.autotutor_verification_window --validate-inputs
 
+      - name: Prepare immutable evidence builder
+        if: steps.ci.outputs.verified == 'true' && (inputs.action == 'canary_snapshot' || inputs.action == 'rollback_verify')
+        run: |
+          python3 -m pip install --constraint constraints-runtime.txt --requirement backend/requirements-runtime.txt
+          python3 scripts/build_autotutor_canary_evidence.py --help
+
       - name: Generate controlled AutoTutor traffic
         id: traffic
         continue-on-error: true
