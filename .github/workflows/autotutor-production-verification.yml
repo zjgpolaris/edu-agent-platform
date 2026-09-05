@@ -37,7 +37,7 @@ on:
         default: '3300'
         type: string
       window_start:
-        description: Exact UTC window start (required for snapshot actions)
+        description: Exact UTC start; for generated Canary use the same-commit control baseline start
         required: false
         type: string
       window_end:
@@ -139,6 +139,15 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Validate verification window inputs
+        if: steps.ci.outputs.verified == 'true'
+        env:
+          VERIFY_ACTION: ${{ inputs.action }}
+          GENERATE_TRAFFIC: ${{ inputs.generate_controlled_traffic }}
+          REQUESTED_START: ${{ inputs.window_start }}
+          REQUESTED_END: ${{ inputs.window_end }}
+        run: python3 -m scripts.autotutor_verification_window --validate-inputs
+
       - name: Generate controlled AutoTutor traffic
         id: traffic
         continue-on-error: true
@@ -157,6 +166,7 @@ jobs:
           TARGET_TRANSITIONS: ${{ inputs.target_transitions }}
           TRAFFIC_TIMEOUT_SECONDS: ${{ inputs.traffic_timeout_seconds }}
           VERIFY_ACTION: ${{ inputs.action }}
+          CONTROL_WINDOW_START: ${{ inputs.window_start }}
         run: |
           case "$VERIFY_ACTION" in
             control_snapshot) phase=control ;;
@@ -174,6 +184,7 @@ jobs:
             --target-transitions "$TARGET_TRANSITIONS" \
             --maximum-sessions 100 \
             --timeout-seconds "$TRAFFIC_TIMEOUT_SECONDS" \
+            --control-window-start "$CONTROL_WINDOW_START" \
             --receipt-output /tmp/autotutor-traffic-receipt.json
           traffic_exit=$?
           set -e
@@ -191,14 +202,7 @@ jobs:
           TRAFFIC_STARTED_AT: ${{ steps.traffic.outputs.started_at }}
           TRAFFIC_FINISHED_AT: ${{ steps.traffic.outputs.finished_at }}
         run: |
-          effective_start="$REQUESTED_START"
-          effective_end="$REQUESTED_END"
-          if [ "$GENERATE_TRAFFIC" = "true" ] && [ "$VERIFY_ACTION" != "preflight" ]; then
-            effective_start="$TRAFFIC_STARTED_AT"
-            effective_end="$TRAFFIC_FINISHED_AT"
-          fi
-          echo "start=$effective_start" >> "$GITHUB_OUTPUT"
-          echo "end=$effective_end" >> "$GITHUB_OUTPUT"
+          python3 -m scripts.autotutor_verification_window
 
       - name: Run read-only AutoTutor verification
         if: steps.ci.outputs.verified == 'true'
@@ -248,7 +252,7 @@ jobs:
           fi
 
       - name: Build immutable Canary evidence
-        if: inputs.action == 'canary_snapshot' && steps.remote.outcome == 'success'
+        if: inputs.action == 'canary_snapshot' && steps.remote.outcome == 'success' && (!inputs.generate_controlled_traffic || steps.traffic.outcome == 'success')
         env:
           RESTART_RESULT: ${{ inputs.restart_rehearsal }}
           WRITER_RESULT: ${{ inputs.writer_failure_rehearsal }}
@@ -278,7 +282,7 @@ jobs:
             --persist-url "$API_BASE/api/admin/agent-runtime/autotutor-canary/evidence" \
             --require-go
       - name: Finalize rollback-bound evidence
-        if: inputs.action == 'rollback_verify' && steps.remote.outcome == 'success'
+        if: inputs.action == 'rollback_verify' && steps.remote.outcome == 'success' && (!inputs.generate_controlled_traffic || steps.traffic.outcome == 'success')
         env:
           API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
           API_BASE: ${{ vars.AUTOTUTOR_PRODUCTION_API_BASE }}
@@ -330,5 +334,5 @@ jobs:
           retention-days: 90
 
       - name: Enforce requested release decision
-        if: steps.ci.outputs.verified != 'true' || (inputs.release_required && steps.remote.outcome != 'success')
+        if: steps.ci.outputs.verified != 'true' || (inputs.release_required && (steps.remote.outcome != 'success' || (inputs.generate_controlled_traffic && inputs.action != 'preflight' && steps.traffic.outcome != 'success')))
         run: exit 1

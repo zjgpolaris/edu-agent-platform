@@ -9,6 +9,7 @@ import hmac
 import json
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -19,6 +20,10 @@ from typing import Any, Callable
 from uuid import uuid4
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from scripts.autotutor_verification_window import control_window_start
+
 UrlOpen = Callable[..., Any]
 PHASES = {"control", "canary", "rollback"}
 MINIMUM_LATENCY_SAFETY_SAMPLES = 20
@@ -54,7 +59,7 @@ def _request_json(
     method: str = "GET",
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
-    timeout: int = 30,
+    timeout: float = 30,
     urlopen: UrlOpen = urllib.request.urlopen,
 ) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8") if payload is not None else None
@@ -90,6 +95,50 @@ def _credentials(raw: str) -> list[dict[str, str]]:
             raise ValueError("verification_credentials_invalid")
         result.append(account)
     return result
+
+
+class PreflightUnavailable(RuntimeError):
+    def __init__(self, diagnostics: dict[str, Any]):
+        super().__init__("verification_preflight_unavailable")
+        self.diagnostics = diagnostics
+
+
+def _request_preflight(url: str, *, headers: dict[str, str], deadline: float,
+                       urlopen: UrlOpen, sleep: Callable[[float], None],
+                       monotonic: Callable[[], float]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Retry only this read-only request, with bounded attempts and safe diagnostics."""
+    started = monotonic()
+    deadline = min(deadline, started + 180)
+    attempts = 0
+    reason = "deadline_exceeded"
+    while attempts < 6 and monotonic() < deadline:
+        attempts += 1
+        retryable = True
+        try:
+            payload = _request_json(url, headers=headers, timeout=min(30, deadline - monotonic()),
+                                    urlopen=urlopen)
+            diagnostics = {"stage": "preflight", "attempts": attempts,
+                           "elapsed_ms": round((monotonic() - started) * 1000), "status": "ready"}
+            print(json.dumps(diagnostics, sort_keys=True), file=sys.stderr, flush=True)
+            return payload, diagnostics
+        except urllib.error.HTTPError as exc:
+            reason = f"http_{exc.code}"
+            retryable = exc.code in {502, 503, 504}
+            exc.close()
+        except (TimeoutError, urllib.error.URLError, OSError):
+            reason = "transport_timeout_or_unavailable"
+        except ValueError:
+            reason = "invalid_json_response"
+            retryable = False
+        diagnostics = {"stage": "preflight", "attempts": attempts, "reason": reason,
+                       "elapsed_ms": round((monotonic() - started) * 1000), "status": "unavailable"}
+        print(json.dumps(diagnostics, sort_keys=True), file=sys.stderr, flush=True)
+        remaining = deadline - monotonic()
+        if not retryable or attempts >= 6 or remaining <= 0:
+            break
+        sleep(min(5 * 2 ** (attempts - 1), 30, remaining))
+    raise PreflightUnavailable({"stage": "preflight", "attempts": attempts, "reason": reason,
+                                "elapsed_ms": round((monotonic() - started) * 1000), "status": "unavailable"})
 
 
 def _preflight_fact(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -220,11 +269,13 @@ def run_traffic(
     target_transitions: int,
     maximum_sessions: int,
     timeout_seconds: int,
+    control_start: str = "",
     env: dict[str, str] | None = None,
     urlopen: UrlOpen = urllib.request.urlopen,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
+    deadline = monotonic() + max(1, timeout_seconds)
     source = dict(os.environ if env is None else env)
     if source.get("AUTOTUTOR_VERIFICATION_ENVIRONMENT") != "production-verification":
         raise ValueError("verification_environment_not_protected")
@@ -249,18 +300,29 @@ def run_traffic(
     if not salt or len(traffic_secret) < 32:
         raise ValueError("verification_traffic_secret_missing")
     accounts = _credentials(source.get("AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON", ""))
-    preflight_url = api_base.rstrip("/") + "/api/admin/agent-runtime/autotutor-canary/verification?" + urllib.parse.urlencode({
+    preflight_params = {
         "expected_commit": expected_commit,
         "expected_config_version": expected_config_version,
-    })
-    preflight = _request_json(preflight_url, headers={
+    }
+    if phase == "canary":
+        preflight_params.update({"window_start": control_window_start(control_start),
+                                 "window_end": datetime.now(timezone.utc).isoformat()})
+    preflight_url = api_base.rstrip("/") + "/api/admin/agent-runtime/autotutor-canary/verification?" + urllib.parse.urlencode(preflight_params)
+    preflight, preflight_diagnostics = _request_preflight(preflight_url, headers={
         "Authorization": f"Bearer {machine_token}",
         "X-AutoTutor-Bootstrap-SHA256": bootstrap,
-    }, urlopen=urlopen)
+    }, deadline=deadline, urlopen=urlopen, sleep=sleep, monotonic=monotonic)
     configuration = _validate_preflight(
         preflight, expected_commit=expected_commit, expected_config_version=expected_config_version, phase=phase
     )
     _assert_operational_safety(preflight)
+    if phase == "canary":
+        fact = preflight.get("snapshot", preflight)
+        aggregate = fact.get("aggregate") or {}
+        if int(aggregate.get("assigned_control_count") or 0) < 100 or (
+            aggregate.get("control_latency") or {}
+        ).get("p95_ms") is None:
+            raise ValueError("verification_control_baseline_insufficient")
     account = _select_account(accounts, phase=phase, salt=salt, active_bps=int(configuration.get("active_bps") or 0))
     login = _request_json(api_base.rstrip("/") + "/api/auth/login", method="POST", payload={
         "username": account["username"], "password": account["password"],
@@ -270,7 +332,6 @@ def run_traffic(
     student_token = str(login["token"])
     run_id = "avr_" + uuid4().hex
     reviewed_answers = _reviewed_answer_texts()
-    deadline = monotonic() + max(1, timeout_seconds)
     transitions = 0
     sessions = 0
     completed = 0
@@ -361,7 +422,10 @@ def run_traffic(
             elif state.get("status") == "needs_content":
                 safe_reason = _safe_blocked_reason(state)
                 raise RuntimeError(f"verification_content_target_unavailable:{safe_reason}")
-            safety = _request_json(preflight_url, headers={
+            if phase == "canary":
+                preflight_params["window_end"] = datetime.now(timezone.utc).isoformat()
+            safety_url = api_base.rstrip("/") + "/api/admin/agent-runtime/autotutor-canary/verification?" + urllib.parse.urlencode(preflight_params)
+            safety = _request_json(safety_url, headers={
                 "Authorization": f"Bearer {machine_token}",
                 "X-AutoTutor-Bootstrap-SHA256": bootstrap,
             }, urlopen=urlopen)
@@ -394,6 +458,8 @@ def run_traffic(
         "sessions_completed": completed,
         "sessions_failed": failed,
         "target_reached": transitions >= target_transitions,
+        "preflight": preflight_diagnostics,
+        "control_window_start": preflight_params.get("window_start"),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     _assert_receipt_safe(receipt)
@@ -409,6 +475,8 @@ def main() -> int:
     parser.add_argument("--target-transitions", type=int, default=100)
     parser.add_argument("--maximum-sessions", type=int, default=100)
     parser.add_argument("--timeout-seconds", type=int, default=3300)
+    parser.add_argument("--control-window-start", default="",
+                        help="Canary evidence start, including the same-commit control baseline")
     parser.add_argument("--receipt-output", required=True)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -423,12 +491,20 @@ def main() -> int:
             "target_transitions": args.target_transitions,
         }
     else:
-        receipt = run_traffic(
-            api_base=args.api_base, expected_commit=args.expected_commit,
-            expected_config_version=args.expected_config_version, phase=args.phase,
-            target_transitions=args.target_transitions, maximum_sessions=args.maximum_sessions,
-            timeout_seconds=args.timeout_seconds,
-        )
+        try:
+            receipt = run_traffic(
+                api_base=args.api_base, expected_commit=args.expected_commit,
+                expected_config_version=args.expected_config_version, phase=args.phase,
+                target_transitions=args.target_transitions, maximum_sessions=args.maximum_sessions,
+                timeout_seconds=args.timeout_seconds, control_start=args.control_window_start,
+            )
+        except PreflightUnavailable as exc:
+            receipt = {
+                "schema_version": 1, "receipt_type": "autotutor_verification_traffic",
+                "phase": args.phase, "status": "failed", "target_reached": False,
+                "transitions_sent": 0, "sessions_started": 0,
+                "preflight": exc.diagnostics,
+            }
     output = Path(args.receipt_output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

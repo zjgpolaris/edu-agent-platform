@@ -46,6 +46,10 @@ def main() -> None:
     assert "id: traffic" in traffic_step and "continue-on-error: true" in traffic_step
     assert "Controlled traffic outcome" in source
     assert "Resolve exact verification window" in source and "id: window" in source
+    assert "Validate verification window inputs" in source
+    assert "python3 -m scripts.autotutor_verification_window" in source
+    assert '--control-window-start "$CONTROL_WINDOW_START"' in source
+    assert "steps.traffic.outcome != 'success'" in source
     assert 'echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"' in traffic_step
     assert 'echo "finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"' in traffic_step
     assert source.count("${{ steps.window.outputs.start }}") == 3

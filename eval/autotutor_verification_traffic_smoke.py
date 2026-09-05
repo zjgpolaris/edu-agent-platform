@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 import sys
 import urllib.error
+from datetime import datetime, timedelta, timezone
 from tempfile import TemporaryDirectory
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -18,12 +20,16 @@ from scripts.run_autotutor_canary_verification_traffic import (  # noqa: E402
     _assert_operational_safety,
     _reviewed_answer_texts,
     _safe_blocked_reason,
+    _request_preflight,
+    PreflightUnavailable,
+    main as traffic_main,
     run_traffic,
 )
 
 COMMIT = "b" * 40
 CONFIG = "v1.49.9-production-canary"
 SALT = "runner-smoke-salt"
+CONTROL_START = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
 
 
 class Response:
@@ -130,6 +136,7 @@ def main() -> None:
         url = request.full_url
         if "/verification?" in url:
             return Response({
+                "aggregate": {"assigned_control_count": 100, "control_latency": {"p95_ms": 100}},
                 "deployment": {"environment": "production", "deployed_commit": COMMIT},
                 "configuration": {"mode": "active_canary", "active_bps": 100,
                                   "config_version": CONFIG, "kill_switch": False},
@@ -150,6 +157,7 @@ def main() -> None:
         ]),
     }
     receipt = run_traffic(
+        control_start=CONTROL_START,
         api_base="https://edu.example", expected_commit=COMMIT,
         expected_config_version=CONFIG, phase="canary", target_transitions=2,
         maximum_sessions=2, timeout_seconds=30, env=env, urlopen=urlopen, sleep=lambda _: None,
@@ -167,6 +175,10 @@ def main() -> None:
     attestations = [request.headers.get("X-autotutor-verification-attestation") for request in transition_requests]
     assert all(attestations) and len(set(attestations)) == 2
     assert all(request.headers.get("X-autotutor-verification-run") for request in transition_requests)
+    checks = [urllib.parse.parse_qs(urllib.parse.urlparse(request.full_url).query)
+              for request in requests if "/verification?" in request.full_url]
+    assert all(check["window_start"] == [CONTROL_START] for check in checks)
+    assert checks[-1]["window_end"][0] > checks[0]["window_end"][0]
 
     flaky_requests = []
     flaky_states = iter([
@@ -181,6 +193,7 @@ def main() -> None:
         url = request.full_url
         if "/verification?" in url:
             return Response({
+                "aggregate": {"assigned_control_count": 100, "control_latency": {"p95_ms": 100}},
                 "deployment": {"environment": "production", "deployed_commit": COMMIT},
                 "configuration": {"mode": "active_canary", "active_bps": 100,
                                   "config_version": CONFIG, "kill_switch": False},
@@ -194,6 +207,7 @@ def main() -> None:
         return Response(next(flaky_states))
 
     retry_receipt = run_traffic(
+        control_start=CONTROL_START,
         api_base="https://edu.example", expected_commit=COMMIT,
         expected_config_version=CONFIG, phase="canary", target_transitions=2,
         maximum_sessions=2, timeout_seconds=30, env=env, urlopen=flaky_urlopen, sleep=lambda _: None,
@@ -209,6 +223,7 @@ def main() -> None:
         url = request.full_url
         if "/verification?" in url:
             return Response({
+                "aggregate": {"assigned_control_count": 100, "control_latency": {"p95_ms": 100}},
                 "deployment": {"environment": "production", "deployed_commit": COMMIT},
                 "configuration": {"mode": "active_canary", "active_bps": 100,
                                   "config_version": CONFIG, "kill_switch": False},
@@ -220,6 +235,7 @@ def main() -> None:
 
     try:
         run_traffic(
+            control_start=CONTROL_START,
             api_base="https://edu.example", expected_commit=COMMIT,
             expected_config_version=CONFIG, phase="canary", target_transitions=2,
             maximum_sessions=2, timeout_seconds=30, env=env,
@@ -242,6 +258,7 @@ def main() -> None:
         url = request.full_url
         if "/verification?" in url:
             return Response({
+                "aggregate": {"assigned_control_count": 100, "control_latency": {"p95_ms": 100}},
                 "deployment": {"environment": "production", "deployed_commit": COMMIT},
                 "configuration": {"mode": "active_canary", "active_bps": 100,
                                   "config_version": CONFIG, "kill_switch": False},
@@ -252,6 +269,7 @@ def main() -> None:
 
     try:
         run_traffic(
+            control_start=CONTROL_START,
             api_base="https://edu.example", expected_commit=COMMIT,
             expected_config_version=CONFIG, phase="canary", target_transitions=2,
             maximum_sessions=2, timeout_seconds=30, env=env,
@@ -260,6 +278,76 @@ def main() -> None:
         raise AssertionError("unusable verification content did not stop traffic")
     except RuntimeError as exc:
         assert str(exc) == "verification_content_target_unavailable:missing_reviewed_content"
+    # No login or transition is allowed when the selected exact window has no baseline.
+    def no_baseline(request, timeout=30):
+        assert "/verification?" in request.full_url
+        return Response({
+            "deployment": {"environment": "production", "deployed_commit": COMMIT},
+            "configuration": {"mode": "active_canary", "active_bps": 100, "config_version": CONFIG},
+            "aggregate": {"assigned_control_count": 99, "control_latency": {"p95_ms": 100}},
+        })
+    try:
+        run_traffic(api_base="https://edu.example", expected_commit=COMMIT,
+                    expected_config_version=CONFIG, phase="canary", target_transitions=2,
+                    maximum_sessions=2, timeout_seconds=30, env=env,
+                    control_start=CONTROL_START, urlopen=no_baseline)
+        raise AssertionError("missing baseline allowed traffic")
+    except ValueError as exc:
+        assert str(exc) == "verification_control_baseline_insufficient"
+
+    # Deterministic clock: retry transient reads, bound total time and never retry auth errors.
+    for failures, expected_attempts, succeeds in [
+        ([TimeoutError("private-host"), 503], 3, True),
+        ([401], 1, False), ([403], 1, False), ([400], 1, False),
+        ([TimeoutError("private-host")] * 10, 6, False),
+    ]:
+        ticks = [0.0]
+        calls = []
+        pending = list(failures)
+        def fake_read(request, timeout=30):
+            calls.append(timeout)
+            if pending:
+                item = pending.pop(0)
+                if isinstance(item, int):
+                    raise urllib.error.HTTPError(request.full_url, item, "private body", None, None)
+                raise item
+            return Response({"ok": True})
+        def advance(seconds):
+            ticks[0] += seconds
+        try:
+            value, diagnostic = _request_preflight("https://edu.example/preflight", headers={},
+                deadline=180, urlopen=fake_read, sleep=advance, monotonic=lambda: ticks[0])
+            assert succeeds and value == {"ok": True}
+        except PreflightUnavailable as exc:
+            assert not succeeds
+            diagnostic = exc.diagnostics
+        assert len(calls) == expected_attempts
+        assert "private" not in json.dumps(diagnostic)
+        assert ticks[0] <= 180
+
+    ticks = [0.0]
+    def slow_read(request, timeout=30):
+        ticks[0] += timeout
+        raise TimeoutError()
+    try:
+        _request_preflight("https://edu.example/preflight", headers={}, deadline=12,
+            urlopen=slow_read, sleep=lambda seconds: None, monotonic=lambda: ticks[0])
+        raise AssertionError("exhausted deadline accepted")
+    except PreflightUnavailable as exc:
+        assert ticks[0] == 12 and exc.diagnostics["attempts"] == 1
+    with TemporaryDirectory() as directory:
+        output = Path(directory) / "failed-receipt.json"
+        argv = ["traffic", "--api-base", "https://edu.example", "--expected-commit", COMMIT,
+                "--expected-config-version", CONFIG, "--phase", "canary",
+                "--control-window-start", CONTROL_START, "--receipt-output", str(output)]
+        with patch.object(sys, "argv", argv), patch(
+            "scripts.run_autotutor_canary_verification_traffic.run_traffic",
+            side_effect=PreflightUnavailable({"stage": "preflight", "attempts": 6, "reason": "http_503"}),
+        ):
+            assert traffic_main() == 7
+        failed_receipt = json.loads(output.read_text())
+        assert failed_receipt["target_reached"] is False and failed_receipt["transitions_sent"] == 0
+        assert failed_receipt["preflight"]["reason"] == "http_503"
     print("autotutor_verification_traffic_smoke=PASS")
 
 

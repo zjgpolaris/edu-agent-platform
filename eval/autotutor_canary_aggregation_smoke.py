@@ -73,6 +73,27 @@ def main() -> None:
     assert passing["transition_kind_coverage"] == ["exit_ticket_answer", "lesson_answer", "start"]
     assert passing["comparator_match_rate"] == 1.0
     assert passing["fallback_rate"] == 0.0
+    # Production collects control first and Graph later. A Graph-only window
+    # loses the baseline; the combined exact window must retain both phases.
+    now = datetime.now(timezone.utc)
+    control_at = (now - timedelta(hours=1)).isoformat()
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE agent_rollout_observations SET created_at=:created_at WHERE assigned_executor='legacy'"),
+                     {"created_at": control_at})
+    assert "control_baseline_missing" in _aggregate()["blockers"]
+    combined = aggregate_autotutor_transition_canary(
+        config_version=CONFIG, deployed_commit=COMMIT, environment=ENVIRONMENT,
+        since=(now - timedelta(hours=2)).isoformat(), until=(now + timedelta(seconds=1)).isoformat(),
+    )
+    assert combined["decision"] == "GO" and combined["assigned_control_count"] == 100, combined
+    wrong_commit = aggregate_autotutor_transition_canary(
+        config_version=CONFIG, deployed_commit="b" * 40, environment=ENVIRONMENT,
+        since=(now - timedelta(hours=2)).isoformat(), until=(now + timedelta(seconds=1)).isoformat(),
+    )
+    assert wrong_commit["assigned_control_count"] == 0 and wrong_commit["committed_graph_count"] == 0
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE agent_rollout_observations SET created_at=:created_at WHERE assigned_executor='legacy'"),
+                     {"created_at": now.isoformat()})
     readiness = build_rollout_status(agent_type="auto_tutor", minimum_samples=100)
     assert readiness["status"] == "GO", readiness
     assert readiness["autotutor_transition_canary"]["assigned_graph_count"] == 100
