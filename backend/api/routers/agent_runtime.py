@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from agent_runtime.event_store import (
@@ -296,7 +297,8 @@ async def get_autotutor_canary_verification(
     from agent_runtime.autotutor_canary_verification import build_autotutor_canary_verification
 
     try:
-        result = build_autotutor_canary_verification(
+        result = await run_in_threadpool(
+            build_autotutor_canary_verification,
             expected_commit=expected_commit,
             expected_config_version=expected_config_version,
             window_start=window_start,
@@ -306,12 +308,14 @@ async def get_autotutor_canary_verification(
             minimum_rollback_control=minimum_rollback_control,
         )
     except ValueError as exc:
-        _audit_autotutor_verification(
+        await run_in_threadpool(
+            _audit_autotutor_verification,
             actor, "autotutor.verification.read", success=False,
             metadata={"reason": "invalid_request"},
         )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _audit_autotutor_verification(
+    await run_in_threadpool(
+        _audit_autotutor_verification,
         actor, "autotutor.verification.read", success=True,
         metadata={"phase": result.get("phase"), "decision": result.get("decision")},
     )
@@ -326,14 +330,16 @@ async def create_autotutor_canary_snapshot(
     from agent_runtime.autotutor_canary_verification import build_autotutor_canary_snapshot
 
     try:
-        result = build_autotutor_canary_snapshot(**req.model_dump())
+        result = await run_in_threadpool(build_autotutor_canary_snapshot, **req.model_dump())
     except ValueError as exc:
-        _audit_autotutor_verification(
+        await run_in_threadpool(
+            _audit_autotutor_verification,
             actor, "autotutor.snapshot.create", success=False,
             metadata={"reason": "invalid_request"},
         )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _audit_autotutor_verification(
+    await run_in_threadpool(
+        _audit_autotutor_verification,
         actor, "autotutor.snapshot.create", success=True,
         metadata={"snapshot_kind": result.get("snapshot", {}).get("snapshot_kind")},
     )

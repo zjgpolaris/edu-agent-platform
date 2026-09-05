@@ -552,18 +552,31 @@ async def autotutor_start_session(
     from security.auth import auth_required
     from security.autotutor_verification_auth import resolve_autotutor_verification_traffic
     assert_student_access(actor, req.student_id)
-    check_rate_limit(f"autotutor:{req.student_id}", limit=40, window_seconds=3600)
+    await run_in_threadpool(
+        check_rate_limit,
+        f"autotutor:{req.student_id}",
+        limit=40,
+        window_seconds=3600,
+    )
     actor_role = "student" if not auth_required() else actor.role
     data_scope = default_data_scope()
     eligible, eligibility_reason = rollout_eligibility(actor, data_scope)
-    verification_traffic = resolve_autotutor_verification_traffic(
+    verification_traffic = await run_in_threadpool(
+        resolve_autotutor_verification_traffic,
         actor=actor,
         verification_run_id=verification_run_id,
         attestation=verification_attestation,
     )
     with trace_context(name="POST /api/autotutor/start", metadata=trace_meta("auto_tutor", "/api/autotutor/start", student_id=req.student_id, grade=req.grade), user_id=req.student_id, input_data={"student_id": req.student_id}):
         trace_id = current_trace_id()
-        record_audit_event(actor_id=actor.actor_id, action="autotutor.start", resource_type="student", resource_id=req.student_id, metadata={"grade": req.grade})
+        await run_in_threadpool(
+            record_audit_event,
+            actor_id=actor.actor_id,
+            action="autotutor.start",
+            resource_type="student",
+            resource_id=req.student_id,
+            metadata={"grade": req.grade},
+        )
         try:
             result = await run_in_threadpool(
                 autotutor_start,
@@ -586,7 +599,8 @@ async def autotutor_start_session(
                 idempotency_key=req.idempotency_key,
             )
             if actor.traffic_cohort == "demo" and not result.get("idempotent_replay"):
-                record_audit_event(
+                await run_in_threadpool(
+                    record_audit_event,
                     actor_id=actor.actor_id,
                     action="demo.entry",
                     resource_type="autotutor_session",
@@ -594,7 +608,8 @@ async def autotutor_start_session(
                     metadata={"focus_tags": (req.focus_tags or [])[:2], "status": result.get("status")},
                 )
                 if result.get("status") == "needs_content":
-                    record_audit_event(
+                    await run_in_threadpool(
+                        record_audit_event,
                         actor_id=actor.actor_id,
                         action="demo.flow_blocked",
                         resource_type="autotutor_session",
@@ -633,12 +648,20 @@ async def autotutor_submit_answer(
     actor_role = "student" if not auth_required() else actor.role
     data_scope = default_data_scope()
     eligible, eligibility_reason = rollout_eligibility(actor, data_scope)
-    verification_traffic = resolve_autotutor_verification_traffic(
+    verification_traffic = await run_in_threadpool(
+        resolve_autotutor_verification_traffic,
         actor=actor,
         verification_run_id=verification_run_id,
         attestation=verification_attestation,
     )
-    record_audit_event(actor_id=actor.actor_id, action="autotutor.answer", resource_type="student", resource_id=session_student_id, metadata={"session_id": req.session_id})
+    await run_in_threadpool(
+        record_audit_event,
+        actor_id=actor.actor_id,
+        action="autotutor.answer",
+        resource_type="student",
+        resource_id=session_student_id,
+        metadata={"session_id": req.session_id},
+    )
     try:
         result = await run_in_threadpool(
             autotutor_answer,
@@ -661,7 +684,8 @@ async def autotutor_submit_answer(
             and not result.get("idempotent_replay")
             and result.get("status") == "completed"
         ):
-            record_audit_event(
+            await run_in_threadpool(
+                record_audit_event,
                 actor_id=actor.actor_id,
                 action="demo.flow_completed",
                 resource_type="autotutor_session",
@@ -673,7 +697,8 @@ async def autotutor_submit_answer(
                 },
             )
         elif actor.traffic_cohort == "demo" and result.get("status") == "needs_content":
-            record_audit_event(
+            await run_in_threadpool(
+                record_audit_event,
                 actor_id=actor.actor_id,
                 action="demo.flow_blocked",
                 resource_type="autotutor_session",

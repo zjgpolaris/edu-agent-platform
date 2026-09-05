@@ -139,6 +139,7 @@ PY_COMPILE_TARGETS = [
     "eval/autotutor_verification_traffic_migration_smoke.py",
     "eval/autotutor_canary_source_aggregation_smoke.py",
     "eval/autotutor_canary_writer_failure_smoke.py",
+    "eval/autotutor_async_db_boundaries_smoke.py",
     "eval/autotutor_langgraph_full_outcome_parity_eval.py",
     "eval/autotutor_langgraph_active_recovery_smoke.py",
     "backend/agents/autotutor_execution.py",
@@ -173,6 +174,7 @@ PY_COMPILE_TARGETS.extend(
         "scripts/verify_autotutor_verification_environment.py",
         "scripts/run_autotutor_canary_verification_traffic.py",
         "backend/api/routers/agent_runtime.py",
+        "backend/api/routers/learning.py",
     ]
 )
 
@@ -205,6 +207,7 @@ FAST_SUITES = [
     "autotutor_verification_traffic_migration_smoke",
     "autotutor_canary_source_aggregation_smoke",
     "autotutor_canary_writer_failure_smoke",
+    "autotutor_async_db_boundaries_smoke",
     "autotutor_finalize_fault_injection_smoke",
     "autotutor_langgraph_full_outcome_parity_eval",
     "autotutor_langgraph_active_recovery_smoke",
