@@ -5,6 +5,7 @@ import math
 import os
 import threading
 import time
+from contextlib import nullcontext
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -196,6 +197,41 @@ def try_record_rollout_observation(**kwargs: Any) -> str | None:
     try:
         return record_rollout_observation(**kwargs)
     except Exception as exc:
+        audit_observation_write_failure(exc, **kwargs)
+        return None
+
+
+class RolloutObservationWriteError(RuntimeError):
+    """Sanitized error; report health only after the enclosing transaction rolls back."""
+
+    def __init__(self, cause: Exception, metadata: dict[str, Any]):
+        super().__init__("autotutor_observation_write_failed")
+        self.cause = cause
+        self.metadata = metadata
+
+
+def record_rollout_observation_with_connection(conn, **kwargs: Any) -> str:
+    """Borrow a business transaction without opening, committing or swallowing errors."""
+    try:
+        return record_rollout_observation(_connection_factory=lambda: nullcontext(conn), **kwargs)
+    except Exception as exc:
+        raise RolloutObservationWriteError(exc, kwargs) from exc
+
+
+def complete_rollout_observation_latency(observation_id: str, *, latency_ms: int, status: str) -> None:
+    """Finalize post-commit timing on the existing row, never create another observation."""
+    with get_connection() as conn:
+        updated = conn.execute(text("""UPDATE agent_rollout_observations
+            SET latency_ms=:latency_ms, status=:status
+            WHERE observation_id=:id AND status='measurement_pending'"""),
+            {"id": observation_id, "latency_ms": max(0, int(latency_ms)), "status": status[:40]})
+        if updated.rowcount != 1:
+            raise LookupError("pending_observation_not_found")
+
+
+def audit_observation_write_failure(exc: Exception, **kwargs: Any) -> None:
+    """Best-effort, separately committed health signal; never call inside a failed transaction."""
+    try:
         reason = (
             "schema_unavailable" if isinstance(exc, LookupError)
             else "provenance_invalid" if isinstance(exc, ValueError)
@@ -230,7 +266,8 @@ def try_record_rollout_observation(**kwargs: Any) -> str | None:
                 )
             except Exception:
                 pass
-        return None
+    except Exception:
+        pass
 
 
 def observation_write_health(
@@ -513,6 +550,8 @@ def aggregate_autotutor_transition_canary(
         and str(row.get("commit_status") or "") in {"committed", "completed", "fallback"}
     ]
     blockers: list[str] = []
+    if any(row.get("status") == "measurement_pending" for row in rows):
+        blockers.append("observation_latency_incomplete")
     if len(committed_graph) < max(1, int(minimum_graph_transitions)):
         blockers.append("insufficient_graph_samples")
     if len(compared) != denominator or mismatches:

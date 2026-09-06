@@ -29,6 +29,10 @@ from pydantic import BaseModel, Field, PrivateAttr
 from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
+from agent_runtime.rollout_observations import (
+    RolloutObservationWriteError,
+    audit_observation_write_failure,
+)
 from agents.autotutor_timing import dimension, execution_components, phase_timing, timed_call, transition_timing
 from llm_config import llm_quality
 from structured_output import StructuredInvocationProvenance, invoke_structured_with_provenance
@@ -386,7 +390,8 @@ def _record_executor_observation(
     context: AutoTutorExecutionContext,
     started_at: float,
     outcome: AutoTutorTransitionOutcome | None = None,
-) -> None:
+    connection=None,
+) -> str | None:
     dimension("selected_executor", state.executor_mode)
     dimension("transition_kind", transition_kind)
     dimension("deployed_commit", context.deployed_commit)
@@ -395,7 +400,10 @@ def _record_executor_observation(
     dimension("transition_id", outcome.diagnostics.transition_id if outcome else None)
     execution_components(outcome)
     try:
-        from agent_runtime.rollout_observations import try_record_rollout_observation
+        from agent_runtime.rollout_observations import (
+            record_rollout_observation_with_connection,
+            try_record_rollout_observation,
+        )
 
         status = "completed" if state.status == "completed" else "committed"
         if state.executor_fallback_reason:
@@ -408,10 +416,13 @@ def _record_executor_observation(
                 or not outcome.diagnostics.comparator_matched
             )
         )
-        try_record_rollout_observation(
+        writer = try_record_rollout_observation if connection is None else (
+            lambda **kwargs: record_rollout_observation_with_connection(connection, **kwargs)
+        )
+        return writer(
             agent_type="auto_tutor",
             runtime_mode="active" if state.executor_mode == "graph_active" else "control",
-            status=f"{status}:{transition_kind}"[:40],
+            status="measurement_pending" if connection is not None else f"{status}:{transition_kind}"[:40],
             latency_ms=max(0, int((perf_counter() - started_at) * 1000)),
             trace_id=state.trace_id,
             data_scope=context.data_scope,
@@ -447,7 +458,44 @@ def _record_executor_observation(
             verification_run_id=context.verification_run_id,
         )
     except Exception:
+        if connection is not None:
+            raise
         return
+
+
+def _atomic_observation_required(state: AutoTutorState, context: AutoTutorExecutionContext) -> bool:
+    # Production Control must use the same boundary as Graph for a comparable baseline.
+    # Preserve unconfigured, local Legacy development; forced Graph still fails closed.
+    return (context.environment == "production" or state.executor_mode == "graph_active"
+            or state.executor_assigned_mode == "graph_active")
+
+
+def _report_atomic_observation_failure(exc: Exception) -> None:
+    if isinstance(exc, RolloutObservationWriteError):
+        # The business connection has already rolled back and returned to its pool.
+        audit_observation_write_failure(exc.cause, **exc.metadata)
+        from agents.autotutor_canary_admission import clear_autotutor_canary_admission_cache
+        clear_autotutor_canary_admission_cache()
+
+
+def _finish_observation_timing(observation_ids: list[str], state: AutoTutorState, *,
+                               transition_kind: str, context: AutoTutorExecutionContext, started_at: float) -> None:
+    if not observation_ids:
+        return
+    from agent_runtime.rollout_observations import complete_rollout_observation_latency
+    status = "fallback" if state.executor_fallback_reason else (
+        "completed" if state.status == "completed" else "committed")
+    try:
+        complete_rollout_observation_latency(observation_ids[0],
+            latency_ms=max(0, int((perf_counter() - started_at) * 1000)), status=f"{status}:{transition_kind}")
+    except Exception as exc:
+        # Business data AND its observation already committed. Do not report a retryable
+        # transition failure. The durable pending marker blocks release even if auditing fails.
+        _report_atomic_observation_failure(RolloutObservationWriteError(exc, {
+            "agent_type": "auto_tutor", "runtime_mode": "active" if state.executor_mode == "graph_active" else "control",
+            "config_version": state.executor_config_version, "deployed_commit": context.deployed_commit,
+            "environment": context.environment, "data_scope": context.data_scope,
+        }))
 
 
 def _tag_verification_learning_events(state: AutoTutorState, context: AutoTutorExecutionContext) -> None:
@@ -2142,14 +2190,20 @@ def start_session(
         idempotency_key=idempotency_key or f"start:{state.session_id}",
         learning_events=list(state._pending_learning_events),
     )
+    observation_ids: list[str] = []
     try:
         timed_call("business_commit", commit_autotutor_start,
             next_state=state,
             response=start_result,
             start_idempotency_key=idempotency_key,
             effects=start_effects,
+            observation_writer=(lambda conn: observation_ids.append(_record_executor_observation(
+                state, transition_kind="start", context=execution_context,
+                started_at=transition_started, outcome=selected_outcome, connection=conn,
+            ))) if _atomic_observation_required(state, execution_context) else None,
         )
-    except Exception:
+    except Exception as exc:
+        _report_atomic_observation_failure(exc)
         if idempotency_key:
             existing = _load_start_idempotent_session(student_id, idempotency_key)
             if existing is not None:
@@ -2169,13 +2223,11 @@ def start_session(
     state._pending_weakpoint_evidence.clear()
     state._pending_review_memory = None
     _store.cache(state)
-    _record_executor_observation(
-        state,
-        transition_kind="start",
-        context=execution_context,
-        started_at=transition_started,
-        outcome=selected_outcome,
-    )
+    _finish_observation_timing(observation_ids, state, transition_kind="start",
+                               context=execution_context, started_at=transition_started)
+    if not _atomic_observation_required(state, execution_context):
+        _record_executor_observation(state, transition_kind="start", context=execution_context,
+                                     started_at=transition_started, outcome=selected_outcome)
     return start_result
 
 
@@ -2265,6 +2317,7 @@ def _commit_claimed_answer_transition(
     request_hash: str,
     result: dict[str, Any],
     execution_context: AutoTutorExecutionContext,
+    observation_writer=None,
 ) -> dict[str, Any]:
     _tag_verification_learning_events(state, execution_context)
     effects = AutoTutorTransitionEffects(
@@ -2288,6 +2341,7 @@ def _commit_claimed_answer_transition(
         next_state=state,
         response=result,
         effects=effects,
+        observation_writer=observation_writer,
     )
     state._transition_active = False
     state._pending_learning_events.clear()
@@ -2396,6 +2450,7 @@ def _submit_answer_locked(
         )
         state = selected_outcome.next_state
         result = selected_outcome.public_result
+        observation_ids: list[str] = []
         committed_result = _commit_claimed_answer_transition(
             state,
             claimed_revision=claimed_revision,
@@ -2403,17 +2458,21 @@ def _submit_answer_locked(
             request_hash=request_hash,
             result=result,
             execution_context=execution_context,
+            observation_writer=(lambda conn: observation_ids.append(_record_executor_observation(
+                state, transition_kind=transition_kind, context=execution_context,
+                started_at=transition_started, outcome=selected_outcome, connection=conn,
+            ))) if _atomic_observation_required(state, execution_context) else None,
         )
-        _mirror_transition_trace(state, from_sequence=previous_sequence)
-        _record_executor_observation(
-            state,
-            transition_kind=transition_kind,
-            context=execution_context,
-            started_at=transition_started,
-            outcome=selected_outcome,
-        )
+        if not committed_result.get("idempotent_replay") and not committed_result.get("stale_answer_ignored"):
+            _mirror_transition_trace(state, from_sequence=previous_sequence)
+            _finish_observation_timing(observation_ids, state, transition_kind=transition_kind,
+                                       context=execution_context, started_at=transition_started)
+            if not _atomic_observation_required(state, execution_context):
+                _record_executor_observation(state, transition_kind=transition_kind, context=execution_context,
+                                             started_at=transition_started, outcome=selected_outcome)
         return committed_result
-    except Exception:
+    except Exception as exc:
+        _report_atomic_observation_failure(exc)
         _release_answer_transition(
             session_id,
             expected_revision=claimed_revision,

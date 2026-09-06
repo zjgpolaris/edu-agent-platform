@@ -15,13 +15,17 @@
 - 遇到 `verification_safety_stop:active_latency_regression`，停止新验证流量，人工恢复 Legacy/BPS=0。
   在 Render 日志搜索 `autotutor_transition_timing`，按 commit/config、transition_kind、cache_state 分组查看。
 - `admission` 内包含 schema/health/wait 子阶段，`execution_with_provider` 内包含 provider/executor/comparator；
-  不重复求和、不将不同分布的 p95 相减。日志 total 包含观测写入，发布门禁 latency 不包含，不能混用。
+  不重复求和、不将不同分布的 p95 相减。v1.49.10 的日志 total 包含观测写入，发布门禁 latency 不包含；
+  原子提交实现的统计边界见下文，两者不能混用。
 - `admission_refresh_timeout` 是同 key 等待刷新超过 2 秒后的 fail-closed 拒绝，不是可忽略告警。
   检查 leader 的 schema/health 耗时；不要延长 TTL、提高 BPS 或放宽门禁来绕过。
 
 ## 发布流程
 
 受控演练工具见 [v1.49.11 安全边界和运行步骤](20260906-autotutor-scoped-rehearsals-v14911-spec.md)。
+业务/观测原子提交及 `observation_latency_incomplete` 的处理边界见
+[原子观测实现说明](20260906-autotutor-atomic-observation.md)。新实现延迟包含事务内观测写入，
+不包含最后的计时回填 UPDATE；不能将旧实现 latency 与新 SHA 混用。
 Canary 的 `build_candidate_evidence` 默认为 false，先采样再审查完整演练证据。
 只有完整生产演练已验证时才显式开启 candidate 构建；scoped writer probe 不能代替完整 writer-failure attestation。
 演练 runner 不产生 production GO，不能因为它绿色就填写三项 pass。

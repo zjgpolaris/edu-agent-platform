@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from agent_runtime.rollout_observations import RolloutObservationWriteError
 from security.auth import Actor, assert_student_access, assert_teacher_student_access, require_auth
 from security.audit_log import record_audit_event
 from security.rate_limit import check_rate_limit
@@ -619,6 +620,8 @@ async def autotutor_start_session(
             return result
         except AutoTutorUnavailableError as exc:
             raise HTTPException(status_code=503, detail=str(exc))
+        except RolloutObservationWriteError:
+            raise HTTPException(status_code=503, detail="autotutor_observation_write_failed") from None
 
 
 @router.post("/api/autotutor/answer")
@@ -710,6 +713,8 @@ async def autotutor_submit_answer(
         raise HTTPException(status_code=404, detail="辅导会话不存在或已过期，请重新开始")
     except AutoTutorIdempotencyConflict:
         raise HTTPException(status_code=409, detail="同一幂等键不能提交不同答案")
+    except RolloutObservationWriteError:
+        raise HTTPException(status_code=503, detail="autotutor_observation_write_failed") from None
 
 
 @router.get("/api/autotutor/session/{session_id}")

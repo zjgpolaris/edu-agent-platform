@@ -56,6 +56,8 @@ def main() -> None:
     with get_connection() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM agent_rollout_observations")).scalar() == count_before
     print("postgres_schema_smoke=PASS")
+    from autotutor_atomic_observation_checks import check_atomic_observation_transactions
+    check_atomic_observation_transactions()
 
 
 if __name__ == "__main__":

@@ -62,15 +62,24 @@ class AutoTutorTransitionConflict(RuntimeError):
     pass
 
 
+def _require_graph_observation(next_state: Any, observation_writer) -> None:
+    if (getattr(next_state, "executor_mode", None) == "graph_active"
+            or getattr(next_state, "executor_assigned_mode", None) == "graph_active"):
+        if observation_writer is None:
+            raise ValueError("graph_transition_requires_atomic_observation")
+
+
 def commit_autotutor_start(
     *,
     next_state: Any,
     response: dict[str, Any],
     start_idempotency_key: str | None,
     effects: AutoTutorTransitionEffects,
+    observation_writer: Callable[[Any], None] | None = None,
     fault_hook: Callable[[str], None] | None = None,
 ) -> None:
     """Insert a new session and its start effects in one transaction."""
+    _require_graph_observation(next_state, observation_writer)
     init_db()
     if effects.session_id != next_state.session_id:
         raise ValueError("start effects do not match session")
@@ -113,6 +122,9 @@ def commit_autotutor_start(
             },
         )
         checkpoint("after_session_insert")
+        if observation_writer is not None:
+            observation_writer(conn)
+            checkpoint("after_observation_write")
 
 
 def commit_autotutor_transition(
@@ -123,9 +135,11 @@ def commit_autotutor_transition(
     next_state: Any,
     response: dict[str, Any],
     effects: AutoTutorTransitionEffects,
+    observation_writer: Callable[[Any], None] | None = None,
     fault_hook: Callable[[str], None] | None = None,
 ) -> TransitionCommitResult:
     """Commit all business effects and the session CAS in one DB transaction."""
+    _require_graph_observation(next_state, observation_writer)
     init_db()
     if effects.session_id != next_state.session_id or effects.claimed_revision != previous_revision:
         raise ValueError("transition effects do not match session revision")
@@ -269,4 +283,7 @@ def commit_autotutor_transition(
         if updated.rowcount != 1:
             raise AutoTutorTransitionConflict("autotutor session CAS failed")
         checkpoint("after_session_cas")
+        if observation_writer is not None:
+            observation_writer(conn)
+            checkpoint("after_observation_write")
     return TransitionCommitResult(status="committed", response=response)

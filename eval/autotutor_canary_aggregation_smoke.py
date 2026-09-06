@@ -73,6 +73,17 @@ def main() -> None:
     assert passing["transition_kind_coverage"] == ["exit_ticket_answer", "lesson_answer", "start"]
     assert passing["comparator_match_rate"] == 1.0
     assert passing["fallback_rate"] == 0.0
+    # A durable observation without post-commit timing cannot approve either phase.
+    for executor in ("legacy", "graph_active"):
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE agent_rollout_observations SET status='measurement_pending' WHERE transition_id=:id"),
+                         {"id": f"transition-{executor}-0"})
+        pending = _aggregate()
+        assert pending["decision"] == "NO_GO"
+        assert "observation_latency_incomplete" in pending["blockers"]
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE agent_rollout_observations SET status='committed:start' WHERE transition_id=:id"),
+                         {"id": f"transition-{executor}-0"})
     # Production collects control first and Graph later. A Graph-only window
     # loses the baseline; the combined exact window must retain both phases.
     now = datetime.now(timezone.utc)

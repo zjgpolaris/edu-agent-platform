@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = Path(tempfile.gettempdir()) / "edu-agent-autotutor-active-recovery.sqlite3"
 os.environ["DATABASE_URL"] = f"sqlite:///{DB_PATH}"
+os.environ["EDU_AGENT_DEPLOYED_COMMIT"] = "a" * 40
 os.environ["EDU_AGENT_AUTOTUTOR_CONTENT_GATE_MODE"] = "enforce"
 os.environ["EDU_AGENT_AUTOTUTOR_CONTENT_GATE_BPS"] = "10000"
 try:
@@ -21,6 +22,9 @@ from agents import auto_tutor as at  # noqa: E402
 
 
 def main() -> None:
+    from db.schema import metadata
+    from db.engine import engine
+    metadata.create_all(engine)
     started = at.start_session(
         "active-recovery-student",
         actor_id="active-recovery-student",

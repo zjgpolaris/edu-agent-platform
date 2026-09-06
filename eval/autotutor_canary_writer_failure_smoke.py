@@ -1,4 +1,4 @@
-"""Observation writer failure is non-fatal and blocks the exact production slice."""
+"""Compatibility best-effort helper audits failure; Graph atomicity is tested separately."""
 from __future__ import annotations
 
 import os
@@ -24,7 +24,6 @@ CONFIG = "v1.49.3-writer-failure-smoke"
 def main() -> None:
     metadata.create_all(engine)
     rollout_observations._last_failure_audit.clear()
-    committed_student_response = {"status": "committed", "next_action": "continue"}
     with patch.object(
         rollout_observations,
         "record_rollout_observation",
@@ -42,7 +41,6 @@ def main() -> None:
             environment="production",
         )
     assert result is None
-    assert committed_student_response == {"status": "committed", "next_action": "continue"}
     health = rollout_observations.observation_write_health(
         config_version=CONFIG,
         deployed_commit=COMMIT,

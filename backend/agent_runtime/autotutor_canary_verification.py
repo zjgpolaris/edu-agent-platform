@@ -273,6 +273,7 @@ def build_autotutor_canary_verification(
     always_hard = {
         "unauthorized_graph_traffic", "duplicate_effects_detected",
         "duplicate_transition_observations_detected", "observation_write_failure",
+        "observation_latency_incomplete",
     }
     blockers.extend(item for item in aggregate_blockers if item in always_hard)
     graph_count = int(aggregate.get("assigned_graph_count") or 0)

@@ -10,6 +10,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = Path(tempfile.gettempdir()) / "edu-agent-autotutor-active-transaction.sqlite3"
 os.environ["DATABASE_URL"] = f"sqlite:///{DB_PATH}"
+os.environ["EDU_AGENT_DEPLOYED_COMMIT"] = "a" * 40
 os.environ["EDU_AGENT_AUTOTUTOR_CONTENT_GATE_MODE"] = "enforce"
 os.environ["EDU_AGENT_AUTOTUTOR_CONTENT_GATE_BPS"] = "10000"
 os.environ["EDU_AGENT_AUTOTUTOR_EXECUTOR_MODE"] = "legacy"
@@ -35,6 +36,9 @@ def _answer(session_id: str) -> str:
 
 
 def main() -> None:
+    from db.schema import metadata
+    from db.engine import engine
+    metadata.create_all(engine)
     before = {"revision": 0}
     bundle = AutoTutorObservationBundle(
         transition_id="immutability-smoke",

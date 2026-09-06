@@ -46,9 +46,12 @@ process identity 变化也可能来自多 worker/load-balancer 路由，**不能
 unavailable health reader，核对重新评估的准入拒绝 Graph。
 
 这不覆盖缓存仍有效时的请求，也不覆盖业务提交后的首次 writer failure。
-当前代码在业务 commit 之后写 observation，原先“任何 writer 故障都不提交未经观测的 Graph effect”
+本工具基线 `a8baa89` 在业务 commit 之后写 observation，原先“任何 writer 故障都不提交未经观测的 Graph effect”
 并未由实现保证。要关闭这个缺口，需要独立评审并实现事务内 observation/outbox 等方案，
 而不是把本探针填成完整 `writer_failure=pass`。
+
+后续事务修复见 [原子观测实现说明](20260906-autotutor-atomic-observation.md)。
+修复代码和数据库回归测试不能替代实际生产演练；本工具的覆盖限制和 attestation=false 保持不变。
 
 ### Kill switch
 

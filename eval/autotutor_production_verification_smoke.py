@@ -97,6 +97,9 @@ def main() -> None:
     encoded = json.dumps(ready)
     assert "secret-test-salt" not in encoded and "bucket_salt" not in encoded
     assert ready["configuration"]["config_fingerprint"].startswith("sha256:")
+    pending = _build(_aggregate(blockers=["observation_latency_incomplete"]))
+    assert pending["decision"] == "NO_GO"
+    assert "observation_latency_incomplete" in pending["blockers"]
 
     collecting = _build(_aggregate(control=100, graph=1, blockers=["insufficient_graph_samples", "transition_kind_coverage_incomplete"]))
     assert collecting["phase"] == "ready_for_manual_one_percent", collecting
