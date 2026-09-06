@@ -27,25 +27,32 @@ def runtime_schema_readiness() -> dict[str, Any]:
     try:
         with get_connection() as conn:
             dialect = str(conn.dialect.name)
-            tables = set(sa_inspect(conn).get_table_names())
+            inspector = sa_inspect(conn)
+            tables = set(inspector.get_table_names())
+            inspected_tables = sorted(tables & {"learning_events", "autotutor_sessions", "accounts", "agent_rollout_observations"})
+            # PostgreSQL batches column reflection across tables; SQLite's dialect
+            # implements the same API with per-table PRAGMAs. Never cache across calls.
+            reflected = inspector.get_multi_columns(filter_names=inspected_tables) if inspected_tables else {}
+            columns = {name: {column["name"] for column in reflected.get((None, name), [])}
+                       for name in inspected_tables}
             missing = sorted(RUNTIME_TABLES - tables)
             missing_columns: list[str] = []
             if "learning_events" not in tables:
                 missing.append("learning_events")
-            elif "effect_key" not in {column["name"] for column in sa_inspect(conn).get_columns("learning_events")}:
+            elif "effect_key" not in columns["learning_events"]:
                 missing_columns.append("learning_events.effect_key")
             if "autotutor_sessions" in tables:
-                session_columns = {column["name"] for column in sa_inspect(conn).get_columns("autotutor_sessions")}
+                session_columns = columns["autotutor_sessions"]
                 for column in ("inflight_request_hash", "last_request_hash"):
                     if column not in session_columns:
                         missing_columns.append(f"autotutor_sessions.{column}")
             if "accounts" in tables:
-                account_columns = {column["name"] for column in sa_inspect(conn).get_columns("accounts")}
+                account_columns = columns["accounts"]
                 for column in ("account_status", "traffic_cohort", "updated_at"):
                     if column not in account_columns:
                         missing_columns.append(f"accounts.{column}")
             if "agent_rollout_observations" in tables:
-                observation_columns = {column["name"] for column in sa_inspect(conn).get_columns("agent_rollout_observations")}
+                observation_columns = columns["agent_rollout_observations"]
                 for column in (
                     "traffic_cohort", "rollout_eligible", "eligibility_reason",
                     "selected_executor", "transition_kind", "comparator_matched",

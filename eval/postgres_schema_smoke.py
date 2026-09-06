@@ -43,6 +43,9 @@ def main() -> None:
         assert pgvector == "vector"
     readiness = runtime_schema_readiness()
     assert readiness["schema_ready"] is True, readiness
+    from schema_reflection_checks import check_reflection
+    with get_connection() as conn:
+        check_reflection(conn, expect_fewer=True)
     print("postgres_schema_smoke=PASS")
 
 

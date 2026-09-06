@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 
 def main() -> None:
@@ -45,6 +47,11 @@ def main() -> None:
     )[0]
     assert "id: traffic" in traffic_step and "continue-on-error: true" in traffic_step
     assert "Controlled traffic outcome" in source
+    assert "scripts/autotutor_verification_summary.py /tmp/autotutor-traffic-receipt.json" in source
+    from scripts.autotutor_verification_summary import traffic_summary
+    summary = traffic_summary({"status": "failed", "error_code": "verification_safety_stop:active_latency_regression",
+                               "password": "private-password", "stage": "bad\nprivate"})
+    assert "private" not in summary and "active_latency_regression" in summary and "unknown" in summary
     assert "Resolve exact verification window" in source and "id: window" in source
     assert "Validate verification window inputs" in source
     assert "Prepare immutable evidence builder" in source

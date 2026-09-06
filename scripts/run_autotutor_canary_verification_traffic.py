@@ -14,6 +14,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextvars import ContextVar
+from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -31,6 +33,110 @@ FORBIDDEN_RECEIPT_KEYS = {
     "actor_id", "student_id", "username", "password", "token", "secret", "salt",
     "session_id", "answer", "question", "attestation", "authorization",
 }
+_progress_state: ContextVar[tuple[dict, Callable] | None] = ContextVar("verification_progress", default=None)
+_FAILURE_CODES = {
+    "verification_response_invalid", "verification_credentials_missing", "verification_credentials_invalid",
+    "environment_not_production", "deployed_commit_mismatch", "config_version_mismatch",
+    "verification_phase_config_mismatch", "kill_switch_enabled", "verification_graph_subject_unavailable",
+    "verification_assessment_not_in_reviewed_pack", "verification_public_answer_mapping_unavailable",
+    "verification_environment_not_protected", "api_base_invalid", "api_host_not_allowlisted",
+    "expected_commit_invalid", "verification_phase_invalid", "verification_machine_credential_missing",
+    "verification_traffic_secret_missing", "verification_control_baseline_insufficient",
+    "verification_student_identity_mismatch", "consecutive_server_errors", "verification_transition_rejected",
+    "verification_traffic_timeout", "verification_preflight_unavailable",
+}
+_SAFETY_CODES = {
+    "unauthorized_graph_traffic", "duplicate_effects_detected", "duplicate_transition_observations_detected",
+    "observation_write_failure", "comparator_not_exact", "fallback_rate_above_one_percent",
+    "active_latency_regression", "observation_write_unhealthy",
+}
+_CONTENT_CODES = {
+    "missing_reviewed_content", "content_review_status_invalid", "reviewed_content_missing",
+    "objective_confidence_below_threshold", "objective_entity_missing", "objective_aspect_unknown",
+    "no_fresh_assessment_for_target_difficulty", "objective_alignment_failed",
+    "missing_answer_bearing_evidence", "assessment_not_independent", "assessment_options_invalid",
+    "assessment_answer_not_unique", "forbidden_placeholder_option", "distractor_misconception_missing",
+    "assessment_evidence_binding_failed", "student_readability_failed",
+    "exit_ticket_unavailable_after_correct_practice", "remediation_unavailable_after_wrong_practice",
+    "legacy_content_unverified", "unknown",
+}
+
+
+def _failure_code(exc: BaseException) -> str:
+    # Do not persist arbitrary exception messages, HTTP bodies or URLs.
+    message = str(exc)
+    if message in _FAILURE_CODES or message in {"verification_safety_stop:" + code for code in _SAFETY_CODES}:
+        return message
+    if message.startswith("verification_content_target_unavailable:"):
+        reason = message.split(":", 1)[1]
+        return "verification_content_target_unavailable" + (":" + reason if reason in _CONTENT_CODES else "")
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"http_{int(exc.code)}"
+    if isinstance(exc, (TimeoutError, urllib.error.URLError)):
+        return "verification_transport_unavailable"
+    if isinstance(exc, KeyboardInterrupt):
+        return "verification_interrupted"
+    return "verification_unexpected_error"
+
+
+def _progress(**updates: Any) -> None:
+    current = _progress_state.get()
+    if current is not None:
+        record, callback = current
+        record.update(updates)
+        record["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _assert_receipt_safe(record)
+        callback(dict(record))
+
+
+def _receipt_lifecycle(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        callback = kwargs.pop("progress_callback", None) or (lambda record: None)
+        started = datetime.now(timezone.utc).isoformat()
+        record = {
+            "schema_version": 1, "receipt_type": "autotutor_verification_traffic",
+            "phase": kwargs.get("phase") if kwargs.get("phase") in PHASES else None,
+            "expected_commit": kwargs.get("expected_commit") if re.fullmatch(r"[0-9a-f]{40}", str(kwargs.get("expected_commit"))) else None,
+            "config_version": kwargs.get("expected_config_version") if re.fullmatch(r"[A-Za-z0-9._-]{1,120}", str(kwargs.get("expected_config_version"))) else None,
+            "environment": "production", "started_at": started, "finished_at": None,
+            "status": "running", "stage": "configuration", "target_reached": False,
+            "target_transitions": kwargs.get("target_transitions"), "transitions_sent": 0,
+            "successful_responses": 0, "transition_request_attempts": 0,
+            "server_confirmed_committed": None, "request_outcome_unknown": False,
+            "sessions_started": 0, "sessions_completed": 0, "sessions_failed": 0,
+            "complete": False, "next_action": "wait_for_result",
+        }
+        token = _progress_state.set((record, callback))
+        try:
+            _progress()
+            result = function(*args, **kwargs)
+            _progress(**result, status="completed" if result["target_reached"] else "failed",
+                      complete=True, finished_at=datetime.now(timezone.utc).isoformat(),
+                      error_code=None if result["target_reached"] else "verification_budget_exhausted",
+                      next_action="review_phase_snapshot" if result["target_reached"] else "inspect_failure_before_retry")
+            return dict(record)
+        except (Exception, KeyboardInterrupt) as exc:
+            updates = {"status": "failed", "complete": True, "target_reached": False,
+                       "finished_at": datetime.now(timezone.utc).isoformat(), "error_code": _failure_code(exc),
+                       "next_action": "stop_traffic_restore_legacy_and_inspect" if record["phase"] == "canary" else "inspect_failure_before_retry"}
+            if record["stage"] in {"transition", "safety_check"}:
+                updates["sessions_failed"] = max(record["sessions_failed"], record["sessions_started"] - record["sessions_completed"])
+            if isinstance(exc, PreflightUnavailable):
+                updates["preflight"] = exc.diagnostics
+            _progress(**updates)
+            raise
+        finally:
+            _progress_state.reset(token)
+    return wrapped
+
+
+def _write_receipt(output: Path, receipt: dict[str, Any]) -> None:
+    _assert_receipt_safe(receipt)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(output.name + ".tmp")
+    temporary.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, output)
 
 
 def stable_executor_bucket(subject: str, *, salt: str) -> int:
@@ -260,6 +366,7 @@ def _assert_receipt_safe(value: Any) -> None:
             _assert_receipt_safe(item)
 
 
+@_receipt_lifecycle
 def run_traffic(
     *,
     api_base: str,
@@ -274,8 +381,15 @@ def run_traffic(
     urlopen: UrlOpen = urllib.request.urlopen,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     deadline = monotonic() + max(1, timeout_seconds)
+    def request(url: str, **kwargs: Any) -> dict[str, Any]:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise TimeoutError("verification_traffic_timeout")
+        return _request_json(url, timeout=min(30, remaining), urlopen=urlopen, **kwargs)
+
     source = dict(os.environ if env is None else env)
     if source.get("AUTOTUTOR_VERIFICATION_ENVIRONMENT") != "production-verification":
         raise ValueError("verification_environment_not_protected")
@@ -308,6 +422,7 @@ def run_traffic(
         preflight_params.update({"window_start": control_window_start(control_start),
                                  "window_end": datetime.now(timezone.utc).isoformat()})
     preflight_url = api_base.rstrip("/") + "/api/admin/agent-runtime/autotutor-canary/verification?" + urllib.parse.urlencode(preflight_params)
+    _progress(stage="preflight", control_window_start=preflight_params.get("window_start"))
     preflight, preflight_diagnostics = _request_preflight(preflight_url, headers={
         "Authorization": f"Bearer {machine_token}",
         "X-AutoTutor-Bootstrap-SHA256": bootstrap,
@@ -323,42 +438,50 @@ def run_traffic(
             aggregate.get("control_latency") or {}
         ).get("p95_ms") is None:
             raise ValueError("verification_control_baseline_insufficient")
+    _progress(stage="account_selection", preflight=preflight_diagnostics)
     account = _select_account(accounts, phase=phase, salt=salt, active_bps=int(configuration.get("active_bps") or 0))
-    login = _request_json(api_base.rstrip("/") + "/api/auth/login", method="POST", payload={
+    _progress(stage="login")
+    login = request(api_base.rstrip("/") + "/api/auth/login", method="POST", payload={
         "username": account["username"], "password": account["password"],
-    }, urlopen=urlopen)
+    })
     if login.get("role") != "student" or login.get("actor_id") != account["actor_id"] or not login.get("token"):
         raise ValueError("verification_student_identity_mismatch")
     student_token = str(login["token"])
     run_id = "avr_" + uuid4().hex
+    _progress(run_fingerprint="sha256:" + hashlib.sha256(run_id.encode()).hexdigest())
     reviewed_answers = _reviewed_answer_texts()
     transitions = 0
     sessions = 0
     completed = 0
     failed = 0
     server_errors = 0
+    attempts = 0
 
     def transition(path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        nonlocal transitions, server_errors
+        nonlocal transitions, server_errors, attempts
         if monotonic() >= deadline:
             raise TimeoutError("verification_traffic_timeout")
         retry = 0
         while True:
+            if monotonic() >= deadline:
+                raise TimeoutError("verification_traffic_timeout")
             attestation = _issue_traffic_token(
                 actor_id=account["actor_id"], verification_run_id=run_id, phase=phase,
                 deployed_commit=expected_commit, config_version=expected_config_version, secret=traffic_secret,
             )
             try:
-                result = _request_json(api_base.rstrip("/") + path, method="POST", payload=payload, headers={
+                attempts += 1
+                _progress(stage="transition", transition_request_attempts=attempts, request_outcome_unknown=True)
+                result = request(api_base.rstrip("/") + path, method="POST", payload=payload, headers={
                     "Authorization": f"Bearer {student_token}",
                     "X-AutoTutor-Verification-Run": run_id,
                     "X-AutoTutor-Verification-Attestation": attestation,
-                }, urlopen=urlopen)
+                })
                 server_errors = 0
                 break
             except urllib.error.HTTPError as exc:
                 if exc.code == 429 and retry < 3 and monotonic() < deadline:
-                    sleep(float(2 ** retry))
+                    sleep(min(float(2 ** retry), max(0, deadline - monotonic())))
                     retry += 1
                     continue
                 if exc.code >= 500:
@@ -367,7 +490,7 @@ def run_traffic(
                         raise RuntimeError("consecutive_server_errors") from exc
                     if monotonic() >= deadline:
                         raise TimeoutError("verification_traffic_timeout") from exc
-                    sleep(float(2 ** retry))
+                    sleep(min(float(2 ** retry), max(0, deadline - monotonic())))
                     retry += 1
                     # Retry the same payload and idempotency key. A gateway may
                     # time out after the application committed the transition;
@@ -380,16 +503,18 @@ def run_traffic(
                     raise RuntimeError("consecutive_server_errors") from exc
                 if monotonic() >= deadline:
                     raise TimeoutError("verification_traffic_timeout") from exc
-                sleep(float(2 ** retry))
+                sleep(min(float(2 ** retry), max(0, deadline - monotonic())))
                 retry += 1
                 continue
         transitions += 1
+        _progress(transitions_sent=transitions, successful_responses=transitions, request_outcome_unknown=False)
         if transitions < target_transitions:
-            sleep(1.0)
+            sleep(min(1.0, max(0, deadline - monotonic())))
         return result
 
     while transitions < target_transitions and sessions < maximum_sessions and monotonic() < deadline:
         sessions += 1
+        _progress(sessions_started=sessions)
         try:
             state = transition("/api/autotutor/start", {
                 "student_id": account["actor_id"],
@@ -425,22 +550,28 @@ def run_traffic(
             if phase == "canary":
                 preflight_params["window_end"] = datetime.now(timezone.utc).isoformat()
             safety_url = api_base.rstrip("/") + "/api/admin/agent-runtime/autotutor-canary/verification?" + urllib.parse.urlencode(preflight_params)
-            safety = _request_json(safety_url, headers={
+            _progress(stage="safety_check", sessions_completed=completed,
+                      safety_window_end=preflight_params.get("window_end"))
+            safety = request(safety_url, headers={
                 "Authorization": f"Bearer {machine_token}",
                 "X-AutoTutor-Bootstrap-SHA256": bootstrap,
-            }, urlopen=urlopen)
+            })
             _validate_preflight(
                 safety, expected_commit=expected_commit, expected_config_version=expected_config_version, phase=phase
             )
             _assert_operational_safety(safety)
         except RuntimeError:
             failed += 1
+            _progress(sessions_failed=failed)
             # RuntimeError is reserved for safety stops, repeated server
             # failures and unusable verification content. None of these may be
             # swallowed while production traffic continues.
             raise
         except (urllib.error.URLError, TimeoutError, ValueError):
             failed += 1
+            _progress(sessions_failed=failed)
+            # An unavailable/invalid safety check must not permit another session.
+            raise
     receipt = {
         "schema_version": 1,
         "receipt_type": "autotutor_verification_traffic",
@@ -491,23 +622,31 @@ def main() -> int:
             "target_transitions": args.target_transitions,
         }
     else:
+        latest: dict[str, Any] = {}
+        def checkpoint(record: dict[str, Any]) -> None:
+            latest.clear()
+            latest.update(record)
+            _write_receipt(Path(args.receipt_output), record)
         try:
             receipt = run_traffic(
                 api_base=args.api_base, expected_commit=args.expected_commit,
                 expected_config_version=args.expected_config_version, phase=args.phase,
                 target_transitions=args.target_transitions, maximum_sessions=args.maximum_sessions,
                 timeout_seconds=args.timeout_seconds, control_start=args.control_window_start,
+                progress_callback=checkpoint,
             )
-        except PreflightUnavailable as exc:
-            receipt = {
+        except (Exception, KeyboardInterrupt) as exc:
+            receipt = latest or {
                 "schema_version": 1, "receipt_type": "autotutor_verification_traffic",
                 "phase": args.phase, "status": "failed", "target_reached": False,
                 "transitions_sent": 0, "sessions_started": 0,
-                "preflight": exc.diagnostics,
+                "error_code": _failure_code(exc), "complete": True,
             }
+            receipt.update(status="failed", target_reached=False, error_code=_failure_code(exc))
+            if isinstance(exc, PreflightUnavailable):
+                receipt["preflight"] = exc.diagnostics
     output = Path(args.receipt_output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_receipt(output, receipt)
     return 0 if receipt.get("target_reached", True) else 7
 
 

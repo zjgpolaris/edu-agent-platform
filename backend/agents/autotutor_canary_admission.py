@@ -3,14 +3,18 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
+
+from agents.autotutor_timing import dimension, phase_timing, timed_call
 
 REQUIRED_SCHEMA_REVISION = 17
 _CACHE_TTL_SECONDS = 10.0
 _cache_lock = threading.Lock()
 _cache: dict[tuple[str, str, str], tuple[float, "AutoTutorCanaryAdmissionSnapshot"]] = {}
+_inflight: dict[tuple[str, str, str], threading.Event] = {}
+_REFRESH_WAIT_SECONDS = 2.0
 
 
 def _now_iso() -> str:
@@ -42,6 +46,9 @@ class AutoTutorCanaryAdmissionSnapshot:
 def clear_autotutor_canary_admission_cache() -> None:
     with _cache_lock:
         _cache.clear()
+        for event in _inflight.values():
+            event.set()
+        _inflight.clear()
 
 
 def _infrastructure_snapshot(*, settings: Any, context: Any) -> AutoTutorCanaryAdmissionSnapshot:
@@ -52,7 +59,7 @@ def _infrastructure_snapshot(*, settings: Any, context: Any) -> AutoTutorCanaryA
     try:
         from agent_runtime.readiness import runtime_schema_readiness
 
-        schema = runtime_schema_readiness()
+        schema = timed_call("admission_schema", runtime_schema_readiness)
         schema_revision = str(schema.get("alembic_version") or "") or None
         try:
             revision_number = int(schema_revision or "0")
@@ -66,7 +73,7 @@ def _infrastructure_snapshot(*, settings: Any, context: Any) -> AutoTutorCanaryA
     try:
         from agent_runtime.rollout_observations import observation_write_health
 
-        health = observation_write_health(
+        health = timed_call("admission_writer_health", observation_write_health,
             window_minutes=15,
             config_version=settings.config_version,
             deployed_commit=context.deployed_commit,
@@ -98,9 +105,22 @@ def _infrastructure_snapshot(*, settings: Any, context: Any) -> AutoTutorCanaryA
     )
 
 
+def _unavailable_snapshot(settings: Any, context: Any, reason: str) -> AutoTutorCanaryAdmissionSnapshot:
+    return AutoTutorCanaryAdmissionSnapshot(
+        status="unknown", checked_at=_now_iso(), expires_at=_now_iso(),
+        environment=context.environment, deployed_commit=context.deployed_commit,
+        config_version=settings.config_version, schema_revision=None,
+        observation_health="unavailable", active_bps=settings.active_bps,
+        reason_codes=(reason,),
+    )
+
+
+@phase_timing("admission")
 def evaluate_autotutor_canary_admission(*, settings: Any, context: Any) -> AutoTutorCanaryAdmissionSnapshot:
     """Return one PII-free snapshot. Production failures always deny Graph."""
     checked_at = _now_iso()
+    dimension("cache_state", "bypassed")
+    dimension("config_version", settings.config_version)
     base_reasons: list[str] = []
     if settings.mode != "active_canary":
         base_reasons.append("executor_mode_not_active_canary")
@@ -150,12 +170,40 @@ def evaluate_autotutor_canary_admission(*, settings: Any, context: Any) -> AutoT
         )
 
     key = (context.environment, context.deployed_commit, settings.runtime_state_fingerprint)
-    now = time.monotonic()
     with _cache_lock:
         cached = _cache.get(key)
-        if cached and now < cached[0]:
+        if cached and time.monotonic() < cached[0]:
+            dimension("cache_state", "hit")
             return cached[1]
-    snapshot = _infrastructure_snapshot(settings=settings, context=context)
-    with _cache_lock:
-        _cache[key] = (now + _CACHE_TTL_SECONDS, snapshot)
-    return snapshot
+        event = _inflight.get(key)
+        owner = event is None
+        if owner:
+            event = threading.Event()
+            _inflight[key] = event
+    assert event is not None
+    if not owner:
+        dimension("cache_state", "wait")
+        if not timed_call("admission_wait", event.wait, _REFRESH_WAIT_SECONDS):
+            return _unavailable_snapshot(settings, context, "admission_refresh_timeout")
+        with _cache_lock:
+            cached = _cache.get(key)
+            if cached and time.monotonic() < cached[0]:
+                return cached[1]
+        return _unavailable_snapshot(settings, context, "admission_refresh_invalidated")
+    dimension("cache_state", "refresh")
+    try:
+        snapshot = _infrastructure_snapshot(settings=settings, context=context)
+        with _cache_lock:
+            # clear() invalidates even a refresh which is still querying the DB.
+            if _inflight.get(key) is not event:
+                return _unavailable_snapshot(settings, context, "admission_refresh_invalidated")
+            snapshot = replace(snapshot, expires_at=_expires_iso())
+            _cache[key] = (time.monotonic() + _CACHE_TTL_SECONDS, snapshot)
+        return snapshot
+    except Exception:
+        return _unavailable_snapshot(settings, context, "admission_refresh_failed")
+    finally:
+        with _cache_lock:
+            if _inflight.get(key) is event:
+                del _inflight[key]
+            event.set()

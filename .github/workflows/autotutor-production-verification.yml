@@ -253,6 +253,7 @@ jobs:
           TRAFFIC_OUTCOME: ${{ steps.traffic.outcome }}
         run: |
           echo "Controlled traffic outcome: \`${TRAFFIC_OUTCOME:-skipped}\`" >> "$GITHUB_STEP_SUMMARY"
+          python3 scripts/autotutor_verification_summary.py /tmp/autotutor-traffic-receipt.json >> "$GITHUB_STEP_SUMMARY"
           if [ -f /tmp/autotutor-verification.md ]; then
             sed -n '1,40p' /tmp/autotutor-verification.md >> "$GITHUB_STEP_SUMMARY"
           fi

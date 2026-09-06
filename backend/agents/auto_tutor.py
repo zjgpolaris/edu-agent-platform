@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field, PrivateAttr
 from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
+from agents.autotutor_timing import dimension, execution_components, phase_timing, timed_call, transition_timing
 from llm_config import llm_quality
 from structured_output import StructuredInvocationProvenance, invoke_structured_with_provenance
 from student_profile import LearningEvent, MemoryEntryUpsert, get_student_profile, try_record_learning_event
@@ -247,6 +248,8 @@ def _execution_context(
 ) -> AutoTutorExecutionContext:
     from deployment import deployed_commit, deployment_environment
 
+    dimension("deployed_commit", deployed_commit())
+    dimension("verification_run_id", verification_run_id)
     return AutoTutorExecutionContext(
         actor_id=actor_id,
         actor_role=actor_role,
@@ -263,6 +266,7 @@ def _execution_context(
     )
 
 
+@phase_timing("execution_with_provider")
 def _execute_selected_transition(
     before: AutoTutorState,
     *,
@@ -272,6 +276,9 @@ def _execute_selected_transition(
     started_at: float,
 ) -> AutoTutorTransitionOutcome:
     """Acquire one observation bundle, compute both candidates, select one pre-commit."""
+    dimension("selected_executor", before.executor_mode)
+    dimension("transition_kind", transition_kind)
+    dimension("config_version", before.executor_config_version)
     effective_command = {**command, "transition_kind": transition_kind}
     provider_started = perf_counter()
     observations = DEFAULT_AUTOTUTOR_OBSERVATION_PROVIDER.prepare(
@@ -371,6 +378,7 @@ def _execute_selected_transition(
     return comparator
 
 
+@phase_timing("observation_write")
 def _record_executor_observation(
     state: AutoTutorState,
     *,
@@ -379,6 +387,13 @@ def _record_executor_observation(
     started_at: float,
     outcome: AutoTutorTransitionOutcome | None = None,
 ) -> None:
+    dimension("selected_executor", state.executor_mode)
+    dimension("transition_kind", transition_kind)
+    dimension("deployed_commit", context.deployed_commit)
+    dimension("config_version", state.executor_config_version)
+    dimension("verification_run_id", context.verification_run_id)
+    dimension("transition_id", outcome.diagnostics.transition_id if outcome else None)
+    execution_components(outcome)
     try:
         from agent_runtime.rollout_observations import try_record_rollout_observation
 
@@ -500,6 +515,7 @@ class _SessionStore:
 _store = _SessionStore()
 
 
+@phase_timing("session_schema")
 def _ensure_session_table() -> None:
     with get_connection() as conn:
         if conn.dialect.name != "sqlite":
@@ -591,6 +607,7 @@ def _restore_state(payload: dict[str, Any]) -> AutoTutorState:
     return state
 
 
+@phase_timing("admission_route")
 def _apply_existing_session_canary_admission(
     state: AutoTutorState,
     *,
@@ -598,6 +615,8 @@ def _apply_existing_session_canary_admission(
     settings: AutoTutorExecutorSettings,
 ) -> None:
     """Permanently downgrade a selected Graph session before Provider execution."""
+    dimension("cache_state", "bypassed")
+    dimension("config_version", settings.config_version)
     if state.executor_assigned_mode != "graph_active" or state.executor_mode != "graph_active":
         return
     if settings.kill_switch:
@@ -663,6 +682,7 @@ def _persist_session(state: AutoTutorState, *, start_idempotency_key: str | None
         )
 
 
+@phase_timing("session_read")
 def _load_start_idempotent_session(student_id: str, idempotency_key: str) -> AutoTutorState | None:
     _ensure_session_table()
     with get_connection() as conn:
@@ -680,6 +700,7 @@ def _load_start_idempotent_session(student_id: str, idempotency_key: str) -> Aut
         return None
 
 
+@phase_timing("session_claim")
 def _claim_answer_transition(
     session_id: str,
     expected_revision: int,
@@ -748,6 +769,7 @@ def _release_answer_transition(
         })
 
 
+@phase_timing("session_read")
 def _load_persisted_session(session_id: str) -> AutoTutorState | None:
     _ensure_session_table()
     with get_connection() as conn:
@@ -826,6 +848,7 @@ def _emit(
     )
 
 
+@phase_timing("trace_mirror")
 def _mirror_transition_trace(state: AutoTutorState, *, from_sequence: int) -> None:
     """Best-effort trace mirror after the business transition has committed."""
     for step in state.runtime_steps:
@@ -1894,6 +1917,7 @@ def _autotutor_side_effect_ledger(state: AutoTutorState) -> list[dict[str, Any]]
     }]
 
 
+@phase_timing("runtime_start")
 def _start_runtime_run(state: AutoTutorState, *, actor_id: str | None, actor_role: str | None) -> None:
     if not state.run_id or state.status != "awaiting_answer":
         return
@@ -2014,6 +2038,7 @@ def _checkpoint_runtime_transition(state: AutoTutorState) -> bool:
         return False
 
 
+@transition_timing
 def start_session(
     student_id: str,
     *,
@@ -2118,7 +2143,7 @@ def start_session(
         learning_events=list(state._pending_learning_events),
     )
     try:
-        commit_autotutor_start(
+        timed_call("business_commit", commit_autotutor_start,
             next_state=state,
             response=start_result,
             start_idempotency_key=idempotency_key,
@@ -2231,6 +2256,7 @@ def _completed_transition_replay(
     return _public_state(state)
 
 
+@phase_timing("business_commit")
 def _commit_claimed_answer_transition(
     state: AutoTutorState,
     *,
@@ -2283,6 +2309,7 @@ def _commit_claimed_answer_transition(
     return result
 
 
+@transition_timing
 def _submit_answer_locked(
     session_id: str,
     answer: str,

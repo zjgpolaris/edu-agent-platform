@@ -49,6 +49,9 @@ def main() -> None:
         "missing_tables": [],
         "missing_columns": [],
     }
+    from schema_reflection_checks import check_reflection
+    with get_connection() as conn:
+        check_reflection(conn, expect_fewer=False)
     print("agent_runtime_schema_readiness_smoke=PASS")
 
 

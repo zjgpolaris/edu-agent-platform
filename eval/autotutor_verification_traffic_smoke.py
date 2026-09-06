@@ -22,6 +22,8 @@ from scripts.run_autotutor_canary_verification_traffic import (  # noqa: E402
     _safe_blocked_reason,
     _request_preflight,
     PreflightUnavailable,
+    _write_receipt,
+    _failure_code,
     main as traffic_main,
     run_traffic,
 )
@@ -49,6 +51,8 @@ class Response:
 
 
 def main() -> None:
+    assert _failure_code(RuntimeError("verification_content_target_unavailable:assessment_not_independent")) == "verification_content_target_unavailable:assessment_not_independent"
+    assert "private" not in _failure_code(RuntimeError("verification_content_target_unavailable:private_student"))
     dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
     dockerfile = (ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
     assert "!knowledge_base/history/**" in dockerignore
@@ -348,6 +352,64 @@ def main() -> None:
         failed_receipt = json.loads(output.read_text())
         assert failed_receipt["target_reached"] is False and failed_receipt["transitions_sent"] == 0
         assert failed_receipt["preflight"]["reason"] == "http_503"
+    # Every safety/content/transport failure persists progress before re-raising.
+    for failure in ("safety", "content", "timeout", "login", "subject", "config", "invalid_safety"):
+        history = []
+        check_count = [0]
+        def failure_read(request, timeout=30):
+            url = request.full_url
+            if "/verification?" in url:
+                check_count[0] += 1
+                if check_count[0] > 1 and failure == "invalid_safety":
+                    raise ValueError("private malformed payload")
+                result = {
+                    "deployment": {"environment": "production", "deployed_commit": COMMIT},
+                    "configuration": {"mode": "active_canary", "active_bps": 100, "config_version": CONFIG},
+                    "aggregate": {"assigned_control_count": 100, "control_latency": {"p95_ms": 100}},
+                }
+                if check_count[0] > 1 and failure == "safety":
+                    result["aggregate"].update(assigned_graph_count=20, blockers=["active_latency_regression"])
+                return Response(result)
+            if url.endswith("/login"):
+                if failure == "login":
+                    raise urllib.error.HTTPError(url, 401, "private body", None, None)
+                return Response({"role": "student", "actor_id": actor, "token": "student-jwt"})
+            if failure == "timeout":
+                raise TimeoutError("private host")
+            if failure == "content":
+                return Response({"status": "needs_content", "content_blocked": {"reason": "private reason"}})
+            return Response({"status": "completed"})
+        settings = dict(env)
+        if failure == "config":
+            settings["AUTOTUTOR_VERIFICATION_ENVIRONMENT"] = "wrong"
+        if failure == "subject":
+            other_actor = next(f"outside-{i}" for i in range(1000) if stable_executor_bucket(f"outside-{i}", salt=SALT) >= 100)
+            settings["AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON"] = json.dumps([
+                {"actor_id": other_actor, "username": "private-user", "password": "private-password"}])
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "receipt.json"
+            def checkpoint(record):
+                history.append(record)
+                _write_receipt(output, record)
+            try:
+                run_traffic(api_base="https://edu.example", expected_commit=COMMIT,
+                    expected_config_version=CONFIG, phase="canary", target_transitions=1,
+                    maximum_sessions=1, timeout_seconds=30, env=settings, control_start=CONTROL_START,
+                    urlopen=failure_read, sleep=lambda _: None, progress_callback=checkpoint)
+                raise AssertionError(f"{failure} was swallowed")
+            except (RuntimeError, ValueError, urllib.error.HTTPError):
+                pass
+            final = json.loads(output.read_text())
+            assert final["status"] == "failed" and not final["target_reached"] and final["complete"]
+            assert final["error_code"] and final["finished_at"]
+            assert final["server_confirmed_committed"] is None
+            assert "private" not in json.dumps(final) and "student-jwt" not in json.dumps(final)
+            if failure in {"safety", "content", "invalid_safety"}:
+                assert final["successful_responses"] == 1 and final["transition_request_attempts"] == 1
+            if failure == "timeout":
+                assert final["request_outcome_unknown"] and final["successful_responses"] == 0
+                assert final["transition_request_attempts"] == 3
+            assert any(not record["complete"] for record in history)
     print("autotutor_verification_traffic_smoke=PASS")
 
 
