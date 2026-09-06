@@ -1,0 +1,77 @@
+name: AutoTutor Scoped Rehearsal Observations
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Full deployed commit with successful push CI
+        required: true
+        type: string
+      expected_config_version:
+        required: true
+        default: v1.49.9-production-canary
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: autotutor-production-verification
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    environment: production-verification
+    timeout-minutes: 60
+    steps:
+      - name: Verify successful immutable push CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" -f head_sha="$EXPECTED_COMMIT" -f event=push -f per_page=20 > /tmp/rehearsal-ci.json
+          python3 -c 'import json,os; runs=json.load(open("/tmp/rehearsal-ci.json"))["workflow_runs"]; r=sorted(runs,key=lambda x:x["created_at"],reverse=True)[0]; assert r["head_sha"]==os.environ["EXPECTED_COMMIT"] and r["event"]=="push" and r["status"]=="completed" and r["conclusion"]=="success"'
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_commit }}
+      - name: Verify checkout belongs to main
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor "$EXPECTED_COMMIT" origin/main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Observe manual restart, rollback-only writer probe and manual kill switch
+        env:
+          AUTOTUTOR_VERIFICATION_ENVIRONMENT: production-verification
+          AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON: ${{ secrets.AUTOTUTOR_VERIFICATION_STUDENT_CREDENTIALS_JSON }}
+          AUTOTUTOR_VERIFICATION_TRAFFIC_SECRET: ${{ secrets.AUTOTUTOR_VERIFICATION_TRAFFIC_SECRET }}
+          AUTOTUTOR_GRAPH_BUCKET_SALT: ${{ secrets.AUTOTUTOR_GRAPH_BUCKET_SALT }}
+          AUTOTUTOR_PRODUCTION_API_TOKEN: ${{ secrets.AUTOTUTOR_PRODUCTION_API_TOKEN }}
+          AUTOTUTOR_PRODUCTION_BOOTSTRAP_SHA256: ${{ vars.AUTOTUTOR_PRODUCTION_BOOTSTRAP_SHA256 }}
+          AUTOTUTOR_PRODUCTION_ALLOWED_HOSTS: ${{ vars.AUTOTUTOR_PRODUCTION_ALLOWED_HOSTS }}
+          API_BASE: ${{ vars.AUTOTUTOR_PRODUCTION_API_BASE }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_CONFIG: ${{ inputs.expected_config_version }}
+        run: |
+          python3 scripts/run_autotutor_rehearsals.py --api-base "$API_BASE" --expected-commit "$EXPECTED_COMMIT" --expected-config-version "$EXPECTED_CONFIG" --timeout-seconds 3000 --output /tmp/autotutor-rehearsals.json
+      - name: Explain evidence boundary
+        if: always()
+        run: |
+          echo 'This job collects scoped observations, not production GO. Writer probe does not cover cached admission or post-commit failures. Process change requires separate operator restart confirmation. No cloud configuration is changed by this workflow.' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f /tmp/autotutor-rehearsals.json ]; then
+            python3 -c 'import json; r=json.load(open("/tmp/autotutor-rehearsals.json")); print(json.dumps({k:r.get(k) for k in ("status","stage","error_code","production_ready","coverage_limits")}))' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autotutor-rehearsals-${{ github.run_id }}
+          path: /tmp/autotutor-rehearsals.json
+          retention-days: 90
+          if-no-files-found: warn

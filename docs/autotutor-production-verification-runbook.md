@@ -21,6 +21,11 @@
 
 ## 发布流程
 
+受控演练工具见 [v1.49.11 安全边界和运行步骤](20260906-autotutor-scoped-rehearsals-v14911-spec.md)。
+Canary 的 `build_candidate_evidence` 默认为 false，先采样再审查完整演练证据。
+只有完整生产演练已验证时才显式开启 candidate 构建；scoped writer probe 不能代替完整 writer-failure attestation。
+演练 runner 不产生 production GO，不能因为它绿色就填写三项 pass。
+
 Canary 和 rollback 任务会先安装被验证 commit 的受约束 runtime 依赖并检查 evidence builder 能否导入，再开始流量采集。如果只需修复工作流编排，可以从环境已允许的独立分支手动运行修复后的 workflow，`expected_commit` 仍指定当前线上版本：工作流会检查该线上版本的成功 push CI、checkout 该完整 SHA，并验证其属于 main 历史。仅当修复没有改变受验证的应用代码时使用这种方式，且不得省略 production-verification 人工审批。若环境只允许 main，不得自行放宽分支规则；需要管理员明确授权特定分支，或按 main 发布流程处理。
 
 1. 在 Render 使用 `legacy`、`active_bps=0`，等待部署完成并核对 commit。

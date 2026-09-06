@@ -26,6 +26,11 @@ on:
         required: true
         default: false
         type: boolean
+      build_candidate_evidence:
+        description: Build candidate only after separately verified full production rehearsals; false collects samples only
+        required: true
+        default: false
+        type: boolean
       target_transitions:
         description: Maximum controlled transitions to generate
         required: true
@@ -251,15 +256,19 @@ jobs:
         if: always() && steps.ci.outputs.verified == 'true'
         env:
           TRAFFIC_OUTCOME: ${{ steps.traffic.outcome }}
+          BUILD_CANDIDATE: ${{ inputs.build_candidate_evidence }}
         run: |
           echo "Controlled traffic outcome: \`${TRAFFIC_OUTCOME:-skipped}\`" >> "$GITHUB_STEP_SUMMARY"
           python3 scripts/autotutor_verification_summary.py /tmp/autotutor-traffic-receipt.json >> "$GITHUB_STEP_SUMMARY"
+          if [ "$BUILD_CANDIDATE" != "true" ]; then
+            echo 'Candidate construction is disabled. Successful sampling is not candidate/final GO; complete and review production rehearsals separately.' >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -f /tmp/autotutor-verification.md ]; then
             sed -n '1,40p' /tmp/autotutor-verification.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Build immutable Canary evidence
-        if: inputs.action == 'canary_snapshot' && steps.remote.outcome == 'success' && (!inputs.generate_controlled_traffic || steps.traffic.outcome == 'success')
+        if: inputs.action == 'canary_snapshot' && inputs.build_candidate_evidence && steps.remote.outcome == 'success' && (!inputs.generate_controlled_traffic || steps.traffic.outcome == 'success')
         env:
           RESTART_RESULT: ${{ inputs.restart_rehearsal }}
           WRITER_RESULT: ${{ inputs.writer_failure_rehearsal }}

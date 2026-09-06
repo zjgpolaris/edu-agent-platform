@@ -51,7 +51,7 @@ def clear_autotutor_canary_admission_cache() -> None:
         _inflight.clear()
 
 
-def _infrastructure_snapshot(*, settings: Any, context: Any) -> AutoTutorCanaryAdmissionSnapshot:
+def _infrastructure_snapshot(*, settings: Any, context: Any, _health_reader=None) -> AutoTutorCanaryAdmissionSnapshot:
     checked_at = _now_iso()
     reasons: list[str] = []
     schema_revision: str | None = None
@@ -73,7 +73,7 @@ def _infrastructure_snapshot(*, settings: Any, context: Any) -> AutoTutorCanaryA
     try:
         from agent_runtime.rollout_observations import observation_write_health
 
-        health = timed_call("admission_writer_health", observation_write_health,
+        health = timed_call("admission_writer_health", _health_reader or observation_write_health,
             window_minutes=15,
             config_version=settings.config_version,
             deployed_commit=context.deployed_commit,

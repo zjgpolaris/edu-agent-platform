@@ -46,6 +46,15 @@ def main() -> None:
     from schema_reflection_checks import check_reflection
     with get_connection() as conn:
         check_reflection(conn, expect_fewer=True)
+    from types import SimpleNamespace
+    from agent_runtime.autotutor_rehearsals import readonly_writer_probe
+    with get_connection() as conn:
+        count_before = conn.execute(text("SELECT COUNT(*) FROM agent_rollout_observations")).scalar()
+    probe = readonly_writer_probe(settings=SimpleNamespace(config_version="postgres-scoped-probe"),
+                                  verification_run_id="postgres-rehearsal-probe")
+    assert probe["fault"] == "database_read_only"
+    with get_connection() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM agent_rollout_observations")).scalar() == count_before
     print("postgres_schema_smoke=PASS")
 
 

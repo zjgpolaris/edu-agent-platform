@@ -56,6 +56,67 @@ class AutoTutorCanaryEvidenceRequest(BaseModel):
     evidence: dict
 
 
+class AutoTutorRehearsalRequest(BaseModel):
+    student_id: str = Field(min_length=1, max_length=128)
+    session_id: str = Field(min_length=1, max_length=64)
+    verification_run_id: str = Field(min_length=8, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    expected_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    expected_config_version: str = Field(min_length=1, max_length=120)
+    operation: str = Field(default="checkpoint", pattern=r"^(checkpoint|restart_verify|restart_resume_verify|kill_switch_verify|writer_probe)$")
+    previous: dict | None = None
+
+
+def _rehearsal_capabilities(actor: Actor) -> dict:
+    import os
+    from deployment import deployed_commit, deployment_environment
+    if autotutor_verification_principal_kind(actor) != "machine":
+        raise HTTPException(status_code=403, detail="rehearsal_machine_identity_required")
+    return {"schema_version": 1, "enabled": os.getenv("EDU_AGENT_AUTOTUTOR_REHEARSALS_ENABLED", "false").lower() == "true",
+            "commit": deployed_commit(), "environment": deployment_environment(),
+            "production_attestation": False, "writer_probe_scope": "isolated_rollback_only_transaction"}
+
+
+@router.get("/api/admin/agent-runtime/autotutor-canary/rehearsals/capabilities")
+async def get_autotutor_rehearsal_capabilities(actor: Actor = Depends(require_autotutor_verifier)):
+    return await run_in_threadpool(_rehearsal_capabilities, actor)
+
+
+def _capture_rehearsal_request(req: AutoTutorRehearsalRequest, actor: Actor) -> dict:
+    import json
+    import os
+    from agent_runtime.autotutor_rehearsals import capture_rehearsal, digest
+    from security.rate_limit import check_rate_limit
+
+    if os.getenv("EDU_AGENT_AUTOTUTOR_REHEARSALS_ENABLED", "false").lower() != "true":
+        raise HTTPException(status_code=403, detail="rehearsals_disabled")
+    if autotutor_verification_principal_kind(actor) != "machine":
+        raise HTTPException(status_code=403, detail="rehearsal_machine_identity_required")
+    if len(json.dumps(req.previous)) > 16384:
+        raise HTTPException(status_code=422, detail="rehearsal_receipt_too_large")
+    check_rate_limit("autotutor-rehearsal:" + actor.actor_id, limit=180, window_seconds=3600)
+    if req.operation == "writer_probe":
+        check_rate_limit("autotutor-writer-probe:" + actor.actor_id, limit=6, window_seconds=3600)
+    try:
+        result = capture_rehearsal(**req.model_dump())
+    except ValueError as exc:
+        # Only stable internal codes; no database details or session content.
+        reason = str(exc) if str(exc).startswith("rehearsal_") else "rehearsal_failed"
+        _audit_autotutor_verification(actor, "autotutor.rehearsal.failed", success=False,
+                                     metadata={"operation": req.operation, "reason": reason})
+        raise HTTPException(status_code=409, detail=reason) from None
+    except Exception:
+        # Database exceptions can contain bound identifiers; do not expose them.
+        raise HTTPException(status_code=503, detail="rehearsal_dependency_unavailable") from None
+    _audit_autotutor_verification(actor, "autotutor.rehearsal.observed", success=True,
+                                 metadata={"operation": req.operation, "receipt_sha256": digest(result)})
+    return result
+
+
+@router.post("/api/admin/agent-runtime/autotutor-canary/rehearsals")
+async def capture_autotutor_rehearsal(req: AutoTutorRehearsalRequest, actor: Actor = Depends(require_autotutor_verifier)):
+    return await run_in_threadpool(_capture_rehearsal_request, req, actor)
+
+
 def _audit_autotutor_verification(
     actor: Actor,
     action: str,

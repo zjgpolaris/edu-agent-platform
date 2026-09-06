@@ -93,6 +93,7 @@ def record_rollout_observation(
     effect_intent_count: int | None = None,
     traffic_source: str = "organic",
     verification_run_id: str | None = None,
+    _connection_factory=None,
 ) -> str:
     if runtime_mode not in VALID_MODES:
         raise ValueError("runtime_mode must be control, shadow or active")
@@ -127,7 +128,7 @@ def record_rollout_observation(
     if source == "organic" and verification_id:
         raise ValueError("organic traffic cannot have verification_run_id")
     observation_id = f"obs_{uuid4().hex}"
-    with get_connection() as conn:
+    with (_connection_factory or get_connection)() as conn:
         if "agent_rollout_observations" not in set(sa_inspect(conn).get_table_names()):
             raise LookupError("rollout observation schema is not migrated")
         conn.execute(text("""INSERT INTO agent_rollout_observations (
