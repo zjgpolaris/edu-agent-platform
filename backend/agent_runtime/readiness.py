@@ -6,7 +6,7 @@ from sqlalchemy import inspect as sa_inspect, text
 
 from db.engine import get_connection
 
-RUNTIME_SCHEMA_HEAD = "017"
+RUNTIME_SCHEMA_HEAD = "018"
 RUNTIME_TABLES = {
     "autotutor_sessions",
     "agent_runs",
@@ -18,6 +18,7 @@ RUNTIME_TABLES = {
     "agent_release_evidence",
     "llm_capability_manifests",
     "weakpoint_evidence",
+    "weakpoints",
     "autotutor_verification_nonces",
 }
 
@@ -29,7 +30,7 @@ def runtime_schema_readiness() -> dict[str, Any]:
             dialect = str(conn.dialect.name)
             inspector = sa_inspect(conn)
             tables = set(inspector.get_table_names())
-            inspected_tables = sorted(tables & {"learning_events", "autotutor_sessions", "accounts", "agent_rollout_observations"})
+            inspected_tables = sorted(tables & {"learning_events", "autotutor_sessions", "accounts", "agent_rollout_observations", "weakpoints"})
             # PostgreSQL batches column reflection across tables; SQLite's dialect
             # implements the same API with per-table PRAGMAs. Never cache across calls.
             reflected = inspector.get_multi_columns(filter_names=inspected_tables) if inspected_tables else {}
@@ -37,6 +38,8 @@ def runtime_schema_readiness() -> dict[str, Any]:
                        for name in inspected_tables}
             missing = sorted(RUNTIME_TABLES - tables)
             missing_columns: list[str] = []
+            if "weakpoints" in tables and "correct_streak" not in columns["weakpoints"]:
+                missing_columns.append("weakpoints.correct_streak")
             if "learning_events" not in tables:
                 missing.append("learning_events")
             elif "effect_key" not in columns["learning_events"]:

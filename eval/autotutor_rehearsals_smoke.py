@@ -43,7 +43,7 @@ def main():
     metadata.create_all(engine)
     with get_connection() as conn:
         conn.execute(text("CREATE TABLE alembic_version(version_num TEXT NOT NULL)"))
-        conn.execute(text("INSERT INTO alembic_version VALUES ('017')"))
+        conn.execute(text("INSERT INTO alembic_version VALUES ('018')"))
         conn.execute(accounts.insert().values(actor_id=STUDENT, username="private-user", password_hash="unused",
             role="student", account_status="active", traffic_cohort="verified", created_at="now", updated_at="now"))
         conn.execute(autotutor_sessions.insert().values(session_id=BASE["session_id"], student_id=STUDENT,

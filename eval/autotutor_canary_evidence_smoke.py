@@ -56,7 +56,7 @@ def main() -> None:
     metadata.create_all(engine)
     with engine.begin() as conn:
         conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('017')"))
+        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('018')"))
     configuration = {
         "config_version": CONFIG, "mode": "active_canary", "active_bps": 100,
         "cohort_fingerprint": "sha256:" + "1" * 64,

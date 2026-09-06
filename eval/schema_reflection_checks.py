@@ -21,7 +21,7 @@ def check_reflection(conn, *, expect_fewer: bool):
     try:
         started = perf_counter()
         tables = set(inspect(conn).get_table_names())
-        for table in ("learning_events", "autotutor_sessions", "accounts", "agent_rollout_observations"):
+        for table in ("learning_events", "autotutor_sessions", "accounts", "agent_rollout_observations", "weakpoints"):
             if table in tables:
                 inspect(conn).get_columns(table)
         conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar()
@@ -41,6 +41,7 @@ def check_reflection(conn, *, expect_fewer: bool):
 
     with patch.object(readiness, "get_connection", borrowed):
         for mutation, expected in (
+            ("ALTER TABLE weakpoints RENAME COLUMN correct_streak TO missing_correct_streak", "missing_columns"),
             ("ALTER TABLE autotutor_sessions RENAME COLUMN last_request_hash TO missing_request_hash", "missing_columns"),
             ("ALTER TABLE agent_checkpoints RENAME TO missing_checkpoints", "missing_tables"),
             ("UPDATE alembic_version SET version_num='016'", "revision"),

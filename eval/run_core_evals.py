@@ -93,6 +93,7 @@ CORE_SUITES = [
     "autotutor_transition_timing_smoke",
     "autotutor_rehearsals_smoke",
     "autotutor_atomic_observation_smoke",
+    "weakpoint_streak_migration_smoke",
     "autotutor_rehearsal_runner_smoke",
     "autotutor_existing_session_downgrade_smoke",
     "autotutor_canary_evidence_smoke",

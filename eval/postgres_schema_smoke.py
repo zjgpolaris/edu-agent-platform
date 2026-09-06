@@ -26,6 +26,15 @@ def main() -> None:
         assert {"agent_rollout_observations", "agent_release_evidence", "llm_capability_manifests", "agent_runs", "review_mastery_state", "autotutor_verification_nonces"} <= tables
         inspector = sa_inspect(conn)
         account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+        assert "correct_streak" in {column["name"] for column in inspector.get_columns("weakpoints")}
+        # Compare the real Alembic-created schema before runtime compatibility
+        # helpers can hide a missing business column in local SQLite tests.
+        from db.schema import metadata
+        for table in ("weakpoints", "weakpoint_evidence", "learning_events", "memory_entries",
+                      "review_mastery_state", "agent_side_effects", "autotutor_sessions"):
+            actual = {column["name"] for column in inspector.get_columns(table)}
+            missing = set(metadata.tables[table].columns.keys()) - actual
+            assert not missing, (table, sorted(missing))
         observation_columns = {column["name"] for column in inspector.get_columns("agent_rollout_observations")}
         observation_indexes = {index["name"] for index in inspector.get_indexes("agent_rollout_observations")}
         assert {"account_status", "traffic_cohort", "updated_at"} <= account_columns
@@ -55,9 +64,9 @@ def main() -> None:
     assert probe["fault"] == "database_read_only"
     with get_connection() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM agent_rollout_observations")).scalar() == count_before
-    print("postgres_schema_smoke=PASS")
     from autotutor_atomic_observation_checks import check_atomic_observation_transactions
     check_atomic_observation_transactions()
+    print("postgres_schema_smoke=PASS")
 
 
 if __name__ == "__main__":

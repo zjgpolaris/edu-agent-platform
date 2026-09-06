@@ -19,6 +19,7 @@ if not database_url.startswith(("postgresql://", "postgres://")):
     raise SystemExit("postgres_upgrade_rehearsal requires a PostgreSQL DATABASE_URL")
 
 from db.engine import get_connection
+from agent_runtime.readiness import RUNTIME_SCHEMA_HEAD
 
 FIXTURE_STUDENT = "migration-rehearsal-student"
 LEGACY_COLUMNS = {
@@ -28,6 +29,7 @@ LEGACY_COLUMNS = {
     "review_sessions": ("id", "student_id", "date", "tasks_json", "completed", "total", "created_at"),
     "autotutor_sessions": ("session_id", "student_id", "trace_id", "status", "state_json", "created_at", "updated_at"),
     "rag_documents": ("id", "collection", "content", "metadata"),
+    "weakpoints": ("student_id", "knowledge_tag", "wrong_count", "last_wrong_at", "source"),
 }
 
 
@@ -71,6 +73,9 @@ def _upgrade_head() -> None:
 def _prepare_production_shape() -> dict[str, object]:
     with get_connection() as conn:
         assert _revision() == "003"
+        conn.execute(text("""INSERT INTO weakpoints (student_id, knowledge_tag, wrong_count, last_wrong_at, source)
+            VALUES (:sid, 'migration-tag', 3, '2026-09-06T00:00:00+00:00', 'auto_tutor')
+            ON CONFLICT (student_id, knowledge_tag) DO NOTHING"""), {"sid": FIXTURE_STUDENT})
         conn.execute(text("""CREATE TABLE IF NOT EXISTS review_sessions (
             id TEXT PRIMARY KEY, student_id TEXT NOT NULL, date TEXT NOT NULL,
             tasks_json TEXT NOT NULL, completed INTEGER NOT NULL DEFAULT 0,
@@ -122,7 +127,9 @@ def _prepare_production_shape() -> dict[str, object]:
 
 def _verify_after(before: dict[str, object]) -> None:
     with get_connection() as conn:
-        assert _revision() == "017"
+        assert _revision() == RUNTIME_SCHEMA_HEAD
+        assert conn.execute(text("SELECT correct_streak FROM weakpoints WHERE student_id=:sid"),
+                            {"sid": FIXTURE_STUDENT}).scalar_one() == 0
         assert _legacy_fingerprints(conn) == before["legacy_fingerprints"]
         assert tuple(conn.execute(text("SELECT student_id, grade, display_name FROM students WHERE student_id=:sid"), {"sid": FIXTURE_STUDENT}).one()) == before["student"]
         assert tuple(conn.execute(text("SELECT id, student_id, feature, event_type FROM learning_events WHERE id='migration-event'")).one()) == before["learning"]
