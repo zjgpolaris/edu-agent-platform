@@ -51,6 +51,15 @@ class Response:
 
 
 def main() -> None:
+    # Incomplete atomic timing is a hard stop even in Control. Preserve the
+    # specific reason in the PII-free receipt instead of generic RuntimeError.
+    for count in (0, 1, 19, 20, 100):
+        try:
+            _assert_operational_safety({"aggregate": {"assigned_graph_count": count,
+                "blockers": ["observation_latency_incomplete"]}})
+            raise AssertionError("pending observation did not stop traffic")
+        except RuntimeError as exc:
+            assert _failure_code(exc) == "verification_safety_stop:observation_latency_incomplete"
     assert _failure_code(RuntimeError("verification_content_target_unavailable:assessment_not_independent")) == "verification_content_target_unavailable:assessment_not_independent"
     assert "private" not in _failure_code(RuntimeError("verification_content_target_unavailable:private_student"))
     dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")

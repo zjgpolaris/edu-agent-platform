@@ -25,10 +25,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 from scripts.autotutor_verification_window import control_window_start
+if str(REPO_ROOT / "backend") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "backend"))
+from autotutor_safety import MINIMUM_LATENCY_SAFETY_SAMPLES, operational_safety_blockers
 
 UrlOpen = Callable[..., Any]
 PHASES = {"control", "canary", "rollback"}
-MINIMUM_LATENCY_SAFETY_SAMPLES = 20
 FORBIDDEN_RECEIPT_KEYS = {
     "actor_id", "student_id", "username", "password", "token", "secret", "salt",
     "session_id", "answer", "question", "attestation", "authorization",
@@ -48,7 +50,7 @@ _FAILURE_CODES = {
 _SAFETY_CODES = {
     "unauthorized_graph_traffic", "duplicate_effects_detected", "duplicate_transition_observations_detected",
     "observation_write_failure", "comparator_not_exact", "fallback_rate_above_one_percent",
-    "active_latency_regression", "observation_write_unhealthy",
+    "active_latency_regression", "observation_write_unhealthy", "observation_latency_incomplete",
 }
 _CONTENT_CODES = {
     "missing_reviewed_content", "content_review_status_invalid", "reviewed_content_missing",
@@ -276,29 +278,7 @@ def _validate_preflight(
 def _assert_operational_safety(payload: dict[str, Any]) -> None:
     fact = payload.get("snapshot") if isinstance(payload.get("snapshot"), dict) else payload
     aggregate = fact.get("aggregate") or {}
-    blockers = set(str(item) for item in aggregate.get("blockers") or [])
-    stop_blockers = {
-        "unauthorized_graph_traffic", "duplicate_effects_detected",
-        "duplicate_transition_observations_detected", "observation_write_failure",
-    }
-    # Comparator, fallback-rate and active-latency checks have no denominator
-    # before the first Graph observation. The aggregate intentionally reports
-    # them as not ready, but treating that state as a traffic safety stop would
-    # make both the initial Legacy baseline and the first Canary sample
-    # impossible to collect. Correctness and fallback invariants become hard
-    # stops with the first Graph sample; latency uses the p95 sample floor below.
-    assigned_graph_count = int(aggregate.get("assigned_graph_count") or 0)
-    if assigned_graph_count > 0:
-        stop_blockers.update({
-            "comparator_not_exact", "fallback_rate_above_one_percent",
-        })
-    # A p95 estimate needs at least 20 observations to contain one tail
-    # sample. Keep collecting below that floor while every correctness and
-    # fallback safety invariant remains enforced; otherwise a single slow
-    # transition can permanently prevent the canary from becoming measurable.
-    if assigned_graph_count >= MINIMUM_LATENCY_SAFETY_SAMPLES:
-        stop_blockers.add("active_latency_regression")
-    matched = sorted(blockers & stop_blockers)
+    matched = operational_safety_blockers(aggregate)
     if matched:
         raise RuntimeError(f"verification_safety_stop:{matched[0]}")
     health = fact.get("observation_health") or aggregate.get("observation_write_health") or {}

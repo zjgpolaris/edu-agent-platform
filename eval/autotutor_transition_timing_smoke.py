@@ -50,6 +50,7 @@ def main():
     assert {r["transition_kind"] for r in committed} >= {"start", "lesson_answer", "exit_ticket_answer"}
     assert {r["selected_executor"] for r in committed} == {"legacy", "graph_active"}
     assert all("business_commit" in r["phases_ms"] and "execution_components_ms" in r for r in committed)
+    assert all("business_schema" in r["phases_ms"] for r in committed)
     assert any("session_claim" in r["phases_ms"] for r in committed)
     assert "active-transition-student" not in json.dumps(records)
     print("autotutor_transition_timing_smoke=PASS")

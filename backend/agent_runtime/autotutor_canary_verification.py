@@ -7,6 +7,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from autotutor_safety import operational_safety_blockers
+
 from agent_runtime.evidence_store import load_release_evidence
 from agent_runtime.readiness import runtime_schema_readiness
 from agent_runtime.rollout_observations import aggregate_autotutor_transition_canary, observation_write_health
@@ -270,12 +272,7 @@ def build_autotutor_canary_verification(
         if not verification_identity.bootstrap_attested:
             blockers.append("verification_bootstrap_not_attested")
     aggregate_blockers = [str(item) for item in aggregate.get("blockers") or []]
-    always_hard = {
-        "unauthorized_graph_traffic", "duplicate_effects_detected",
-        "duplicate_transition_observations_detected", "observation_write_failure",
-        "observation_latency_incomplete",
-    }
-    blockers.extend(item for item in aggregate_blockers if item in always_hard)
+    blockers.extend(operational_safety_blockers(aggregate))
     graph_count = int(aggregate.get("assigned_graph_count") or 0)
     selected_graph = int(aggregate.get("selected_graph_count") or 0)
     committed_graph = int(aggregate.get("committed_graph_count") or 0)

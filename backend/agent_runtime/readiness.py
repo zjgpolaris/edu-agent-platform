@@ -22,20 +22,49 @@ RUNTIME_TABLES = {
     "autotutor_verification_nonces",
 }
 
+_COLUMN_TABLES = {"learning_events", "autotutor_sessions", "accounts", "agent_rollout_observations", "weakpoints"}
+
+
+def _schema_inventory(conn) -> tuple[set[str], dict[str, set[str]]]:
+    if conn.dialect.name == "postgresql":
+        # Read names only: SQLAlchemy's full column reflection also fetches
+        # domains/enums/types/defaults which this existence gate never uses.
+        # Match Inspector's default (visible, non-temp, ordinary/partitioned
+        # tables) scope. No cache: every refresh still detects live schema drift.
+        rows = conn.execute(text("""SELECT c.relname AS table_name, a.attname AS column_name
+            FROM pg_catalog.pg_class AS c
+            JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+            LEFT JOIN pg_catalog.pg_attribute AS a
+              ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+             AND c.relname IN ('learning_events', 'autotutor_sessions', 'accounts',
+                              'agent_rollout_observations', 'weakpoints')
+            WHERE c.relkind IN ('r', 'p') AND c.relpersistence != 't'
+              AND pg_catalog.pg_table_is_visible(c.oid) AND n.nspname != 'pg_catalog'
+        """)).mappings().all()
+        tables: set[str] = set()
+        columns: dict[str, set[str]] = {}
+        for row in rows:
+            name = row["table_name"]
+            tables.add(name)
+            if name in _COLUMN_TABLES:
+                columns.setdefault(name, set())
+                if row["column_name"] is not None:
+                    columns[name].add(row["column_name"])
+        return tables, columns
+    inspector = sa_inspect(conn)
+    tables = set(inspector.get_table_names())
+    inspected = sorted(tables & _COLUMN_TABLES)
+    reflected = inspector.get_multi_columns(filter_names=inspected) if inspected else {}
+    return tables, {name: {column["name"] for column in reflected.get((None, name), [])}
+                    for name in inspected}
+
 
 def runtime_schema_readiness() -> dict[str, Any]:
     """Read-only deployment gate; never bootstraps missing schema."""
     try:
         with get_connection() as conn:
             dialect = str(conn.dialect.name)
-            inspector = sa_inspect(conn)
-            tables = set(inspector.get_table_names())
-            inspected_tables = sorted(tables & {"learning_events", "autotutor_sessions", "accounts", "agent_rollout_observations", "weakpoints"})
-            # PostgreSQL batches column reflection across tables; SQLite's dialect
-            # implements the same API with per-table PRAGMAs. Never cache across calls.
-            reflected = inspector.get_multi_columns(filter_names=inspected_tables) if inspected_tables else {}
-            columns = {name: {column["name"] for column in reflected.get((None, name), [])}
-                       for name in inspected_tables}
+            tables, columns = _schema_inventory(conn)
             missing = sorted(RUNTIME_TABLES - tables)
             missing_columns: list[str] = []
             if "weakpoints" in tables and "correct_streak" not in columns["weakpoints"]:

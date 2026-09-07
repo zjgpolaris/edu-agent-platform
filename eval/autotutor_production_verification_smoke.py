@@ -51,8 +51,8 @@ def _env(mode: str = "legacy", bps: str = "0") -> dict[str, str]:
     }
 
 
-def _build(aggregate: dict, **kwargs: object) -> dict:
-    with patch.dict(os.environ, _env(), clear=True), \
+def _build(aggregate: dict, *, mode: str = "legacy", bps: str = "0", **kwargs: object) -> dict:
+    with patch.dict(os.environ, _env(mode, bps), clear=True), \
          patch("agent_runtime.autotutor_canary_verification.runtime_schema_readiness", return_value={"schema_ready": True, "alembic_version": "017"}), \
          patch("agent_runtime.autotutor_canary_verification.trusted_rollout_cohort_status", return_value={"ready": True, "verified_actor_count": 2}), \
          patch("agent_runtime.autotutor_canary_verification.observation_write_health", return_value={"status": "ok", "ok": True, "failure_count": 0}), \
@@ -100,6 +100,22 @@ def main() -> None:
     pending = _build(_aggregate(blockers=["observation_latency_incomplete"]))
     assert pending["decision"] == "NO_GO"
     assert "observation_latency_incomplete" in pending["blockers"]
+
+    # The server summary must stop at the same floor as the traffic runner,
+    # not hide the cause behind canary_collecting until 100 committed samples.
+    for count in (0, 1, 19, 20, 99, 100):
+        latency = _build(_aggregate(graph=count, blockers=["insufficient_graph_samples", "active_latency_regression"]),
+                         mode="active_canary", bps="100")
+        assert ("active_latency_regression" in latency["blockers"]) is (count >= 20), latency
+        if count >= 20:
+            assert latency["status"] == "BLOCKED" and latency["next_action"] == "stop_canary", latency
+        else:
+            assert latency["phase"] == "canary_collecting", latency
+    for reason in ("comparator_not_exact", "fallback_rate_above_one_percent"):
+        unsafe = _build(_aggregate(graph=1, blockers=[reason]), mode="active_canary", bps="100")
+        assert reason in unsafe["blockers"] and unsafe["next_action"] == "stop_canary", unsafe
+        empty = _build(_aggregate(graph=0, blockers=[reason]), mode="active_canary", bps="100")
+        assert reason not in empty["blockers"], empty
 
     collecting = _build(_aggregate(control=100, graph=1, blockers=["insufficient_graph_samples", "transition_kind_coverage_incomplete"]))
     assert collecting["phase"] == "ready_for_manual_one_percent", collecting

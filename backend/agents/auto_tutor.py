@@ -478,6 +478,7 @@ def _report_atomic_observation_failure(exc: Exception) -> None:
         clear_autotutor_canary_admission_cache()
 
 
+@phase_timing("observation_finalize")
 def _finish_observation_timing(observation_ids: list[str], state: AutoTutorState, *,
                                transition_kind: str, context: AutoTutorExecutionContext, started_at: float) -> None:
     if not observation_ids:
@@ -567,19 +568,13 @@ _store = _SessionStore()
 def _ensure_session_table() -> None:
     with get_connection() as conn:
         if conn.dialect.name != "sqlite":
-            inspector = sa_inspect(conn)
-            if "autotutor_sessions" not in set(inspector.get_table_names()):
-                raise RuntimeError("autotutor_sessions is not migrated; run Alembic 007")
-            required = {
-                "session_id", "student_id", "trace_id", "run_id", "status",
-                "revision", "state_json", "inflight_idempotency_key",
-                "start_idempotency_key", "last_idempotency_key",
-                "last_response_json", "created_at", "updated_at",
-                "inflight_request_hash", "last_request_hash",
-            }
-            missing = sorted(required - {column["name"] for column in inspector.get_columns("autotutor_sessions")})
-            if missing:
-                raise RuntimeError(f"autotutor_sessions migration 007 is incomplete: {', '.join(missing)}")
+            # Validate the same required columns in one round trip, without
+            # expensive type/default reflection or reading session payloads.
+            conn.execute(text("""SELECT session_id, student_id, trace_id, run_id, status,
+                revision, state_json, inflight_idempotency_key, start_idempotency_key,
+                last_idempotency_key, last_response_json, created_at, updated_at,
+                inflight_request_hash, last_request_hash
+                FROM autotutor_sessions WHERE 1=0""")).close()
             return
         conn.execute(
             text(

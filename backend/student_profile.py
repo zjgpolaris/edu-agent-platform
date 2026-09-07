@@ -107,6 +107,22 @@ def now_iso() -> str:
 
 def init_db() -> None:
     with get_connection() as conn:
+        if conn.dialect.name != "sqlite":
+            # Production schema belongs to Alembic. Previously every profile
+            # read / AutoTutor commit issued five CREATE TABLE and six CREATE
+            # INDEX statements, even against an already migrated database.
+            # A zero-row query validates names without reading student data,
+            # bootstrapping production or caching a possibly stale success.
+            from db.schema import students, learning_events, student_profiles, memory_entries, homework_reviews
+            from sqlalchemy import false, select, true
+
+            tables = (students, learning_events, student_profiles, memory_entries, homework_reviews)
+            source = tables[0]
+            for table in tables[1:]:
+                source = source.join(table, true())
+            conn.execute(select(*(column for table in tables for column in table.c))
+                         .select_from(source).where(false())).close()
+            return
         conn.execute(text("""CREATE TABLE IF NOT EXISTS students (
               student_id TEXT PRIMARY KEY, grade TEXT, display_name TEXT,
               created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"""))

@@ -90,6 +90,7 @@ CORE_SUITES = [
     "autotutor_canary_aggregation_smoke",
     "autotutor_canary_admission_smoke",
     "autotutor_admission_performance_smoke",
+    "autotutor_schema_hotpath_smoke",
     "autotutor_transition_timing_smoke",
     "autotutor_rehearsals_smoke",
     "autotutor_atomic_observation_smoke",

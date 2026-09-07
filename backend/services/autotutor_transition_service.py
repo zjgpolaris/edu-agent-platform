@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from db.engine import get_connection
+from agents.autotutor_timing import timed_call
 from services.weakpoint_service import apply_weakpoint_evidence_with_connection
 from services.review_mastery_service import add_retention_interval, set_mastery_state_with_connection
 from student_profile import (
@@ -80,7 +81,7 @@ def commit_autotutor_start(
 ) -> None:
     """Insert a new session and its start effects in one transaction."""
     _require_graph_observation(next_state, observation_writer)
-    init_db()
+    timed_call("business_schema", init_db)
     if effects.session_id != next_state.session_id:
         raise ValueError("start effects do not match session")
     if effects.weakpoint_evidence or effects.review_memory is not None:
@@ -140,7 +141,7 @@ def commit_autotutor_transition(
 ) -> TransitionCommitResult:
     """Commit all business effects and the session CAS in one DB transaction."""
     _require_graph_observation(next_state, observation_writer)
-    init_db()
+    timed_call("business_schema", init_db)
     if effects.session_id != next_state.session_id or effects.claimed_revision != previous_revision:
         raise ValueError("transition effects do not match session revision")
     if effects.idempotency_key != idempotency_key:

@@ -53,8 +53,10 @@ def main() -> None:
     readiness = runtime_schema_readiness()
     assert readiness["schema_ready"] is True, readiness
     from schema_reflection_checks import check_reflection
+    from autotutor_schema_hotpath_checks import check_schema_hotpath
     with get_connection() as conn:
         check_reflection(conn, expect_fewer=True)
+        check_schema_hotpath(conn)
     from types import SimpleNamespace
     from agent_runtime.autotutor_rehearsals import readonly_writer_probe
     with get_connection() as conn:
