@@ -24,7 +24,7 @@ from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "eval"), str(ROOT)]
-SUITES = ["autotutor_teaching_quality_eval", "autotutor_teaching_graph_eval",
+SUITES = ["autotutor_catalog_eval", "autotutor_teaching_quality_eval", "autotutor_teaching_graph_eval",
           "autotutor_demo_graph_policy_smoke", "autotutor_demo_graph_flow_smoke",
           "autotutor_demo_execution_projection_smoke", "auto_tutor_trajectory_eval",
           "demo_evidence_authorization_smoke", "autotutor_session_recovery_smoke"]
@@ -159,6 +159,19 @@ def render_cases(data):
     return "\n".join(lines)
 
 
+def render_planning(data):
+    examples = data.get("examples", [])
+    if data.get("production_evidence") is not False or {e.get("mode") for e in examples} != {"graph_active", "legacy"}:
+        raise ValueError("planning_examples_incomplete")
+    lines = ["\n## 内容感知规划案例", "", "本地合成学情；不属于生产证据。", ""]
+    for example in examples:
+        if (example.get("automatic_target") != "洋务运动目的" or example.get("explicit_target") != "甲午战争影响"
+                or example.get("explicit_status") != "needs_content" or example.get("planning_decision", {}).get("skipped_count") != 1):
+            raise ValueError("planning_example_invalid")
+        lines += [f"- {example['mode']}：自动跳过甲午战争，选择洋务运动目的；显式甲午战争保持原目标并阻断。"]
+    return "\n".join(lines) + "\n"
+
+
 def overall(steps, stable):
     if not stable or any(v["status"] == "fail" for v in steps.values()):
         return "fail"
@@ -274,6 +287,7 @@ def main(argv=None):
                 private = Path(private_dir)
                 if not args.browser_mode:
                     env["AUTOTUTOR_REVIEW_CASE_OUTPUT"] = str(private / "cases.json")
+                    env["AUTOTUTOR_PLANNING_CASE_OUTPUT"] = str(private / "planning.json")
                     command = [sys.executable, str(ROOT / "eval/run_core_evals.py"), "--json", "--no-report"]
                     for suite in SUITES:
                         command += ["--suite", suite]
@@ -284,7 +298,7 @@ def main(argv=None):
                     if data["status"] != "pass":
                         step.update(status="fail", reason="eval_contract_failed")
                     if step["status"] == "pass":
-                        (output / "cases/teaching-example.md").write_text(render_cases(json.loads((private / "cases.json").read_text())) + "\n")
+                        (output / "cases/teaching-example.md").write_text(render_cases(json.loads((private / "cases.json").read_text())) + "\n" + render_planning(json.loads((private / "planning.json").read_text())))
                 browser_data = {k: {"status": "not_run"} for k in ("legacy", "graph")}
                 if not args.backend_only:
                     if not shutil.which("node") or not (ROOT / "frontend/node_modules/@playwright/test/cli.js").is_file():

@@ -220,6 +220,7 @@ class AutoTutorObservationBundle(BaseModel):
     selection: dict[str, str] = Field(default_factory=dict)
     call_counts: dict[str, int] = Field(default_factory=dict)
     provenance: dict[str, Any] = Field(default_factory=dict)
+    content_guard_reason: str | None = None
 
     @classmethod
     def _forbidden_keys(cls) -> set[str]:

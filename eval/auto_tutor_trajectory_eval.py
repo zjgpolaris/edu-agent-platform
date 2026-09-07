@@ -143,7 +143,7 @@ def case_correct_answer_no_spurious_replan() -> tuple[bool, str, dict]:
     """反思触发正确性（反例）：答对不该乱反思 / 乱改计划。"""
     sid = "traj-correct"
     _seed(sid, ["赤壁之战影响"])
-    st = at.start_session(sid, grade="七年级下册", actor_role="student")
+    st = at.start_session(sid, grade="七年级上册", actor_role="student")
     sess = st["session_id"]
     res = at.submit_answer(sess, _current_correct_letter(sess), actor_role="student")
     detail = {"replans": res["replans"], "correct": res.get("last_answer_correct"), "reflect_log": res["reflect_log"]}
@@ -160,7 +160,7 @@ def case_closure_writes_memory_and_review() -> tuple[bool, str, dict]:
     """闭环命中：课后写 memory + 独立证据，并安排保持复测。"""
     sid = "traj-closure"
     _seed(sid, ["辛亥革命历史意义"])
-    st = at.start_session(sid, grade="七年级上册", actor_role="student")
+    st = at.start_session(sid, grade="八年级上册", actor_role="student")
     sess = st["session_id"]
     guard = 0
     while st["status"] != "completed" and guard < 30:
@@ -259,7 +259,7 @@ def case_empty_weakpoints_still_plans() -> tuple[bool, str, dict]:
     """错题本为空的新学生也应规划出合理（非空、有效难度）的计划。"""
     sid = "traj-empty"
     clear_weakpoints(sid)
-    st = at.start_session(sid, grade="七年级上册", actor_role="student")
+    st = at.start_session(sid, grade="八年级上册", actor_role="student")
     plan = st["lesson_plan"]
     detail = {"plan": [p["knowledge_point"] for p in plan]}
     if not plan:

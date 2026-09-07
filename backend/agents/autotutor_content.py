@@ -9,6 +9,8 @@ import hashlib
 import json
 import os
 from functools import lru_cache
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Literal
 
@@ -267,13 +269,14 @@ def _aspect_label(aspect: HistoryAspect) -> str:
 
 
 @lru_cache(maxsize=2)
-def _load_content_cached(path: str, mtime_ns: int) -> tuple[CuratedContentEntry, ...]:
-    del mtime_ns
+def _load_content_cached(raw: bytes) -> tuple[CuratedContentEntry, ...]:
     try:
-        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        payload = json.loads(raw)
     except (OSError, ValueError, TypeError):
         return ()
     rows = payload.get("items", []) if isinstance(payload, dict) else []
+    if not isinstance(rows, list):
+        return ()
     entries: list[CuratedContentEntry] = []
     for row in rows:
         try:
@@ -283,12 +286,27 @@ def _load_content_cached(path: str, mtime_ns: int) -> tuple[CuratedContentEntry,
     return tuple(entries)
 
 
-def load_curated_content(path: Path = CONTENT_PATH) -> tuple[CuratedContentEntry, ...]:
+_CONTENT_SNAPSHOT = ContextVar("autotutor_content_snapshot", default=None)
+
+
+@contextmanager
+def use_content_snapshot(entries):
+    token = _CONTENT_SNAPSHOT.set(entries)
     try:
-        mtime_ns = path.stat().st_mtime_ns
+        yield
+    finally:
+        _CONTENT_SNAPSHOT.reset(token)
+
+
+def load_curated_content(path: Path | None = None) -> tuple[CuratedContentEntry, ...]:
+    captured = _CONTENT_SNAPSHOT.get()
+    if path is None and captured is not None:
+        return captured
+    try:
+        raw = (path or CONTENT_PATH).read_bytes()
     except OSError:
         return ()
-    return _load_content_cached(str(path), mtime_ns)
+    return _load_content_cached(raw)
 
 
 def find_curated_content(objective: LearningObjective) -> CuratedContentEntry | None:

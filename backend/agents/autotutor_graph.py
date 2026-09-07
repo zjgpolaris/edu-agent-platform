@@ -188,6 +188,7 @@ def _active_apply_exit(state: AutoTutorActiveGraphState) -> dict[str, Any]:
         draft,
         str(command.get("answer") or ""),
         claimed_revision=int(command.get("claimed_revision", getattr(draft, "revision", 0))),
+        observations=state.get("observations"),
     )
     return {
         "draft": draft,

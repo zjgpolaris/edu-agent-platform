@@ -1,6 +1,6 @@
 """学习助手 + AutoTutor 路由"""
 import asyncio
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -13,6 +13,14 @@ from tracing import current_trace_id, trace_context
 from ._shared import sse_frame, enforce_guardrails, record_event_if_student, trace_meta
 
 router = APIRouter(tags=["learning"])
+
+
+@router.get("/api/autotutor/targets")
+async def autotutor_targets(grade: str | None = Query(default=None, max_length=40), actor: Actor = Depends(require_auth)):
+    if actor.role not in {"student", "teacher", "admin"}:
+        raise HTTPException(status_code=403, detail="无权查看辅导目标")
+    from agents.autotutor_catalog import targets
+    return await run_in_threadpool(targets, grade)
 
 
 class LearningAssistantRequest(BaseModel):

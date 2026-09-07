@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { authHeaders } from "@/lib/auth";
 import { fetchApiJson, REQUEST_TIMEOUTS } from "@/lib/api";
 import { AutoTutorExecutionSummary, type ExecutionSummary } from "./AutoTutorExecutionSummary";
+import { AutoTutorPlanningSummary, type PlanningDecision } from "./AutoTutorTargets";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -24,6 +25,7 @@ export type DemoJourneyEvent = {
 };
 
 type DemoJourneyResponse = {
+  planning_decision?: PlanningDecision | null;
   execution?: ExecutionSummary | null;
   enabled: boolean;
   session_id: string;
@@ -108,6 +110,7 @@ export function DemoAgentJourney({ sessionId, revision, token }: { sessionId: st
         </ol>
       )}
       {displayed && !unavailable ? <AutoTutorExecutionSummary execution={displayed.execution?.revision === revision ? displayed.execution : null} /> : null}
+      {displayed && !unavailable ? <AutoTutorPlanningSummary decision={displayed.planning_decision?.revision === revision ? displayed.planning_decision : null} /> : null}
     </aside>
   );
 }

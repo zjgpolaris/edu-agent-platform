@@ -81,6 +81,7 @@ CORE_SUITES = [
     "autotutor_demo_graph_policy_smoke",
     "autotutor_demo_graph_flow_smoke",
     "autotutor_teaching_graph_eval",
+    "autotutor_catalog_eval",
     "autotutor_demo_review_smoke",
     "autotutor_demo_execution_projection_smoke",
     "llm_provider_contract_smoke",
@@ -324,6 +325,7 @@ SMOKE_SUITES = [
     "autotutor_demo_graph_policy_smoke",
     "autotutor_demo_graph_flow_smoke",
     "autotutor_teaching_graph_eval",
+    "autotutor_catalog_eval",
     "autotutor_demo_review_smoke",
     "autotutor_demo_execution_projection_smoke",
     "eval_run_evidence_smoke",
@@ -419,6 +421,7 @@ SMOKE_SUITES = [
 ]
 SUITE_FILES = {
     "autotutor_demo_graph_policy_smoke": EVAL_DIR / "autotutor_demo_graph_policy_smoke.py",
+    "autotutor_catalog_eval": EVAL_DIR / "autotutor_catalog_eval.py",
     "autotutor_teaching_graph_eval": EVAL_DIR / "autotutor_teaching_graph_eval.py",
     "autotutor_demo_review_smoke": EVAL_DIR / "autotutor_demo_review_smoke.py",
     "autotutor_demo_graph_flow_smoke": EVAL_DIR / "autotutor_demo_graph_flow_smoke.py",

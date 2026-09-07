@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import { DemoAgentJourney } from "@/components/DemoAgentJourney";
+import { AutoTutorTargets, AutoTutorPlanningSummary, type PlanningDecision } from "@/components/AutoTutorTargets";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { fetchApiJson, ApiError, apiErrorMessage, REQUEST_TIMEOUTS } from "@/lib/api";
@@ -83,6 +84,7 @@ type EvidenceSummary = {
 };
 
 type SessionState = {
+  planning_decision?: PlanningDecision | null;
   session_id: string;
   trace_id: string;
   student_id: string;
@@ -461,6 +463,19 @@ function AutoTutorInner() {
   }, [studentId, user?.token, focusTag, showDemoJourney, freshDemo, requestedSessionId, session, loading, restored, headers, pendingChecked, pending]);
 
   const plan = session?.lesson_plan ?? [];
+  const chooseTarget = (label: string) => {
+    const unresolved = readPending(studentId);
+    if (loading || mutationRef.current || unresolved) {
+      if (unresolved) setPending(unresolved);
+      setError("存在待确认的请求，请先同步进度");
+      return false;
+    }
+    const params = new URLSearchParams();
+    params.set("focus", label);
+    if (showDemoJourney) { params.set("demo", "1"); params.set("fresh", "1"); }
+    router.push(`/student/auto-tutor?${params.toString()}`);
+    return true;
+  };
   const q = session?.current_question ?? null;
   const lastReflection = session?.reflection ?? null;
   const orderedSteps = (session?.runtime_steps ?? []).slice().sort((a, b) => a.sequence - b.sequence);
@@ -497,6 +512,7 @@ function AutoTutorInner() {
           <div className="seal-mark" aria-hidden="true">辅</div>
           <span className="card-label">辅导台状态</span>
           <strong>{status}</strong>
+          <AutoTutorPlanningSummary decision={session?.planning_decision} />
           <p>
             {session
               ? `本节聚焦 ${plan.length} 个学习目标 · 调整讲解 ${session.replans} 次`
@@ -536,6 +552,7 @@ function AutoTutorInner() {
             {loading ? "规划中…" : "开始本节课"}
           </button>
           {error && <p className="learning-error">{error}</p>}
+          {user?.token ? <AutoTutorTargets apiBase={apiBaseUrl} token={user.token} disabled={loading || !!pending || !pendingChecked} onSelect={chooseTarget} /> : null}
           <ol className="autotutor-launch-steps" aria-label="开始后会发生什么">
             <li><strong>读学情</strong><span>翻你的画像与错题本</span></li>
             <li><strong>规划</strong><span>排知识点顺序和难度</span></li>
@@ -627,6 +644,7 @@ function AutoTutorInner() {
                 <Link href={`/student/assistant?prompt=${encodeURIComponent(`我想继续了解${session.content_blocked.objective_label}，请先说明现有教材能支持哪些内容。`)}`}>进入随问继续提问</Link>
                 <Link href="/student/review">换一个复习目标</Link>
               </div>
+              {user?.token ? <AutoTutorTargets apiBase={apiBaseUrl} token={user.token} disabled={loading || !!pending || !pendingChecked} onSelect={chooseTarget} /> : null}
             </div>
           ) : q ? (
             <div className="autotutor-question" style={{ padding: 8 }}>

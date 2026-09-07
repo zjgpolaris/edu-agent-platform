@@ -126,6 +126,7 @@ class LessonStep(BaseModel):
     practice_result: dict[str, Any] | None = None
     content_blocked: dict[str, Any] | None = None
     assessment_history: list[str] = Field(default_factory=list)
+    planning_decision: dict[str, Any] | None = None
 
 
 class RuntimeStep(BaseModel):
@@ -965,49 +966,21 @@ def _tool_context(student_id: str, actor_id: str | None, actor_role: str | None)
 # plan
 # --------------------------------------------------------------------------- #
 def _fallback_plan(weakpoints: list[dict[str, Any]], weak_topics: list[str], recent_topics: list[str]) -> list[LessonStep]:
-    """从学情中选择一个主目标，避免把无关近期主题拼成一节课。"""
-    seen: list[str] = []
-    steps: list[LessonStep] = []
-    ranked = [w["knowledge_tag"] for w in weakpoints] + weak_topics + recent_topics
-    for tag in ranked:
-        if not tag or tag in seen:
-            continue
-        seen.append(tag)
-        wrong = next((w["wrong_count"] for w in weakpoints if w["knowledge_tag"] == tag), 0)
-        difficulty: Difficulty = "easy" if wrong >= 2 else "medium"
-        steps.append(
-            LessonStep(
-                knowledge_point=tag,
-                source_tag=tag,
-                difficulty=difficulty,
-                rationale=f"错题本中错过 {wrong} 次，优先巩固。" if wrong else "近期学习主题，纳入巩固。",
-            )
-        )
-        if len(steps) >= 1:
-            break
-    if not steps:
-        steps.append(LessonStep(knowledge_point="鸦片战争影响", difficulty="easy", rationale="暂无学情，从近代史开篇的核心影响切入。"))
-    return steps
+    from agents.autotutor_catalog import choose
+    label, difficulty, decision = choose(weakpoints, weak_topics, recent_topics)
+    return [LessonStep(knowledge_point=label, source_tag=label, difficulty=difficulty,
+                       rationale="按可用教材安排学习目标。", planning_decision=decision)]
 
 
-def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], profile: Any, focus_tags: list[str] | None = None, focus_reason: str | None = None) -> list[LessonStep]:
-    """生成受控课时计划：一个主目标，后续仅在有审核关系时再扩支持目标。"""
-    weak_topics = list(getattr(profile, "weak_topics", []) or [])
-    recent_topics = list(getattr(profile, "recent_topics", []) or [])
-    if focus_tags and str(focus_tags[0]).strip():
-        tag = str(focus_tags[0]).strip()
-        wrong = next((int(w.get("wrong_count") or 0) for w in weakpoints if w.get("knowledge_tag") == tag), 0)
-        rationale = f"显式聚焦目标；错题本中错过 {wrong} 次。" if wrong else "显式聚焦目标，作为本节主目标。"
-        if focus_reason:
-            rationale += f" 错因提示：{focus_reason}"
-        return [LessonStep(
-            knowledge_point=tag,
-            source_tag=tag,
-            difficulty="easy" if wrong >= 2 else "medium",
-            strategy="先明确学习目标，再区分易混概念并用有效题检验。",
-            rationale=rationale,
-        )]
-    return _fallback_plan(weakpoints, weak_topics, recent_topics)[:1]
+def _generate_plan(state: AutoTutorState, weakpoints: list[dict[str, Any]], profile: Any, focus_tags: list[str] | None = None, focus_reason: str | None = None, *, catalog=None) -> list[LessonStep]:
+    from agents.autotutor_catalog import choose
+    focus = str(focus_tags[0]).strip() if focus_tags and str(focus_tags[0]).strip() else None
+    label, difficulty, decision = choose(weakpoints, list(getattr(profile, "weak_topics", []) or []),
+        list(getattr(profile, "recent_topics", []) or []), grade=getattr(state, "grade", None) or getattr(profile, "grade", None),
+        focus=focus, catalog=catalog)
+    return [LessonStep(knowledge_point=label, source_tag=label, difficulty=difficulty,
+        strategy="先明确学习目标，再区分易混概念并用有效题检验。",
+        rationale="显式聚焦目标。" if focus else "优先巩固有教材支持的薄弱点。", planning_decision=decision)]
 
 
 # --------------------------------------------------------------------------- #
@@ -1774,6 +1747,7 @@ def _public_reflection(reflection: ReflectionRecord) -> dict[str, Any]:
 
 
 def _public_state(state: AutoTutorState) -> dict[str, Any]:
+    from agents.autotutor_catalog import project_planning
     from agents.autotutor_demo_execution import project_execution
     current = state.lesson_plan[state.current_step_index] if state.current_step_index < len(state.lesson_plan) else None
     current_question = None
@@ -1842,6 +1816,7 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         "trace_id": state.trace_id,
         "student_id": state.student_id,
         "grade": state.grade,
+        "planning_decision": project_planning(state.lesson_plan[0].planning_decision, state.revision) if state.lesson_plan else None,
         "status": state.status,
         "phase": state.phase,
         "content_gate_mode": state.content_gate_mode,

@@ -6,6 +6,18 @@
 **Live Demo：** [edu-agent-platform.vercel.app](https://edu-agent-platform.vercel.app)
 > 一键体验账号：`pilot-student` / `pilot123`（首页按钮会直达 AutoTutor Agent 主线）
 
+### v1.52 内容感知规划与目标选择
+
+AutoTutor 自动按原学情优先序选择同年级/册次内有审核教材、有效练习及独立退出票的目标。
+显式指定的目标若暂不支持，会保留原目标并提示补充内容；学生可从目录选择新目标开启新课。
+开始页和内容阻断页提供目标目录，学生、教师证据与演示旅程同步展示本次规划原因。
+
+沿用下方本地 Graph 启动与 review 命令，验收包已包含自动规划、显式阻断和手动替代场景。
+不增加题库或在线模型调用；当前审核覆盖仍为 5 个目标。
+
+[v1.52 Spec](docs/20260907-autotutor-content-aware-planning-v152-spec.md) ·
+[实现与验收记录](docs/20260907-autotutor-content-aware-planning-v152-delivery.md)
+
 ### v1.50 本地 Graph 演示（免费、离线）
 
 已有 Python 虚拟环境和前端依赖后，在仓库根目录运行：

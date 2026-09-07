@@ -86,6 +86,7 @@ def _summary(event_type: str, metadata: dict[str, Any], status: str) -> str:
 
 
 def project_demo_trace(state: dict[str, Any]) -> dict[str, Any]:
+    from agents.autotutor_catalog import project_planning
     from agents.autotutor_demo_execution import project_execution
     """Return a bounded, deterministic projection of one AutoTutor session."""
     projected: list[dict[str, Any]] = []
@@ -121,6 +122,7 @@ def project_demo_trace(state: dict[str, Any]) -> dict[str, Any]:
         })
     return {
         "execution": project_execution(state.get("execution")),
+        "planning_decision": project_planning(state.get("planning_decision"), state.get("revision", 0)),
         "enabled": True,
         "session_id": _text(state.get("session_id"), limit=128),
         "status": _text(state.get("status"), limit=40),

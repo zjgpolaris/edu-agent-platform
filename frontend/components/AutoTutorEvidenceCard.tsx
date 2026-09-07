@@ -1,6 +1,8 @@
 import { AutoTutorExecutionSummary, type ExecutionSummary } from "./AutoTutorExecutionSummary";
+import { AutoTutorPlanningSummary, type PlanningDecision } from "./AutoTutorTargets";
 
 export type AutoTutorEvidence = {
+  planning_decision?: PlanningDecision | null;
   execution?: ExecutionSummary | null;
   session_id: string;
   student_id: string;
@@ -50,6 +52,7 @@ export function AutoTutorEvidenceCard({ data }: { data: AutoTutorEvidence }) {
       </p>
       {!completed ? <p role="status">该课程尚未完成，以下仅展示当前已产生的证据。</p> : null}
       <AutoTutorExecutionSummary execution={data.execution} />
+      <AutoTutorPlanningSummary decision={data.planning_decision} />
       <div className="eval-ops-grid" style={{ marginTop: 16 }}>
         <div className="eval-ops-card"><span>学习目标</span><strong>{data.knowledge_points.join("、") || "暂无"}</strong><small>本次会话</small></div>
         <div className="eval-ops-card"><span>反思 / 重规划</span><strong>{data.reflection_count} / {data.replans}</strong><small>Agent 策略调整</small></div>

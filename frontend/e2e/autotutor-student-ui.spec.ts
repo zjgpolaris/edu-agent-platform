@@ -116,3 +116,32 @@ test("AutoTutor 内容不足时安全阻断且不展示题目", async ({ page })
   await expect(page.getByText(/不会改变你的掌握记录/)).toBeVisible();
   await expect(page.locator(".quiz-option-btn")).toHaveCount(0);
 });
+
+test("不支持的显式目标保留原意图，选择审核目标开启新课", async ({ page }) => {
+  test.setTimeout(90_000);
+  await enterStudent(page);
+  await page.goto(`/student/auto-tutor?demo=1&fresh=1&focus=${encodeURIComponent("甲午战争影响")}`);
+  await expect(page.getByRole("region", { name: "选择学习目标" })).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveURL(/session_id=at_/);
+  const blockedId = new URL(page.url()).searchParams.get("session_id");
+  await expect(page.getByLabel("目标安排说明").first()).toContainText("暂缺");
+  await page.getByRole("button", { name: /洋务运动目的.*八年级上册/ }).click();
+  await expect(page.locator(".quiz-option-btn")).toHaveCount(4, { timeout: 30_000 });
+  await expect.poll(() => new URL(page.url()).searchParams.get("session_id")).not.toBe(blockedId);
+  await expect(page.getByLabel("目标安排说明").first()).toContainText("指定的目标");
+});
+
+test("没有指定目标时按可用内容自动规划", async ({ page }) => {
+  test.setTimeout(90_000);
+  await enterStudent(page);
+  await page.goto("/student/auto-tutor?demo=1&fresh=1");
+  const started = page.waitForResponse(response => response.url().endsWith("/api/autotutor/start") && response.request().method() === "POST");
+  await page.getByRole("button", { name: "开始本节课" }).click();
+  const response = await started;
+  expect(response.request().postDataJSON().focus_tags).toBeUndefined();
+  const lesson = await response.json();
+  expect(lesson.planning_decision.launchable).toBe(true);
+  expect(lesson.planning_decision.selection_source).not.toBe("explicit_focus");
+  await expect(page.locator(".quiz-option-btn")).toHaveCount(4, { timeout: 30_000 });
+  await expect(page.getByLabel("目标安排说明").first()).toContainText("有教材支持");
+});

@@ -146,11 +146,17 @@ def apply_lesson_answer_transition(
     observations: AutoTutorObservationBundle,
     *,
     claimed_revision: int,
-) -> tuple[bool, Any | None]:
+) -> tuple[bool | None, Any | None]:
     from agents import auto_tutor as at
     from agents.autotutor_content import answer_feedback as build_answer_feedback
 
     step = state.lesson_plan[state.current_step_index]
+    if observations.content_guard_reason:
+        if step.planning_decision:
+            step.planning_decision.update(launchable=False, reason_code=observations.content_guard_reason)
+        at._block_content(state, step, observations.content_guard_reason)
+        state.revision = claimed_revision + 1
+        return None, None
     step.attempts += 1
     is_correct, _ = at._judge(step, answer)
     assessment = at._assessment_from_question(step.question or {})
@@ -249,8 +255,16 @@ def apply_lesson_answer_transition(
     return False, None
 
 
-def apply_exit_answer_transition(state: Any, answer: str, *, claimed_revision: int) -> bool:
+def apply_exit_answer_transition(state: Any, answer: str, *, claimed_revision: int, observations=None) -> bool | None:
     from agents import auto_tutor as at
+
+    if observations and observations.content_guard_reason:
+        step = state.lesson_plan[0]
+        if step.planning_decision:
+            step.planning_decision.update(launchable=False, reason_code=observations.content_guard_reason)
+        at._block_content(state, step, observations.content_guard_reason)
+        state.revision = claimed_revision + 1
+        return None
 
     correct, _ = at._KERNEL_SUBMIT_EXIT_TICKET(state, answer)
     at._KERNEL_FINALIZE(state)
@@ -332,6 +346,7 @@ def execute_autotutor_transition(
             state,
             str(command.get("answer") or ""),
             claimed_revision=int(command.get("claimed_revision", state.revision)),
+            observations=observations,
         )
     elif kind == "recovery_resume":
         apply_recovery_transition(state)

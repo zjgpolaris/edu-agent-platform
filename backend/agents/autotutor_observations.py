@@ -25,6 +25,7 @@ def _acquire_content_observation(
     step_index: int,
     tool_context: Any,
     correction: str = "",
+    catalog=None,
 ) -> dict[str, Any]:
     """Acquire retrieval/content into a detached step DTO without state mutation."""
     from agents import auto_tutor as at
@@ -40,6 +41,17 @@ def _acquire_content_observation(
         lesson=before.lesson_id,
         misconception_hint=step.rationale,
     )
+    if step.planning_decision and not step.planning_decision.get("launchable"):
+        step.status = "content_blocked"
+        step.question = step.teaching = None
+        step.content_blocked = _blocked_payload(step, step.planning_decision.get("reason_code") or "content_unavailable")
+        return step.model_dump(mode="json")
+    unavailable_ids = set()
+    if catalog:
+        allowed = catalog.capability(step.knowledge_point)["pairs"]
+        from agents.autotutor_content import find_curated_content
+        entry = find_curated_content(step.objective)
+        unavailable_ids = {item.assessment_id for item in entry.practice_items if item.assessment_id not in allowed} if entry else set()
     retrieval_data: dict[str, Any] = {}
     sources: list[dict[str, Any]] = []
     retrieval_error: str | None = None
@@ -72,7 +84,7 @@ def _acquire_content_observation(
         kind="practice",
         variant_index=step.attempts,
         target_difficulty=step.difficulty,
-        excluded_assessment_ids=set(step.assessment_history),
+        excluded_assessment_ids=set(step.assessment_history) | unavailable_ids,
         preferred_cognitive_actions=["recall", "explain"] if step.replanned else None,
         selection_seed=f"{before.session_id}:{step_index}:{step.attempts}",
     )
@@ -92,7 +104,7 @@ def _acquire_content_observation(
             kind="practice",
             variant_index=step.attempts,
             target_difficulty=fallback_difficulty,
-            excluded_assessment_ids=set(step.assessment_history),
+            excluded_assessment_ids=set(step.assessment_history) | unavailable_ids,
             preferred_cognitive_actions=["recall", "explain"],
             selection_seed=f"{before.session_id}:{step_index}:{step.attempts}:lower",
         )
@@ -121,7 +133,7 @@ def _acquire_content_observation(
     return step.model_dump(mode="json")
 
 
-def _acquire_exit_ticket_observation(*, before: Any, target: Any, generated_from: str) -> dict[str, Any] | None:
+def _acquire_exit_ticket_observation(*, before: Any, target: Any, generated_from: str, catalog=None) -> dict[str, Any] | None:
     from agents import auto_tutor as at
 
     if target.objective is None:
@@ -132,12 +144,18 @@ def _acquire_exit_ticket_observation(*, before: Any, target: Any, generated_from
     }
     practice_id = str((target.question or {}).get("assessment_id") or "") or None
     practice = at._assessment_from_question(target.question) if target.question else None
+    unavailable_ids = set()
+    if catalog:
+        from agents.autotutor_content import find_curated_content
+        entry = find_curated_content(target.objective)
+        allowed = catalog.capability(target.knowledge_point)["pairs"].get(practice_id, [])
+        unavailable_ids = {item.assessment_id for item in entry.exit_ticket_items if item.assessment_id not in allowed} if entry else set()
     prepared = at.prepare_content(
         target.objective,
         retrieval_data,
         kind="exit_ticket",
         target_difficulty="medium",
-        excluded_assessment_ids=set(target.assessment_history),
+        excluded_assessment_ids=set(target.assessment_history) | unavailable_ids,
         preferred_cognitive_actions=["apply"],
         selection_seed=f"{before.session_id}:exit-ticket:{target.objective.objective_id}",
         excluded_assessment_id=practice_id,
@@ -163,12 +181,41 @@ def _acquire_exit_ticket_observation(*, before: Any, target: Any, generated_from
 class DefaultAutoTutorObservationProvider:
     """Capture nondeterministic inputs once; never execute a transition mutation."""
 
-    def prepare(
+    def prepare(self, *, before, command, context):
+        from agents.autotutor_catalog import snapshot
+        from agents.autotutor_content import use_content_snapshot
+        catalog = snapshot()
+        kind = command.get("transition_kind")
+        if kind in {"lesson_answer", "exit_ticket_answer"} and before.lesson_plan and before.lesson_plan[0].planning_decision:
+            target = before.lesson_plan[before.current_step_index]
+            pairs = catalog.capability(target.knowledge_point)["pairs"]
+            practice_id = (target.question or {}).get("assessment_id")
+            available = practice_id in pairs and catalog.question_valid(target.knowledge_point, target.question, "practice")
+            if kind == "exit_ticket_answer":
+                available = available and before.exit_ticket and before.exit_ticket.question.get("assessment_id") in pairs.get(practice_id, []) and catalog.question_valid(target.knowledge_point, before.exit_ticket.question, "exit_ticket")
+            if not available:
+                return AutoTutorObservationBundle(transition_id=f"ato_{uuid4().hex}", transition_kind=kind,
+                    command=copy.deepcopy(command), clock={"captured_at": time.time()}, content_guard_reason="content_unavailable")
+        with use_content_snapshot(catalog.entries):
+            bundle = self._prepare(before=before, command=command, context=context, catalog=catalog)
+        if snapshot().version != catalog.version:
+            if kind == "start" and bundle.content:
+                blocked = copy.deepcopy(bundle.content)
+                blocked.update(status="content_blocked", question=None, teaching=None, content_validation=None,
+                    content_blocked={"reason": "catalog_changed"})
+                if blocked.get("planning_decision"):
+                    blocked["planning_decision"].update(launchable=False, reason_code="catalog_changed")
+                return bundle.model_copy(update={"content": blocked})
+            return bundle.model_copy(update={"content_guard_reason": "catalog_changed"})
+        return bundle
+
+    def _prepare(
         self,
         *,
         before: Any,
         command: dict[str, Any],
         context: AutoTutorExecutionContext,
+        catalog,
     ) -> AutoTutorObservationBundle:
         from agents import auto_tutor as at
         from agents.autotutor_domain import replan_policy
@@ -220,6 +267,7 @@ class DefaultAutoTutorObservationProvider:
                 profile,
                 focus_tags=focus_tags or None,
                 focus_reason=str(command.get("focus_reason") or "") or None,
+                catalog=catalog,
             )
             plan = [
                 {
@@ -229,6 +277,7 @@ class DefaultAutoTutorObservationProvider:
                     "strategy": step.strategy,
                     "tool": step.tool,
                     "rationale": step.rationale,
+                    "planning_decision": step.planning_decision,
                 }
                 for step in steps
             ]
@@ -237,6 +286,7 @@ class DefaultAutoTutorObservationProvider:
                 raw_step=steps[0],
                 step_index=0,
                 tool_context=tool_context,
+                catalog=catalog,
             )
             calls["retrieval"] = calls["tool"] = 1
 
@@ -270,6 +320,7 @@ class DefaultAutoTutorObservationProvider:
                     step_index=index,
                     tool_context=tool_context,
                     correction=str(feedback.get("correction") or ""),
+                    catalog=catalog,
                 )
                 calls["model"] = calls["retrieval"] = calls["tool"] = 1
             else:
@@ -280,6 +331,7 @@ class DefaultAutoTutorObservationProvider:
                         raw_step=before.lesson_plan[next_index],
                         step_index=next_index,
                         tool_context=tool_context,
+                        catalog=catalog,
                     )
                     calls["retrieval"] = calls["tool"] = 1
                 else:
@@ -295,6 +347,7 @@ class DefaultAutoTutorObservationProvider:
                         before=before,
                         target=target,
                         generated_from=generated_from,
+                        catalog=catalog,
                     )
 
         bundle = AutoTutorObservationBundle(
