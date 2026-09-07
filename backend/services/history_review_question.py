@@ -148,12 +148,15 @@ def build_curated_review_question(
     task_role: str | None = None,
     excluded_assessment_ids: set[str] | None = None,
     excluded_fingerprints: set[str] | None = None,
+    assessment_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Convert one curriculum-reviewed assessment into the review contract."""
     entry = _curated_entry(tag)
     if entry is None:
         return None
-    from agents.autotutor_content import assessment_fingerprint
+    from agents.autotutor_content import APPROVED_REVIEW_STATUSES, assessment_fingerprint, build_learning_objective, prepare_content
+    if entry.review_status not in APPROVED_REVIEW_STATUSES:
+        return None
 
     practice = list(entry.practice_items)
     exit_items = list(entry.exit_ticket_items)
@@ -170,6 +173,8 @@ def build_curated_review_question(
         candidates = [*exit_items, *practice]
     else:
         candidates = practice
+    if assessment_id is not None:
+        candidates = [item for item in candidates if item.assessment_id == assessment_id]
     unfiltered_candidates = list(candidates)
     if target_difficulty:
         matched = [item for item in candidates if item.difficulty == target_difficulty]
@@ -185,10 +190,7 @@ def build_curated_review_question(
         if item.assessment_id not in excluded_ids and assessment_fingerprint(item) not in excluded_prints
     ]
     if task_role and not fresh:
-        fresh = [
-            item for item in unfiltered_candidates
-            if item.assessment_id not in excluded_ids and assessment_fingerprint(item) not in excluded_prints
-        ]
+        fresh = [item for item in unfiltered_candidates if item.assessment_id not in excluded_ids and assessment_fingerprint(item) not in excluded_prints]
     if task_role and not fresh:
         return None
     if fresh:
@@ -206,6 +208,10 @@ def build_curated_review_question(
 
     source_label = entry.source_refs[0].label if entry.source_refs else entry.lesson
     for item in sorted(candidates, key=candidate_key):
+        pool = entry.exit_ticket_items if item.kind == "exit_ticket" else entry.practice_items
+        checked = prepare_content(build_learning_objective(tag), {}, kind=item.kind, variant_index=pool.index(item))
+        if checked.validation.status != "verified":
+            continue
         if task_role == "retrieval" or (is_variant and item.review_prompt and item.feedback_material):
             material = item.feedback_material.strip()
             question = item.review_prompt.strip()
@@ -238,12 +244,12 @@ def build_curated_review_question(
             "source_label": source_label,
             "done": False,
             "correct": None,
-            "is_variant": is_variant,
+            "is_variant": is_variant and not (task_role == "retrieval" and item.cognitive_action == "recall"),
             "generation_source": "curriculum_reviewed",
             "quality_contract_version": QUALITY_CONTRACT_VERSION,
             "quality_status": "verified",
         }
-        if not review_question_quality_reasons(result, require_variant=is_variant):
+        if not review_question_quality_reasons(result):
             return result
     return None
 

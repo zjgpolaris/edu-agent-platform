@@ -30,8 +30,18 @@ type Session = {
   date: string; completed: number; total: number; tasks: Task[];
   blocked_count?: number; blocked_tags?: string[];
   session_revision: number;
+  blocked_reviews?: Array<{ knowledge_tag: string; available_at: string; reason_code: string }>;
   scheduled_reviews?: Array<{ knowledge_tag: string; available_at: string; message: string }>;
 };
+
+function FollowUpSchedule({ session }: { session: Session | null }) {
+  if (!session?.scheduled_reviews?.length && !session?.blocked_reviews?.length) return null;
+  return <section aria-label="复测安排" className="panel" style={{ padding: 16, marginBottom: 16 }}>
+    <h2>复测安排</h2>
+    {session.scheduled_reviews?.map(item => <p key={item.knowledge_tag}>{item.knowledge_tag}：等待间隔复测。最早时间 {new Date(item.available_at).toLocaleString("zh-CN", { hour12: false })}，到期仍需核验独立题。</p>)}
+    {session.blocked_reviews?.map(item => <p key={item.knowledge_tag}>{item.knowledge_tag}：延迟复测暂缺独立题，原学习证据已保留。</p>)}
+  </section>;
+}
 
 /** 后端出题失败时会留下无法作答的占位题，前端不能把它当正常题呈现。 */
 function isUnusableTask(task: Task): boolean {
@@ -314,6 +324,7 @@ export default function ReviewTab() {
     <div className="rv">
       <InjectStyles />
       <div className="rv-inner">
+        <FollowUpSchedule session={session} />
         <div className="rv-empty">
           <div className="rv-empty-c">卷</div>
           <div className="rv-empty-t">{session?.blocked_count ? "暂无可发布复习题" : "暂无复习任务"}</div>
@@ -345,6 +356,7 @@ export default function ReviewTab() {
     <div className="rv">
       <InjectStyles />
       <div className="rv-inner">
+        <FollowUpSchedule session={session} />
         <div className="rv-head">
           <div>
             <div className="rv-eyebrow">今日复习</div>

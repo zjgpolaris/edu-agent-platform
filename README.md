@@ -6,6 +6,18 @@
 **Live Demo：** [edu-agent-platform.vercel.app](https://edu-agent-platform.vercel.app)
 > 一键体验账号：`pilot-student` / `pilot123`（首页按钮会直达 AutoTutor Agent 主线）
 
+### v1.53 课后间隔复测
+
+AutoTutor 完成页和教师证据现可查看课后排期，区分本节独立检验与间隔复测结果。
+今日复习会在发布前核验题目与来源链；到期缺少独立题时明确说明并保留证据，内容恢复后可重新核验。
+角色化复测不会退回普通旧题，重复提交与跨日任务不能重复计入留存。
+
+当前五个目标的退出票通常已在课内使用，延迟复测可能需要补充审核独立题。
+本轮没有扩大题库；完整本地 review 包已覆盖排期、到期缺题与恢复边界。
+
+[v1.53 Spec](docs/20260907-autotutor-retention-follow-up-v153-spec.md) ·
+[实现与验收记录](docs/20260907-autotutor-retention-follow-up-v153-delivery.md)
+
 ### v1.52 内容感知规划与目标选择
 
 AutoTutor 自动按原学情优先序选择同年级/册次内有审核教材、有效练习及独立退出票的目标。

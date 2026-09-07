@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
 import { TraceTimeline } from "@/components/TraceTimeline";
 import { DemoAgentJourney } from "@/components/DemoAgentJourney";
+import { AutoTutorFollowUp } from "@/components/AutoTutorFollowUp";
 import { AutoTutorTargets, AutoTutorPlanningSummary, type PlanningDecision } from "@/components/AutoTutorTargets";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -617,12 +618,13 @@ function AutoTutorInner() {
                   {session.evidence && (
                     <div className="learning-runtime-chips">
                       <small>{session.evidence.exit_ticket_recorded ? "学习事件已记录" : "学习事件未记录"}</small>
-                      <small>{session.evidence.weakpoint_action === "verified_correct_evidence_recorded" ? "已写入验证掌握" : session.evidence.weakpoint_action === "weakpoint_recorded" ? "已回流错题本" : "未改变掌握记录"}</small>
+                      <small>{["verified_correct_evidence_recorded", "independent_correct_evidence_recorded"].includes(session.evidence.weakpoint_action) ? "即时检验证据已记录" : session.evidence.weakpoint_action === "weakpoint_recorded" ? "已回流错题本" : "未改变掌握记录"}</small>
                       <small>{session.evidence.tutor_effectiveness_ready ? "教师端可见" : "等待同步"}</small>
                     </div>
                   )}
                 </div>
               )}
+              {user?.token ? <AutoTutorFollowUp sessionId={session.session_id} revision={session.revision} token={user.token} /> : null}
               <div className="learning-suggestion-row" style={{ marginTop: 16 }}>
                 <Link href="/student/review" className="learning-tool-action">去今日复习</Link>
                 <Link href="/student/memory" className="learning-tool-action">查看记忆中心</Link>

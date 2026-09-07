@@ -24,7 +24,7 @@ from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "eval"), str(ROOT)]
-SUITES = ["autotutor_catalog_eval", "autotutor_teaching_quality_eval", "autotutor_teaching_graph_eval",
+SUITES = ["autotutor_retention_follow_up_eval", "autotutor_catalog_eval", "autotutor_teaching_quality_eval", "autotutor_teaching_graph_eval",
           "autotutor_demo_graph_policy_smoke", "autotutor_demo_graph_flow_smoke",
           "autotutor_demo_execution_projection_smoke", "auto_tutor_trajectory_eval",
           "demo_evidence_authorization_smoke", "autotutor_session_recovery_smoke"]
@@ -172,6 +172,17 @@ def render_planning(data):
     return "\n".join(lines) + "\n"
 
 
+def render_follow_up(data):
+    examples = data.get("examples", [])
+    if data.get("production_evidence") is not False or len(examples) != 4 or {
+        (e.get("mode"), e.get("difficulty")) for e in examples
+    } != {(mode, difficulty) for mode in ("legacy", "graph_active") for difficulty in ("easy", "medium")}:
+        raise ValueError("follow_up_examples_incomplete")
+    if any(e.get("immediate") != "verified" or e.get("follow_up") != "content_blocked" for e in examples):
+        raise ValueError("follow_up_example_invalid")
+    return "\n## 课后间隔复测\n\nGraph 与 Legacy 的 easy / medium 合成案例：课内独立检验通过，已写入 24 小时排期；到期没有未用过的独立退出票，明确阻断，未改判留存。额外题恢复成功仅在隔离测试夹具中验证，不代表当前题库新增覆盖。\n"
+
+
 def overall(steps, stable):
     if not stable or any(v["status"] == "fail" for v in steps.values()):
         return "fail"
@@ -288,6 +299,7 @@ def main(argv=None):
                 if not args.browser_mode:
                     env["AUTOTUTOR_REVIEW_CASE_OUTPUT"] = str(private / "cases.json")
                     env["AUTOTUTOR_PLANNING_CASE_OUTPUT"] = str(private / "planning.json")
+                    env["AUTOTUTOR_FOLLOW_UP_CASE_OUTPUT"] = str(private / "follow-up.json")
                     command = [sys.executable, str(ROOT / "eval/run_core_evals.py"), "--json", "--no-report"]
                     for suite in SUITES:
                         command += ["--suite", suite]
@@ -298,7 +310,7 @@ def main(argv=None):
                     if data["status"] != "pass":
                         step.update(status="fail", reason="eval_contract_failed")
                     if step["status"] == "pass":
-                        (output / "cases/teaching-example.md").write_text(render_cases(json.loads((private / "cases.json").read_text())) + "\n" + render_planning(json.loads((private / "planning.json").read_text())))
+                        (output / "cases/teaching-example.md").write_text(render_cases(json.loads((private / "cases.json").read_text())) + "\n" + render_planning(json.loads((private / "planning.json").read_text())) + render_follow_up(json.loads((private / "follow-up.json").read_text())))
                 browser_data = {k: {"status": "not_run"} for k in ("legacy", "graph")}
                 if not args.backend_only:
                     if not shutil.which("node") or not (ROOT / "frontend/node_modules/@playwright/test/cli.js").is_file():

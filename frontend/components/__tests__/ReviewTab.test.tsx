@@ -96,3 +96,15 @@ describe("ReviewTab", () => {
     expect(screen.queryByText(feedbackMaterial)).not.toBeInTheDocument();
   });
 });
+
+it.each([false, true])("shows retention schedule and blocks even alongside other tasks: %s", async (done) => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+    date: "2030-01-01", completed: done ? 1 : 0, total: 1, session_revision: 2,
+    tasks: [{ question_id: "other", tag: "其他目标", question: "其他练习题", options: ["A. 一", "B. 二", "C. 三", "D. 四"], done, correct: done ? true : null, quality_status: "verified" }],
+    scheduled_reviews: [{ knowledge_tag: "戊戌变法失败原因", available_at: "2030-01-02T03:00:00Z", message: "等待" }],
+    blocked_reviews: [{ knowledge_tag: "洋务运动目的", available_at: "2030-01-01T03:00:00Z", reason_code: "independent_review_content_missing" }],
+  })));
+  render(<ReviewTab />);
+  expect(await screen.findByLabelText("复测安排")).toHaveTextContent("等待间隔复测");
+  expect(screen.getByLabelText("复测安排")).toHaveTextContent("延迟复测暂缺独立题");
+});

@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import { writeFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 test.beforeAll(() => {
@@ -144,4 +145,35 @@ test("没有指定目标时按可用内容自动规划", async ({ page }) => {
   expect(lesson.planning_decision.selection_source).not.toBe("explicit_focus");
   await expect(page.locator(".quiz-option-btn")).toHaveCount(4, { timeout: 30_000 });
   await expect(page.getByLabel("目标安排说明").first()).toContainText("有教材支持");
+});
+
+
+test("课程完成后等待间隔复测，到期缺题明确阻断", async ({ page }) => {
+  test.setTimeout(90_000);
+  const clock = process.env.E2E_REVIEW_CLOCK_FILE!;
+  try {
+    await enterStudent(page);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (await page.getByLabel("课后复测状态").count()) break;
+      const answer = page.waitForResponse(response => response.url().endsWith("/api/autotutor/answer") && response.request().method() === "POST");
+      await page.locator(".quiz-option-btn").filter({ hasText: /维护.*统治|清政府.*统治|巩固.*统治/ }).first().click();
+      const result = await (await answer).json();
+      if (result.status === "completed") break;
+    }
+    const follow = page.getByLabel("课后复测状态");
+    await expect(follow).toContainText("等待间隔复测");
+    await expect(page.getByText("即时检验证据已记录")).toBeVisible();
+    const sourceUrl = page.url();
+    const response = page.waitForResponse(r => r.url().endsWith("/follow-up"));
+    await page.getByRole("button", { name: "刷新复测状态" }).click();
+    const body = await (await response).json();
+    writeFileSync(clock, body.follow_up.due_at);
+    await page.getByRole("link", { name: "查看今日复习安排" }).click();
+    await expect(page.getByLabel("复测安排")).toContainText("延迟复测暂缺独立题");
+    await page.goto(sourceUrl);
+    await expect(page.getByLabel("课后复测状态")).toContainText("原学习证据已保留");
+    await expect(page.getByLabel("课后复测状态")).toContainText("暂缺独立题");
+  } finally {
+    writeFileSync(clock, "");
+  }
 });

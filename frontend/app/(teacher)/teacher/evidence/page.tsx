@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { AutoTutorFollowUp } from "@/components/AutoTutorFollowUp";
 import { AutoTutorEvidenceCard, type AutoTutorEvidence } from "@/components/AutoTutorEvidenceCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { authHeaders } from "@/lib/auth";
@@ -19,6 +20,7 @@ function TeacherEvidenceInner() {
   useEffect(() => {
     if (!sessionId || !user?.token) return;
     const controller = new AbortController();
+    let active = true;
     setStatus("loading");
     setData(null);
     fetch(`${API}/api/autotutor/session/${encodeURIComponent(sessionId)}/evidence`, {
@@ -33,15 +35,17 @@ function TeacherEvidenceInner() {
         return response.json() as Promise<AutoTutorEvidence>;
       })
       .then((payload) => {
+        if (!active) return;
         setData(payload);
         setStatus("idle");
       })
       .catch((error: unknown) => {
+        if (!active) return;
         if (error instanceof DOMException && error.name === "AbortError") return;
         const message = error instanceof Error ? error.message : "error";
         setStatus(message === "forbidden" ? "forbidden" : message === "missing" ? "missing" : "error");
       });
-    return () => controller.abort();
+    return () => { active = false; controller.abort(); };
   }, [sessionId, user?.token]);
 
   return (
@@ -57,6 +61,7 @@ function TeacherEvidenceInner() {
       {status === "missing" ? <section className="panel" role="alert"><h2>证据不存在</h2><p>会话可能已过期或未成功创建。</p></section> : null}
       {status === "error" ? <section className="panel" role="alert"><h2>证据暂不可用</h2><p>请稍后重试，班级其他功能不受影响。</p></section> : null}
       {data ? <AutoTutorEvidenceCard data={data} /> : null}
+      {data && user?.token ? <AutoTutorFollowUp allowReview={false} sessionId={data.session_id} revision={data.planning_decision?.revision || 0} token={user.token} /> : null}
       <div className="learning-suggestion-row" style={{ marginTop: 16 }}>
         <Link href="/teacher/class-analytics">查看班级学情聚合</Link>
         <Link href="/teacher">返回教师总览</Link>

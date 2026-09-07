@@ -68,10 +68,10 @@ def ensure_review_mastery_schema(conn: Any) -> None:
         ON review_mastery_state(status, retention_due_at)"""))
 
 
-def get_mastery_state_with_connection(conn: Any, student_id: str, knowledge_tag: str) -> dict[str, Any] | None:
+def get_mastery_state_with_connection(conn: Any, student_id: str, knowledge_tag: str, *, for_update: bool = False) -> dict[str, Any] | None:
     ensure_review_mastery_schema(conn)
     row = conn.execute(
-        text("SELECT * FROM review_mastery_state WHERE student_id=:sid AND knowledge_tag=:tag"),
+        text("SELECT * FROM review_mastery_state WHERE student_id=:sid AND knowledge_tag=:tag" + (" FOR UPDATE" if for_update and conn.dialect.name == "postgresql" else "")),
         {"sid": student_id, "tag": knowledge_tag},
     ).mappings().first()
     return dict(row) if row else None
@@ -163,6 +163,9 @@ def validate_retention_chain(
     retrieval = by_key.get(state.get("retrieval_evidence_key"))
     verification = by_key.get(state.get("verification_evidence_key"))
     if not retrieval or not verification or verification.get("evidence_type") != "independent_correct":
+        raise ValueError("evidence_chain_conflict")
+    if any(row.get("student_id") != state.get("student_id") or row.get("knowledge_tag") != state.get("knowledge_tag")
+           for row in (retrieval, verification)) or verification.get("parent_evidence_key") != state.get("retrieval_evidence_key"):
         raise ValueError("evidence_chain_conflict")
     prior_ids = {retrieval.get("assessment_id"), verification.get("assessment_id")}
     prior_prints = {retrieval.get("assessment_fingerprint"), verification.get("assessment_fingerprint")}

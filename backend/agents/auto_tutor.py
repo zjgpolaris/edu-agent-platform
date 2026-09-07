@@ -1605,6 +1605,7 @@ def _finalize(state: AutoTutorState) -> None:
             event_types.append(event_type)
 
         if state.verified_mastery:
+            review_action = "retention_scheduled"
             weakpoint_action = "independent_correct_evidence_recorded"
             evidence_type: Literal["independent_correct"] = "independent_correct"
             if primary is not None:

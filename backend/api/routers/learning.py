@@ -777,6 +777,28 @@ async def autotutor_get_demo_trace(session_id: str, actor: Actor = Depends(requi
     return payload
 
 
+@router.get("/api/autotutor/session/{session_id}/follow-up")
+async def autotutor_get_follow_up(session_id: str, actor: Actor = Depends(require_auth)):
+    from agents.auto_tutor import get_session as autotutor_get
+    from services.autotutor_follow_up import get_follow_up
+
+    try:
+        state = await run_in_threadpool(autotutor_get, session_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="辅导会话不存在或已过期")
+
+    student_id = str(state.get("student_id") or "")
+    if actor.role == "student":
+        if actor.actor_id != student_id:
+            raise HTTPException(status_code=403, detail="insufficient_role")
+    elif actor.role == "teacher":
+        assert_teacher_student_access(actor, student_id)
+    elif actor.role != "admin":
+        raise HTTPException(status_code=403, detail="insufficient_role")
+
+    return await run_in_threadpool(get_follow_up, state)
+
+
 @router.get("/api/autotutor/session/{session_id}/evidence")
 async def autotutor_get_evidence(session_id: str, actor: Actor = Depends(require_auth)):
     from agents.auto_tutor import get_session as autotutor_get

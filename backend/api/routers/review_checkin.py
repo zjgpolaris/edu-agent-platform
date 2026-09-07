@@ -21,6 +21,7 @@ router = APIRouter(tags=["review"])
 
 
 class ReviewSubmitRequest(BaseModel):
+    model_config = {"extra": "forbid"}
     task_index: int = Field(ge=0)
     selected_answer: str = Field(pattern="^[A-Da-d]$")
     expected_revision: int | None = Field(default=None, ge=0)
@@ -28,6 +29,7 @@ class ReviewSubmitRequest(BaseModel):
 
 
 class ReviewAdvanceRequest(BaseModel):
+    model_config = {"extra": "forbid"}
     task_index: int = Field(ge=0)
     action: str = Field(pattern="^continue_after_feedback$")
     expected_revision: int = Field(ge=0)

@@ -9,6 +9,8 @@ from typing import Any
 
 from sqlalchemy import inspect, text
 
+from agents.autotutor_content import CONTENT_PATH, load_curated_content, use_content_snapshot
+
 from db.engine import get_connection
 from student_profile import (
     LearningEvent,
@@ -20,6 +22,7 @@ from services.history_review_question import (
     QUALITY_CONTRACT_VERSION,
     build_curated_review_question,
     build_grounded_review_question,
+    blocked_review_question,
     is_usable_choice_question,
     public_review_question,
 )
@@ -29,6 +32,7 @@ from services.review_mastery_service import (
     ensure_review_mastery_schema,
     evidence_rows_with_connection,
     get_mastery_state_with_connection,
+    is_due,
     list_retention_states_with_connection,
     request_hash,
     set_mastery_state_with_connection,
@@ -114,6 +118,8 @@ def _generate_question(
     )
     if curated is not None:
         return curated
+    if task_role is not None:
+        return blocked_review_question(tag, "independent_review_content_missing")
     # 当前只有审定内容包能同时证明题干、答案和干扰项质量。教材段落可用于
     # 讲解或后续出题草稿，但不能自动证明一道选择题达到学生发布标准。
     return build_grounded_review_question(
@@ -131,6 +137,7 @@ def get_today_session(
     *,
     hydrate: bool = True,
     at: str | None = None,
+    fault_hook=None,
 ) -> dict | None:
     """读取今日复习 session。
 
@@ -146,30 +153,41 @@ def get_today_session(
         ).mappings().fetchone()
     if not row:
         return None
-    session_id = str(row["id"])
-    tasks = json.loads(row["tasks_json"])
     if hydrate:
-        tasks = _hydrate_pending_tasks(student_id, today, tasks, session_id=session_id)
-        tasks, revision = _attach_due_retention_tasks(
-            student_id, today, session_id, tasks, int(row.get("revision") or 0), at=at
-        )
+        weakpoints = {item["knowledge_tag"]: item for item in get_weakpoints(student_id)}
+        entries = load_curated_content()
+        with get_connection() as conn, use_content_snapshot(entries):
+            if conn.dialect.name == "sqlite":
+                conn.execute(text("BEGIN IMMEDIATE"))
+            suffix = " FOR UPDATE" if conn.dialect.name == "postgresql" else ""
+            row = conn.execute(text("SELECT * FROM review_sessions WHERE id=:id" + suffix), {"id": row["id"]}).mappings().one()
+            original = row["tasks_json"]
+            tasks = json.loads(original)
+            tasks = _hydrate_pending_tasks(student_id, today, tasks, session_id=str(row["id"]), weakpoints=weakpoints)
+            from services.review_retention import maintain_retention
+            tasks, blocked, _ = maintain_retention(conn, student_id, today, str(row["id"]), tasks, at=at or now_iso(), fault_hook=fault_hook)
+            if load_curated_content(CONTENT_PATH) != entries:
+                raise ReviewConflictError("review content changed", code="review_content_changed")
+            revision = int(row["revision"])
+            if json.dumps(tasks, ensure_ascii=False) != original:
+                updated = conn.execute(text("""UPDATE review_sessions SET tasks_json=:tasks, revision=revision+1,
+                    total=:total, completed=:completed WHERE id=:id AND revision=:revision"""),
+                    {"tasks": json.dumps(tasks, ensure_ascii=False), "id": row["id"], "revision": revision,
+                     "total": sum(not is_unusable_question(t) for t in tasks),
+                     "completed": sum(bool(t.get("done")) and not is_unusable_question(t) for t in tasks)})
+                if updated.rowcount != 1:
+                    raise ReviewConflictError("review session changed", code="stale_review_revision")
+                revision += 1
+                if fault_hook:
+                    fault_hook("after_retention_session")
     else:
-        revision = int(row.get("revision") or 0)
+        tasks, revision, blocked = json.loads(row["tasks_json"]), int(row["revision"]), []
     with get_connection() as conn:
         _, scheduled = list_retention_states_with_connection(conn, student_id, at=at)
     scoreable = [task for task in tasks if not is_unusable_question(task)]
-    return {
-        "id": session_id,
-        "date": today,
-        "completed": (
-            sum(1 for task in scoreable if task.get("done")) if hydrate else int(row["completed"] or 0)
-        ),
-        "total": len(scoreable) if hydrate else int(row["total"] or 0),
-        "tasks": tasks,
-        "revision": revision,
-        "status": row.get("status") or "active",
-        "scheduled_reviews": scheduled,
-    }
+    return {"id": str(row["id"]), "date": today, "completed": sum(bool(t.get("done")) for t in scoreable),
+        "total": len(scoreable), "tasks": tasks, "revision": revision, "status": row.get("status") or "active",
+        "scheduled_reviews": scheduled, "blocked_reviews": blocked}
 
 
 def is_unusable_question(task: dict[str, Any]) -> bool:
@@ -242,14 +260,13 @@ def _hydrate_pending_tasks(
     tasks: list[dict],
     *,
     session_id: str,
+    weakpoints,
 ) -> list[dict]:
     """为无法作答的未答题目按需生成真实题目并落库。
 
     覆盖两类：作业错题追加的 pending_generate 占位题，以及早先已写库但
     不满足质量合同的题。缺少审定题时保留 blocked 状态，不向学生发布。
     """
-    weakpoints = {item["knowledge_tag"]: item for item in get_weakpoints(student_id)}
-    changed = False
     for index, task in enumerate(tasks):
         if task.get("done"):
             continue
@@ -261,9 +278,10 @@ def _hydrate_pending_tasks(
             target_difficulty = str(task.get("target_difficulty") or task.get("difficulty") or ("medium" if is_variant else "easy"))
             adaptive_message = str(task.get("adaptive_message") or "")
         role = str(task.get("task_role") or "retrieval")
+        if role in {"verification", "retention"}:
+            continue  # chain-aware validation runs in the same transaction below
         adaptive_mismatch = bool(wp) and role == "retrieval" and (
-            bool(task.get("is_variant")) != is_variant
-            or str(task.get("difficulty") or "") != target_difficulty
+            str(task.get("difficulty") or "") != target_difficulty
         )
         contract_missing = not task.get("task_role") or not task.get("assessment_fingerprint")
         if not is_unusable_question(task) and not adaptive_mismatch and not contract_missing:
@@ -291,13 +309,6 @@ def _hydrate_pending_tasks(
         if replacement != task:
             task.clear()
             task.update(replacement)
-            changed = True
-    if changed:
-        with get_connection() as conn:
-            conn.execute(
-                text("UPDATE review_sessions SET tasks_json=:tasks WHERE student_id=:sid AND date=:date"),
-                {"tasks": json.dumps(tasks, ensure_ascii=False), "sid": student_id, "date": today},
-            )
     return tasks
 
 
@@ -316,100 +327,14 @@ def _pick_question(student_id: str, today: str, wp: dict[str, Any]) -> dict[str,
     return task
 
 
-def _build_retention_task(
-    student_id: str,
-    today: str,
-    session_id: str,
-    state: dict[str, Any],
-) -> dict[str, Any] | None:
-    with get_connection() as conn:
-        evidence = evidence_rows_with_connection(conn, [
-            state.get("retrieval_evidence_key"), state.get("verification_evidence_key"),
-        ])
-    excluded_ids = {str(row.get("assessment_id")) for row in evidence if row.get("assessment_id")}
-    excluded_prints = {
-        str(row.get("assessment_fingerprint")) for row in evidence if row.get("assessment_fingerprint")
-    }
-    task = _generate_question(
-        str(state.get("knowledge_tag") or ""),
-        target_difficulty="medium",
-        selection_seed=f"{student_id}:{today}:{state.get('knowledge_tag')}:retention",
-        task_role="retention",
-        excluded_assessment_ids=excluded_ids,
-        excluded_fingerprints=excluded_prints,
-    )
-    if is_unusable_question(task):
-        return None
-    return _decorate_task(
-        task,
-        student_id=student_id,
-        session_id=session_id,
-        task_role="retention",
-        retrieval_evidence_key=str(state.get("retrieval_evidence_key") or "") or None,
-        due_at=state.get("retention_due_at"),
-    )
-
-
-def _attach_due_retention_tasks(
-    student_id: str,
-    today: str,
-    session_id: str,
-    tasks: list[dict[str, Any]],
-    revision: int,
-    *,
-    at: str | None = None,
-) -> tuple[list[dict[str, Any]], int]:
-    with get_connection() as conn:
-        due_states, _ = list_retention_states_with_connection(conn, student_id, at=at)
-    existing_tags = {
-        str(task.get("tag") or "") for task in tasks if task.get("task_role") == "retention"
-    }
-    additions: list[dict[str, Any]] = []
-    blocked_states: list[dict[str, Any]] = []
-    for state in due_states:
-        if state["knowledge_tag"] in existing_tags:
-            continue
-        task = _build_retention_task(student_id, today, session_id, state)
-        if task is None:
-            blocked_states.append(state)
-        else:
-            additions.append(task)
-    if not additions and not blocked_states:
-        return tasks, revision
-    merged = [*additions, *tasks]
-    with get_connection() as conn:
-        for state in blocked_states:
-            set_mastery_state_with_connection(
-                conn,
-                student_id=student_id,
-                knowledge_tag=state["knowledge_tag"],
-                status="content_blocked",
-                retrieval_evidence_key=state.get("retrieval_evidence_key"),
-                verification_evidence_key=state.get("verification_evidence_key"),
-                retention_due_at=state.get("retention_due_at"),
-            )
-        if additions:
-            updated = conn.execute(text("""UPDATE review_sessions SET
-                tasks_json=:tasks, total=:total, revision=revision+1
-                WHERE id=:session_id AND revision=:revision"""), {
-                "tasks": json.dumps(merged, ensure_ascii=False),
-                "total": len(merged),
-                "session_id": session_id,
-                "revision": revision,
-            })
-            if updated.rowcount == 1:
-                return merged, revision + 1
-    return tasks, revision
-
-
-def create_today_session(student_id: str, today: str) -> dict:
+def create_today_session(student_id: str, today: str, *, at: str | None = None, fault_hook=None) -> dict:
     _ensure_table()
     weakpoints = get_weakpoints(student_id)
     with get_connection() as conn:
-        due_states, scheduled_states = list_retention_states_with_connection(conn, student_id)
+        due_states, scheduled_states = list_retention_states_with_connection(conn, student_id, at=at)
         active_rows = conn.execute(
             text("""SELECT knowledge_tag FROM review_mastery_state
-                WHERE student_id=:sid AND status IN ('awaiting_feedback','verification_pending','retention_due')"""),
+                WHERE student_id=:sid AND status IN ('awaiting_feedback','verification_pending','retention_due','content_blocked')"""),
             {"sid": student_id},
         ).scalars().all()
     active_tags = set(active_rows)
@@ -422,10 +347,6 @@ def create_today_session(student_id: str, today: str) -> dict:
     tasks = [_pick_question(student_id, today, w) for w in top]
     for task in tasks:
         _decorate_task(task, student_id=student_id, session_id=session_id, task_role="retrieval")
-    for state in due_states:
-        task = _build_retention_task(student_id, today, session_id, state)
-        if task is not None:
-            tasks.insert(0, task)
     # 生成失败的题标记为待重试，下次打开复习页会重新生成，而不是固化成占位题
     for t in tasks:
         if is_unusable_question(t):
@@ -438,16 +359,9 @@ def create_today_session(student_id: str, today: str) -> dict:
             {"id": session_id, "sid": student_id, "date": today,
              "tasks": json.dumps(tasks, ensure_ascii=False), "total": len(tasks), "ts": now_iso()},
         )
-    return {
-        "id": session_id,
-        "date": today,
-        "completed": 0,
-        "total": len(tasks),
-        "tasks": tasks,
-        "revision": 0,
-        "status": "active",
-        "scheduled_reviews": scheduled_states,
-    }
+    # Read the winning row, including concurrent ON CONFLICT creation, and use
+    # exactly the same maintenance transaction as subsequent refreshes.
+    return get_today_session(student_id, today, at=at, fault_hook=fault_hook)
 
 
 def public_review_session(session: dict[str, Any]) -> dict[str, Any]:
@@ -455,6 +369,8 @@ def public_review_session(session: dict[str, Any]) -> dict[str, Any]:
     public_tasks: list[dict[str, Any]] = []
     blocked_tags: list[str] = []
     for task_index, task in enumerate(session.get("tasks") or []):
+        if task.get("obsolete"):
+            continue
         if is_unusable_question(task):
             blocked_tags.append(str(task.get("tag") or "历史知识点"))
             continue
@@ -476,6 +392,7 @@ def public_review_session(session: dict[str, Any]) -> dict[str, Any]:
         }
         for item in session.get("scheduled_reviews") or []
     ]
+    blocked_tags = list(dict.fromkeys([*blocked_tags, *[str(r["knowledge_tag"]) for r in session.get("blocked_reviews", [])]]))
     return {
         "session_id": session.get("id"),
         "date": session.get("date"),
@@ -487,6 +404,7 @@ def public_review_session(session: dict[str, Any]) -> dict[str, Any]:
         "session_revision": int(session.get("revision") or 0),
         "status": session.get("status") or "active",
         "scheduled_reviews": scheduled_reviews,
+        "blocked_reviews": session.get("blocked_reviews", []),
     }
 
 
@@ -546,11 +464,14 @@ def _submit_answer_once(
         if fault_hook is not None:
             fault_hook(name)
 
-    with get_connection() as conn:
+    entries = load_curated_content()
+    with get_connection() as conn, use_content_snapshot(entries):
+        if conn.dialect.name == "sqlite":
+            conn.execute(text("BEGIN IMMEDIATE"))
         row = conn.execute(
             text("""SELECT id, tasks_json, completed, total, revision,
                 last_idempotency_key, last_request_hash, last_response_json
-                FROM review_sessions WHERE student_id=:sid AND date=:date"""),
+                FROM review_sessions WHERE student_id=:sid AND date=:date""" + (" FOR UPDATE" if conn.dialect.name == "postgresql" else "")),
             {"sid": student_id, "date": today},
         ).mappings().fetchone()
         if not row:
@@ -591,7 +512,7 @@ def _submit_answer_once(
         fingerprint = str(task.get("assessment_fingerprint") or "")
         if not tag or not fingerprint:
             raise ValueError("review question has no stable evidence identity")
-        state = get_mastery_state_with_connection(conn, student_id, tag)
+        state = get_mastery_state_with_connection(conn, student_id, tag, for_update=True)
         if role == "verification":
             if not state or state.get("status") != "verification_pending":
                 raise ValueError("invalid_review_transition")
@@ -616,6 +537,13 @@ def _submit_answer_once(
                 code = str(exc)
                 raise ReviewConflictError(code, code=code) from exc
 
+        if role in {"verification", "retention"}:
+            from services.review_retention import valid_task
+            if not valid_task(conn, task, state, at=timestamp):
+                raise ReviewConflictError("review content or evidence chain changed", code="evidence_chain_conflict")
+
+        if load_curated_content(CONTENT_PATH) != entries:
+            raise ReviewConflictError("review content changed", code="review_content_changed")
         answer = str(task.get("answer") or "").strip().upper()[:1]
         is_correct = selected == answer
         feedback = task.get("option_feedback") if isinstance(task.get("option_feedback"), dict) else {}
@@ -732,6 +660,10 @@ def _submit_answer_once(
                     student_id=student_id,
                     knowledge_tag=tag,
                     status="needs_retrieval",
+                    retrieval_evidence_key=state.get("retrieval_evidence_key"),
+                    verification_evidence_key=state.get("verification_evidence_key"),
+                    retention_evidence_key=effect_key,
+                    retention_due_at=state.get("retention_due_at"),
                     updated_at=timestamp,
                 )
         checkpoint("after_mastery_state")
@@ -898,8 +830,10 @@ def _advance_after_feedback_once(
     )
 
     with get_connection() as conn:
+        if conn.dialect.name == "sqlite":
+            conn.execute(text("BEGIN IMMEDIATE"))
         row = conn.execute(text("""SELECT id, tasks_json, revision, last_idempotency_key,
-            last_request_hash, last_response_json FROM review_sessions WHERE id=:id"""),
+            last_request_hash, last_response_json FROM review_sessions WHERE id=:id""" + (" FOR UPDATE" if conn.dialect.name == "postgresql" else "")),
             {"id": snapshot["id"]}).mappings().first()
         if not row:
             raise ValueError("review session not found")
@@ -916,9 +850,16 @@ def _advance_after_feedback_once(
         current = tasks[task_idx]
         if current.get("feedback_acknowledged"):
             raise ReviewConflictError("feedback was already acknowledged", code="stale_review_revision")
-        state = get_mastery_state_with_connection(conn, student_id, tag)
+        state = get_mastery_state_with_connection(conn, student_id, tag, for_update=True)
         if not state or state.get("status") != "awaiting_feedback":
             raise ReviewConflictError("feedback evidence state changed", code="evidence_chain_conflict")
+        from services.review_retention import matches_chain, role_question
+        if not matches_chain(current, state):
+            raise ReviewConflictError("feedback evidence chain changed", code="evidence_chain_conflict")
+        if not is_unusable_question(verification):
+            verified = role_question(conn, state, "verification", assessment_id=verification.get("question_id"))
+            if not verified or any(verified.get(k) != verification.get(k) for k in ("question", "options", "answer", "assessment_fingerprint")):
+                raise ReviewConflictError("verification content changed", code="review_content_changed")
         next_revision = revision + 1
         current["feedback_acknowledged"] = True
         current["phase"] = "answered"

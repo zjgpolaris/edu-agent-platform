@@ -57,7 +57,7 @@ export function AutoTutorEvidenceCard({ data }: { data: AutoTutorEvidence }) {
         <div className="eval-ops-card"><span>学习目标</span><strong>{data.knowledge_points.join("、") || "暂无"}</strong><small>本次会话</small></div>
         <div className="eval-ops-card"><span>反思 / 重规划</span><strong>{data.reflection_count} / {data.replans}</strong><small>Agent 策略调整</small></div>
         <div className="eval-ops-card"><span>退出票</span><strong>{data.exit_ticket.passed == null ? "未完成" : data.exit_ticket.passed ? "通过" : "未通过"}</strong><small>{data.exit_ticket.knowledge_point || "独立检验"}</small></div>
-        <div className="eval-ops-card"><span>验证掌握</span><strong>{data.mastery.status === "verified" ? "已验证" : "尚未验证"}</strong><small>不以练习题代替退出票</small></div>
+        <div className="eval-ops-card"><span>验证掌握</span><strong>{data.mastery.status === "verified" ? "已验证" : "尚未验证"}</strong><small>本节独立检验；留存需间隔复测</small></div>
         <div className="eval-ops-card"><span>模型参与</span><strong>{participation}</strong><small>{provenance?.model || provenance?.profile || provenance?.provider || "会话级决策来源"}</small></div>
       </div>
       <div className="learning-runtime-chips" style={{ marginTop: 16 }}>

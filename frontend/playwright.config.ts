@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 
 function resolvePython(): string {
   const candidates = [
@@ -25,6 +25,8 @@ const browserChannel = process.env.E2E_BROWSER_CHANNEL === "chrome" ? "chrome" :
 const graphDemo = process.env.E2E_GRAPH_DEMO === "1";
 if (process.env.DATABASE_URL || process.env.DIRECT_URL) throw new Error("Unset DATABASE_URL / DIRECT_URL before isolated E2E");
 process.env.E2E_DB_PATH ||= path.join(mkdtempSync(path.join(os.tmpdir(), "edu-agent-e2e-")), "demo.sqlite3");
+process.env.E2E_REVIEW_CLOCK_FILE ||= path.join(mkdtempSync(path.join(os.tmpdir(), "edu-agent-review-clock-")), "clock");
+writeFileSync(process.env.E2E_REVIEW_CLOCK_FILE, "");
 
 export default defineConfig({
   testDir: "./e2e",
@@ -51,12 +53,13 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: graphDemo ? `${JSON.stringify(python)} scripts/dev_autotutor_graph_demo.py --backend-only --port ${backendPort} --frontend-port ${frontendPort}` : `${JSON.stringify(python)} -m uvicorn backend.api.main:app --host 127.0.0.1 --port ${backendPort}`,
+      command: `${JSON.stringify(python)} eval/retention_e2e_server.py ${graphDemo ? "--graph" : ""} --port ${backendPort}`,
       cwd: "..",
       env: {
         PYTHONPATH: "backend",
         EDU_AGENT_AUTH_REQUIRED: "true",
         EDU_AGENT_DB_PATH: process.env.E2E_DB_PATH,
+        E2E_REVIEW_CLOCK_FILE: process.env.E2E_REVIEW_CLOCK_FILE,
         JWT_SECRET: "edu-agent-playwright-only-secret",
         EDU_AGENT_LLM_DISABLED: "1",
         EDU_AGENT_ASSISTANT_PLANNER_ENABLED: "true",
