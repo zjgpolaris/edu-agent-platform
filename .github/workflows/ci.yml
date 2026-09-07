@@ -98,6 +98,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install --constraint constraints-runtime.txt --requirement backend/requirements.txt
 
+      - name: Build offline teaching review
+        if: always()
+        run: python3 scripts/build_autotutor_demo_review.py --backend-only --output "$RUNNER_TEMP/review-backend"
+
+      - name: Upload safe teaching review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-backend
+          path: ${{ runner.temp }}/review-backend
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Run quick eval
         env:
           PYTHONPATH: backend
@@ -241,8 +254,16 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run core browser flows
-        working-directory: frontend
-        run: npm run test:e2e
+        run: python3 scripts/build_autotutor_demo_review.py --browser-mode legacy --output "$RUNNER_TEMP/review-legacy"
+
+      - name: Upload safe Legacy review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-legacy
+          path: ${{ runner.temp }}/review-legacy
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload browser report
         if: always()
@@ -254,11 +275,17 @@ jobs:
           retention-days: 14
 
       - name: Run isolated offline Graph browser flows
-        working-directory: frontend
-        env:
-          E2E_GRAPH_DEMO: '1'
-          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-graph-report
-        run: npm run test:e2e
+        if: always()
+        run: python3 scripts/build_autotutor_demo_review.py --browser-mode graph --output "$RUNNER_TEMP/review-graph"
+
+      - name: Upload safe Graph review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-graph
+          path: ${{ runner.temp }}/review-graph
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload Graph browser report
         if: always()
@@ -267,6 +294,38 @@ jobs:
           name: playwright-graph-report
           path: frontend/playwright-graph-report
           if-no-files-found: ignore
+          retention-days: 14
+
+  autotutor-review-index:
+    name: AutoTutor review artifact index
+    if: always()
+    needs: [quick-eval, browser-e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: review-*
+          path: ${{ runner.temp }}/review-inputs
+      - name: Collect current-run review packs
+        if: always()
+        run: |
+          python3 scripts/build_autotutor_demo_review.py --output "$RUNNER_TEMP/autotutor-review" --collect \
+            "$RUNNER_TEMP/review-inputs/review-backend" \
+            "$RUNNER_TEMP/review-inputs/review-legacy" \
+            "$RUNNER_TEMP/review-inputs/review-graph" \
+            --upstream-result '${{ needs.quick-eval.result }}' \
+            --upstream-result '${{ needs.browser-e2e.result }}'
+      - name: Upload review index
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autotutor-review
+          path: ${{ runner.temp }}/autotutor-review
+          if-no-files-found: error
           retention-days: 14
 
   docker-build:

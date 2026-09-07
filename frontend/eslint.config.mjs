@@ -1,7 +1,7 @@
 import { defineConfig } from "eslint/config";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 export default defineConfig([{
-    ignores: [".next/**", ".next-e2e/**", ".next-e2e-graph/**", ".next-graph-demo/**"],
+    ignores: [".next/**", ".next-e2e/**", ".next-e2e-graph/**", ".next-graph-demo/**", "playwright-report/**", "playwright-graph-report/**", "test-results/**"],
 }, {
     extends: [...nextCoreWebVitals],
     rules: {

@@ -36,6 +36,27 @@
 [开发验收与迁移边界](docs/20260907-autotutor-langgraph-demo-v150-delivery.md) ·
 [本轮 Spec](docs/20260907-autotutor-langgraph-demo-closure-v150-spec.md)
 
+### v1.51 教学质量与展示验收包
+
+已安装项目 Python/前端依赖与 Playwright Chromium 后，运行以下命令；输出必须是仓库外尚不存在的目录：
+
+```bash
+.venv/bin/python scripts/build_autotutor_demo_review.py --output /tmp/edu-agent-review-my-run
+```
+
+打开输出目录的 `summary.md`，查看同一源码版本的后端 suite/case 数量、Legacy 与 Graph 浏览器结果，以及真实运行生成的教学案例：
+失败原因/历史影响混淆 → 定向纠正 → 独立退出票 → 教师证据；另含退出票失败案例。
+输入来自审核内容与确定性演示，不能作为真实模型质量、云端性能或生产放行证明。
+
+只验证后端可加 `--backend-only`，结果明确为 `partial`；默认每步最多 600 秒，可用 `--timeout` 调整。
+脚本使用当前 Python，缺依赖会失败并生成摘要，不自动安装软件。启动前退出手动浏览器演示，避免共用 Next 构建目录。
+继承 `DATABASE_URL`/`DIRECT_URL` 会拒绝执行；使用未设置这些变量的终端，不用修改项目 `.env`。
+重复运行请换新目录；运行时修改源码会标记来源不稳定。dirty 工作区可以本地验收，但报告会明确记录，不能声称 commit 单独通过。
+
+对外分享仅使用该输出目录。现有 Playwright HTML/trace 是内部诊断材料，可能含请求信息，不包含在展示包中。
+CI 的 `autotutor-review` artifact 汇总当前 workflow 的后端和两类浏览器结果；缺项/失败不会成为完整 PASS。
+实现范围与验收标准见 [v1.51 Spec](docs/20260907-autotutor-teaching-evidence-v151-spec.md)，实际检查与限制见 [交付记录](docs/20260907-autotutor-teaching-evidence-v151-delivery.md)。
+
 ---
 
 ## 亮点功能：AutoTutor 自主辅导 Agent

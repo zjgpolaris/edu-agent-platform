@@ -1,14 +1,14 @@
 """Deterministic AutoTutor teaching-content quality evaluation.
 
-This suite complements trajectory tests: it checks that offline fallback teaching
-retains source facts, rejects retrieved prompt injection, is structurally useful,
-and actually changes after a re-teach decision.
+Checks curated content contracts and actual polluted input isolation. This is
+not an LLM injection evaluation; Graph re-teaching has its own trajectory suite.
 """
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
@@ -27,23 +27,47 @@ DATASET = ROOT / "eval" / "datasets" / "autotutor_teaching_cases.json"
 
 def evaluate_case(case: dict) -> tuple[bool, str, dict]:
     objective = build_learning_objective(case["knowledge_point"], grade="八年级上册")
-    prepared = prepare_content(objective, {}, kind="practice")
+    from agents import autotutor_content as content
+    inputs, expected = case["input"], case["expected"]
+    retrieval = inputs["retrieval_data"]
+    # Spy at the actual boundary inside prepare_content, not the caller alone.
+    with patch.object(content, "evidence_decision", wraps=content.evidence_decision) as boundary:
+        prepared = prepare_content(objective, retrieval, kind="practice",
+                                   target_difficulty=inputs["target_difficulty"])
+    detail = {"case_id": case["id"], "boundary": "content_gate",
+              "assertion_scope": case["assertion_scope"], "expected": expected["status"],
+              "actual": prepared.validation.status}
+    if boundary.call_count != 1 or boundary.call_args.args[1] != retrieval:
+        return False, "retrieval input did not reach evidence boundary", detail
+    if case["scenario"] == "polluted_source" and "V151_INJECTION_SENTINEL" not in json.dumps(boundary.call_args.args[1]):
+        return False, "polluted input was not exercised", detail
+    if expected["status"] == "blocked":
+        ok = prepared.validation.status == "blocked" and prepared.blocked_reason == expected["blocked_reason"] and prepared.assessment is None
+        if case["scenario"] == "missing_content":
+            ok = ok and prepared.teaching is None
+        return ok, "ok" if ok else "unsupported content was served", detail
     teaching = prepared.teaching
     assessment = prepared.assessment
     explanation = teaching.explanation if teaching else ""
-    detail = {"case": case["id"], "teaching": teaching.model_dump(mode="json") if teaching else None}
     if prepared.validation.status != "verified" or teaching is None or assessment is None:
         return False, "content gate blocked a pilot case", detail
+    if objective.aspect != case["objective_aspect"]:
+        return False, "objective aspect mismatch", detail
+    if assessment.difficulty != inputs["target_difficulty"]:
+        return False, "selected difficulty differs from explicit target", {**detail, "boundary": "assessment_selection", "expected": inputs["target_difficulty"], "actual": assessment.difficulty}
+    if not teaching.claims or not all(set(claim.source_ids) & set(prepared.evidence.answer_bearing_source_ids) for claim in teaching.claims):
+        return False, "teaching claims lack evidence binding", detail
     if not 20 <= len(explanation) <= 500:
         return False, "explanation length out of bounds", detail
     if not 2 <= len(teaching.key_points) <= 3:
         return False, "expected 2-3 key points", detail
     if not str(teaching.example or "").strip():
         return False, "teaching example missing", detail
-    missing = [fact for fact in case.get("required_facts", []) if fact not in explanation]
+    missing = [fact for fact in expected.get("required_facts", []) if fact not in explanation]
     if missing:
         return False, f"source facts missing: {missing}", detail
-    leaked = [term for term in case.get("forbidden_terms", []) if term.lower() in explanation.lower()]
+    public_content = json.dumps({"teaching": teaching.model_dump(mode="json"), "stem": assessment.stem, "options": [o.text for o in assessment.options]}, ensure_ascii=False)
+    leaked = [term for term in expected.get("forbidden_terms", []) if term.lower() in public_content.lower()]
     if leaked:
         return False, f"untrusted instructions leaked: {leaked}", detail
     if any(marker in option.text for option in assessment.options for marker in FORBIDDEN_PLACEHOLDERS):
@@ -51,7 +75,7 @@ def evaluate_case(case: dict) -> tuple[bool, str, dict]:
     return True, "ok", detail
 
 
-def evaluate_reteach_change() -> tuple[bool, str, dict]:
+def evaluate_misconception_feedback() -> tuple[bool, str, dict]:
     objective = build_learning_objective("戊戌变法失败原因")
     prepared = prepare_content(objective, {}, kind="practice")
     wrong = next(option for option in prepared.assessment.options if option.misconception_code == "cause_impact_confusion")
@@ -91,8 +115,8 @@ def main() -> None:
     for case in cases:
         ok, reason, detail = evaluate_case(case)
         results.append((case["id"], ok, reason, detail))
-    ok, reason, detail = evaluate_reteach_change()
-    results.append(("reteach_semantic_change", ok, reason, detail))
+    ok, reason, detail = evaluate_misconception_feedback()
+    results.append(("misconception_feedback_specificity", ok, reason, detail))
     ok, reason, detail = evaluate_v135_content_gate()
     results.append(("v135_objective_evidence_assessment_gate", ok, reason, detail))
 
@@ -101,14 +125,14 @@ def main() -> None:
             print(f"OK {name}")
         else:
             print(f"FAIL {name}: {reason}")
-            print("FAILED_CASE_DETAIL=" + json.dumps({"name": name, "reason": reason, **detail}, ensure_ascii=False))
+            print("FAILED_CASE_DETAIL=" + json.dumps({"name": name, "case_id": name, "boundary": "misconception_feedback" if name == "misconception_feedback_specificity" else "content_gate", "expected": "contract satisfied", "actual": reason, "reason": reason, **detail}, ensure_ascii=False))
 
     passed = sum(1 for _, ok, _, _ in results if ok)
     total = len(results)
-    supplemental = {"reteach_semantic_change", "v135_objective_evidence_assessment_gate"}
-    grounded = sum(1 for name, ok, _, _ in results if ok and name not in supplemental)
+    content_ids = {c["id"] for c in cases if c["expected"]["status"] == "verified"}
+    grounded = sum(1 for name, ok, _, _ in results if ok and name in content_ids)
     print(f"autotutor_teaching_quality={passed}/{total}")
-    print(f"teaching_groundedness_rate={round(grounded / len(cases), 4)}")
+    print(f"teaching_groundedness_rate={round(grounded / len(content_ids), 4)}")
     if passed != total:
         raise SystemExit(1)
 

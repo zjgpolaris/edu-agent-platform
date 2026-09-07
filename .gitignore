@@ -17,6 +17,8 @@ textbooks/raw/
 frontend/.next/standalone
 frontend/test-results/
 frontend/playwright-report/
+frontend/playwright-graph-report/
+frontend/.next-graph-demo/
 .DS_Store
 eval/reports/history/
 frontend/tsconfig.tsbuildinfo
