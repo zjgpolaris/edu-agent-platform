@@ -1,6 +1,8 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { AuthUser, loadAuth, saveAuth, clearAuth } from "@/lib/auth";
+import { fetchApiJson, REQUEST_TIMEOUTS } from "@/lib/api";
+import { clearAllPending } from "@/lib/autotutorPending";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -26,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authenticatedFetch: typeof window.fetch = async (...args) => {
       const response = await originalFetch(...args);
       if (response.status === 401 && loadAuth()) {
+        clearAllPending();
         clearAuth();
         setUser(null);
         if (window.location.pathname !== "/") window.location.assign("/");
@@ -39,13 +42,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function login(username: string, password: string) {
-    const res = await fetch(`${API}/api/auth/login`, {
+    const data = await fetchApiJson<{ actor_id: string; role: AuthUser["role"]; display_name?: string; demo_mode?: boolean; token: string }>(`${API}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: { username, password },
+      timeoutMs: REQUEST_TIMEOUTS.mutation,
     });
-    if (!res.ok) throw new Error("用户名或密码错误");
-    const data = await res.json();
+    if (loadAuth()?.actorId !== data.actor_id) clearAllPending();
     const auth: AuthUser = {
       actorId: data.actor_id,
       role: data.role,
@@ -77,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   function logout() {
+    clearAllPending();
     clearAuth();
     setUser(null);
   }

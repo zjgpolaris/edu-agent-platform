@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { authHeaders } from "@/lib/auth";
+import { fetchApiJson, REQUEST_TIMEOUTS } from "@/lib/api";
+import { AutoTutorExecutionSummary, type ExecutionSummary } from "./AutoTutorExecutionSummary";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -22,6 +24,7 @@ export type DemoJourneyEvent = {
 };
 
 type DemoJourneyResponse = {
+  execution?: ExecutionSummary | null;
   enabled: boolean;
   session_id: string;
   status: string;
@@ -52,26 +55,29 @@ function decisionSourceLabel(source: DemoJourneyEvent["decision_source"]): strin
 export function DemoAgentJourney({ sessionId, revision, token }: { sessionId: string; revision: number; token: string }) {
   const [data, setData] = useState<DemoJourneyResponse | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [loadedKey, setLoadedKey] = useState("");
+  const requestKey = `${sessionId}:${revision}`;
 
   useEffect(() => {
     const controller = new AbortController();
+    let current = true;
     setUnavailable(false);
-    fetch(`${API}/api/autotutor/session/${encodeURIComponent(sessionId)}/demo-trace`, {
+    fetchApiJson<DemoJourneyResponse>(`${API}/api/autotutor/session/${encodeURIComponent(sessionId)}/demo-trace`, {
       headers: authHeaders(token),
       signal: controller.signal,
       cache: "no-store",
+      timeoutMs: REQUEST_TIMEOUTS.read,
     })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(String(response.status));
-        return response.json() as Promise<DemoJourneyResponse>;
-      })
-      .then((payload) => setData(payload))
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+      .then((payload) => { if (current) { setData(payload); setLoadedKey(requestKey); } })
+      .catch(() => {
+        if (!current) return;
         setUnavailable(true);
       });
-    return () => controller.abort();
-  }, [sessionId, revision, token]);
+    return () => { current = false; controller.abort(); };
+  }, [sessionId, revision, token, retry, requestKey]);
+
+  const displayed = loadedKey === requestKey ? data : null;
 
   return (
     <aside className="panel learning-observation-panel" aria-label="Agent 演示旅程">
@@ -81,10 +87,10 @@ export function DemoAgentJourney({ sessionId, revision, token }: { sessionId: st
         这里只展示当前辅导会话的脱敏决策，不包含提示词、模型原文或其他学生数据。
       </p>
       {unavailable ? (
-        <p role="status" style={{ color: "var(--muted)", fontSize: 13 }}>决策轨迹暂不可用，辅导仍可继续。</p>
+        <div><p role="status" style={{ color: "var(--muted)", fontSize: 13 }}>决策轨迹暂不可用，辅导仍可继续。</p><button type="button" onClick={() => setRetry(n => n + 1)}>重试读取轨迹</button></div>
       ) : (
         <ol className="learning-runtime-list" style={{ maxHeight: 520, overflowY: "auto", padding: 0, listStyle: "none" }}>
-          {(data?.events || []).map((event) => (
+          {(displayed?.events || []).map((event) => (
             <li className={`learning-runtime-step ${event.status}`} key={`${event.sequence}-${event.phase}`}>
               <div className="learning-runtime-step-head">
                 <span>{event.sequence}. {event.label}</span>
@@ -98,9 +104,10 @@ export function DemoAgentJourney({ sessionId, revision, token }: { sessionId: st
               {event.duration_ms != null ? <em>{Math.round(event.duration_ms)}ms</em> : null}
             </li>
           ))}
-          {!data?.events.length ? <li style={{ color: "var(--muted)", fontSize: 13 }}>正在等待 Agent 产生第一步决策…</li> : null}
+          {!displayed?.events.length ? <li style={{ color: "var(--muted)", fontSize: 13 }}>正在等待 Agent 产生第一步决策…</li> : null}
         </ol>
       )}
+      {displayed && !unavailable ? <AutoTutorExecutionSummary execution={displayed.execution?.revision === revision ? displayed.execution : null} /> : null}
     </aside>
   );
 }

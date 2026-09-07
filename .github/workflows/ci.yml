@@ -253,6 +253,22 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Run isolated offline Graph browser flows
+        working-directory: frontend
+        env:
+          E2E_GRAPH_DEMO: '1'
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-graph-report
+        run: npm run test:e2e
+
+      - name: Upload Graph browser report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-graph-report
+          path: frontend/playwright-graph-report
+          if-no-files-found: ignore
+          retention-days: 14
+
   docker-build:
     name: Docker builds
     runs-on: ubuntu-latest

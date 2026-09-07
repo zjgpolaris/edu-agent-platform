@@ -6,6 +6,36 @@
 **Live Demo：** [edu-agent-platform.vercel.app](https://edu-agent-platform.vercel.app)
 > 一键体验账号：`pilot-student` / `pilot123`（首页按钮会直达 AutoTutor Agent 主线）
 
+### v1.50 本地 Graph 演示（免费、离线）
+
+已有 Python 虚拟环境和前端依赖后，在仓库根目录运行：
+
+```bash
+.venv/bin/python scripts/dev_autotutor_graph_demo.py
+```
+
+打开 `http://127.0.0.1:13000`，点击学生体验。脚本创建隔离 SQLite、运行现有 Pilot seed，
+实际使用 LangGraph Active + 确定性观察输入，不请求在线模型、embedding 或远程追踪。
+若当前 shell 设置了 `DATABASE_URL` / `DIRECT_URL`，请换一个未设置这些变量的终端；脚本会拒绝继承，且不修改 `.env`。
+此模式只绑定回环地址，不用于公网部署。现有免费云端 Legacy 配置不变，本地通过不代表生产 GO。
+
+停止使用 `Ctrl+C`；输出的 `Local demo directory` 保留数据。用同一目录恢复：
+
+```bash
+.venv/bin/python scripts/dev_autotutor_graph_demo.py --reuse-dir /实际输出的演示目录
+```
+
+复用不会重新 seed；不要复用未知数据库。端口可用 `--port` / `--frontend-port` 调整。
+停止进程后可备份整个演示目录（含仅本地使用的 JWT 文件）；不用时只把该确切目录移到废纸篓。
+不要上传目录里的账号、会话数据或密钥。首次运行以 SQLAlchemy metadata 创建本地 schema，不等于执行了生产 Alembic 迁移。
+
+五分钟演示：学生开课 → 查看“本地 Graph / 确定性演示”和实际节点 → 答错一次 →
+看反思和重规划 → 答对练习与独立退出票 → 刷新恢复 → 点击教师证据链接并选择教师体验。
+教师演示账号为 `pilot-teacher / pilot123`。恢复、断网和 kill 降级由专项测试验证，勿通过切线上配置演示。
+
+[开发验收与迁移边界](docs/20260907-autotutor-langgraph-demo-v150-delivery.md) ·
+[本轮 Spec](docs/20260907-autotutor-langgraph-demo-closure-v150-spec.md)
+
 ---
 
 ## 亮点功能：AutoTutor 自主辅导 Agent

@@ -547,7 +547,7 @@ async def autotutor_start_session(
     verification_run_id: str | None = Header(default=None, alias="X-AutoTutor-Verification-Run"),
     verification_attestation: str | None = Header(default=None, alias="X-AutoTutor-Verification-Attestation"),
 ):
-    from agents.auto_tutor import AutoTutorUnavailableError, start_session as autotutor_start
+    from agents.auto_tutor import AutoTutorUnavailableError, AutoTutorIdempotencyConflict, start_session as autotutor_start
     from agent_runtime.context import rollout_eligibility
     from agent_runtime.models import default_data_scope
     from security.auth import auth_required
@@ -618,6 +618,8 @@ async def autotutor_start_session(
                         metadata={"phase": result.get("phase"), "source": "start"},
                     )
             return result
+        except AutoTutorIdempotencyConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
         except AutoTutorUnavailableError as exc:
             raise HTTPException(status_code=503, detail=str(exc))
         except RolloutObservationWriteError:
@@ -721,7 +723,7 @@ async def autotutor_submit_answer(
 async def autotutor_get_session(session_id: str, actor: Actor = Depends(require_auth)):
     from agents.auto_tutor import get_session as autotutor_get
     try:
-        state = autotutor_get(session_id)
+        state = await run_in_threadpool(autotutor_get, session_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="辅导会话不存在或已过期")
     if req_student := state.get("student_id"):

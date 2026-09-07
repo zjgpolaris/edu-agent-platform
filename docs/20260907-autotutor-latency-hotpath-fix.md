@@ -74,3 +74,53 @@ Comparator 20/20 一致、fallback=0、重复副作用=0、观测写入健康。
 2. 本地回归及 PostgreSQL CI 通过后再提交/部署；本次开发本身不更改生产环境、不自动 push/部署或重跑。
 3. 补齐旧窗口 Graph start_session 尾部和同类型 Control 日志，定位剩余延迟，不假定减少 SQL 次数即可满足 p95 门禁。
 4. 新版本重新绑定 commit/config/window，先验证分段耗时确实下降，再按既有门禁验证；不混用旧提交基线、不缩窗排除坏样本、不调整阈值。
+
+## 2026-09-07 部署后核查与下一步
+
+### 已确认的结果
+
+- `eda3f94acf78bb98fd9bbd40ac9b50aec1fe52f3` 的 CI
+  [34074641176](https://github.com/zjgpolaris/edu-agent-platform/actions/runs/34074641176) 通过，包含真实 PostgreSQL 迁移与请求路径检查。
+- Legacy/BPS=0 小样本诊断
+  [34077321513](https://github.com/zjgpolaris/edu-agent-platform/actions/runs/34077321513) 完成 6 条 transition；
+  Control p50=6516 ms、p95=14252 ms。它不是 100 条正式基线，更不是 Canary 发布通过。
+- 用户提供的新版本 Legacy 日志：start 总耗时 10408.296 ms，其中 provider=6017.398 ms；
+  exit_ticket_answer=7081.116 ms、lesson_answer=6092.104 ms。
+  答题 provider 均低于 1 ms，business_schema 约 565 ms，observation_write 约 285 ms。
+  provider 包含观察数据准备，不等同于纯模型调用。
+- 从已登录的 Render Settings 页面确认：后端在 Oregon (US West)，实例为 Free。
+- 从同一服务 Environment 页的实际 `DATABASE_URL` 仅提取主机与端口：
+  `aws-1-ap-southeast-2.pooler.supabase.com:6543`。没有保存连接用户名、密码或完整 URI。
+  [Supabase 地区表](https://supabase.com/docs/guides/platform/regions) 将 `ap-southeast-2` 定义为 Sydney；
+  [连接文档](https://supabase.com/docs/guides/database/connecting-to-postgres) 将共享 pooler 的 6543 定义为 transaction mode。
+  本次尚未核验 `DIRECT_URL`，不能假定其类型或地区正确。
+
+### 判断与不确定性
+
+已确认应用到数据库 pooler 是 Oregon → Sydney 的跨洲路径。
+多次串行数据库调用会放大往返成本；该部署拓扑与日志的稳定耗时阶梯吻合，是需优先处理的延迟风险。
+但尚未从 Render 实例测量纯网络 RTT、连接池排队和数据库执行时间，不能把 285 ms 直接标为实测 RTT，
+也不能宣称它单独解释了全部 Graph/Control p95 差值。
+Free 冷启动与预热后持续数据库延迟需要分开分析。
+6543 不是天然错误；持久后端可以评估 session/direct 模式，但改端口不会消除跨洲延迟，不能盲改。
+
+### 下一步执行顺序（外部变更待授权）
+
+1. 保留 Legacy/BPS=0，不自动重跑完整 Canary，不降低性能阈值。
+2. 用户选择同地区部署路线：
+   - 保留当前 Render 后端，评估将数据库迁至 Oregon；涉及数据迁移、数据驻留变化与可能的新资源费用。
+   - 保留 Sydney 数据库，评估可部署在 Sydney 的后端托管；涉及新托管资源和 API 地址切换。
+   [Render 地区说明](https://render.com/docs/regions) 当前不含 Sydney，且现有服务不能原地改地区。
+   仅将后端搬到 Singapore 仍不是同地区，不能承诺解决问题。
+3. 获得路线与资源授权后，先核验配额、费用、备份恢复、数据库扩展/角色/序列/数据量及其他 Supabase 依赖；
+   准备只读或隔离验证环境。保留原服务与数据库，不做双写，不删除旧资源。
+4. 在目标实例使用不读取业务数据的数据库连通性/往返诊断，分别记录预热连接、事务及 SQL 耗时；
+   核验 session/direct 容量与迁移 advisory lock 兼容性，禁止输出 DSN/凭据。
+5. 制定维护窗口、停写与最终同步方案，经切换确认后才修改 `DATABASE_URL`/`DIRECT_URL`。
+   若 API 地址变化，同时核对 Vercel `NEXT_PUBLIC_API_BASE_URL`、CORS 与 GitHub
+   `AUTOTUTOR_PRODUCTION_API_BASE` / `AUTOTUTOR_PRODUCTION_ALLOWED_HOSTS`。
+   新库接受写入后不能仅改回旧 URL 当作回滚，必须先处理新写入的数据一致性。
+6. 验收 schema、鉴权、幂等性、原子观测与 Legacy 小样本，再为新拓扑重新建立正式 Control 基线；
+   后续 Canary/回滚验证绑定相同提交、配置和受控窗口，不混入旧拓扑样本。
+
+本次仅补充诊断文档，未创建资源、迁移数据、切换生产连接、升级付费计划或重新触发验证。

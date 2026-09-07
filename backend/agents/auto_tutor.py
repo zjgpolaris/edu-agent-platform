@@ -226,6 +226,10 @@ class AutoTutorState(BaseModel):
     executor_admission_reasons: list[str] = Field(default_factory=list)
     executor_admission_checked_at: str | None = None
     executor_fallback_reason: str | None = None
+    execution_profile: Literal["standard", "local_demo_graph"] = "standard"
+    execution_scope: Literal["runtime", "demo", "eval"] = "runtime"
+    execution_summary: dict[str, Any] | None = None
+    start_request_hash: str | None = None
     revision: int = 0
     created_at: float = 0.0
     updated_at: float = 0.0
@@ -254,7 +258,7 @@ def _execution_context(
 
     dimension("deployed_commit", deployed_commit())
     dimension("verification_run_id", verification_run_id)
-    return AutoTutorExecutionContext(
+    context = AutoTutorExecutionContext(
         actor_id=actor_id,
         actor_role=actor_role,
         account_status=account_status,
@@ -268,10 +272,36 @@ def _execution_context(
         traffic_source=traffic_source,
         verification_run_id=verification_run_id,
     )
+    from agents.autotutor_demo_policy import enabled, isolated_context, validate_configuration
+    if enabled():
+        validate_configuration()
+        if traffic_source != "organic" or verification_run_id:
+            raise AutoTutorUnavailableError("demo_verification_traffic_forbidden")
+        context = isolated_context(context)
+    return context
 
 
 @phase_timing("execution_with_provider")
 def _execute_selected_transition(
+    before: AutoTutorState,
+    *,
+    transition_kind: Literal["start", "lesson_answer", "exit_ticket_answer", "recovery_resume"],
+    command: dict[str, Any],
+    context: AutoTutorExecutionContext,
+    started_at: float,
+) -> AutoTutorTransitionOutcome:
+    from agents.autotutor_demo_execution import record_execution
+    outcome = _compute_selected_transition(before, transition_kind=transition_kind, command=command,
+                                            context=context, started_at=started_at)
+    attempted = before.executor_mode == "graph_active"
+    reason = outcome.next_state.executor_fallback_reason or ""
+    status = ("failed" if reason.startswith("graph_precommit_fallback:") else
+              "mismatch" if reason.startswith("active_comparator_mismatch:") else "completed") if attempted else "not_run"
+    return record_execution(outcome, before=before, transition_kind=transition_kind,
+                            nodes=outcome.diagnostics.visited_nodes if attempted else [], attempt_status=status)
+
+
+def _compute_selected_transition(
     before: AutoTutorState,
     *,
     transition_kind: Literal["start", "lesson_answer", "exit_ticket_answer", "recovery_resume"],
@@ -311,11 +341,12 @@ def _execute_selected_transition(
         selected.next_state.executor_mode = "legacy"
         selected.next_state.executor_fallback_reason = reason
         selected.executor_mode = "legacy"
-        selected.public_result = _public_state(selected.next_state)
+        selected.public_result = {**selected.public_result, **_public_state(selected.next_state)}
         selected.diagnostics.comparator_matched = False
         selected.diagnostics.fallback_reason = reason
         selected.diagnostics.provider_latency_ms = provider_latency_ms
         selected.diagnostics.executor_latency_ms = round((perf_counter() - selected_started) * 1000, 3)
+        selected.diagnostics.visited_nodes = []  # no completed Graph diagnostics on exception
         return selected
     selected.diagnostics.provider_latency_ms = provider_latency_ms
     selected.diagnostics.executor_latency_ms = round((perf_counter() - selected_started) * 1000, 3)
@@ -373,12 +404,13 @@ def _execute_selected_transition(
     comparator.next_state.executor_mode = "legacy"
     comparator.next_state.executor_fallback_reason = reason
     comparator.executor_mode = "legacy"
-    comparator.public_result = _public_state(comparator.next_state)
+    comparator.public_result = {**comparator.public_result, **_public_state(comparator.next_state)}
     comparator.diagnostics.provider_latency_ms = selected.diagnostics.provider_latency_ms
     comparator.diagnostics.executor_latency_ms = selected.diagnostics.executor_latency_ms
     comparator.diagnostics.comparator_latency_ms = selected.diagnostics.comparator_latency_ms
     comparator.diagnostics.comparator_matched = False
     comparator.diagnostics.fallback_reason = reason
+    comparator.diagnostics.visited_nodes = list(selected.diagnostics.visited_nodes)
     return comparator
 
 
@@ -661,6 +693,16 @@ def _apply_existing_session_canary_admission(
     dimension("cache_state", "bypassed")
     dimension("config_version", settings.config_version)
     if state.executor_assigned_mode != "graph_active" or state.executor_mode != "graph_active":
+        return
+    if state.execution_profile == "local_demo_graph":
+        from agents.autotutor_demo_policy import eligibility_reason
+        reason = eligibility_reason(state.student_id, actor_id=context.actor_id, actor_role=context.actor_role,
+                                    traffic_source=context.traffic_source, verification_run_id=context.verification_run_id)
+        if reason:
+            state.executor_mode = "legacy"
+            state.executor_fallback_reason = reason
+            state.executor_admission_status = "denied"
+            state.executor_admission_reasons = [reason]
         return
     if settings.kill_switch:
         state.executor_admission_status = "denied"
@@ -1732,6 +1774,7 @@ def _public_reflection(reflection: ReflectionRecord) -> dict[str, Any]:
 
 
 def _public_state(state: AutoTutorState) -> dict[str, Any]:
+    from agents.autotutor_demo_execution import project_execution
     current = state.lesson_plan[state.current_step_index] if state.current_step_index < len(state.lesson_plan) else None
     current_question = None
     if state.phase == "exit_ticket" and state.exit_ticket and state.status == "awaiting_answer":
@@ -1793,6 +1836,7 @@ def _public_state(state: AutoTutorState) -> dict[str, Any]:
         }
         public_runtime_steps.append(payload)
     return {
+        "execution": project_execution(state.execution_summary),
         "session_id": state.session_id,
         "run_id": state.run_id,
         "trace_id": state.trace_id,
@@ -2081,6 +2125,34 @@ def _checkpoint_runtime_transition(state: AutoTutorState) -> bool:
         return False
 
 
+def _start_hash(*, grade, focus_tags, focus_reason, lesson_id, max_minutes) -> str:
+    payload = {"grade": grade, "focus_tags": focus_tags or [], "focus_reason": focus_reason or None,
+               "lesson_id": lesson_id, "max_minutes": max(5, min(int(max_minutes or 12), 45))}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def _check_start_replay(state, request_hash):
+    if state.start_request_hash and state.start_request_hash != request_hash:
+        raise AutoTutorIdempotencyConflict("start_idempotency_payload_conflict")
+
+
+_START_LOCKS = [threading.RLock() for _ in range(64)]
+
+
+def _serialize_start(function):
+    from functools import wraps
+    @wraps(function)
+    def run(student_id, **kwargs):
+        key = kwargs.get("idempotency_key")
+        if not key:
+            return function(student_id, **kwargs)
+        slot = int(hashlib.sha256(f"{student_id}:{key}".encode()).hexdigest()[:8], 16) % len(_START_LOCKS)
+        with _START_LOCKS[slot]:
+            return function(student_id, **kwargs)
+    return run
+
+
+@_serialize_start
 @transition_timing
 def start_session(
     student_id: str,
@@ -2105,9 +2177,12 @@ def start_session(
 ) -> dict[str, Any]:
     transition_started = perf_counter()
     content_gate = ContentGateSettings.from_env()
+    request_hash = _start_hash(grade=grade, focus_tags=focus_tags, focus_reason=focus_reason,
+                               lesson_id=lesson_id, max_minutes=max_minutes)
     if idempotency_key:
         existing = _load_start_idempotent_session(student_id, idempotency_key)
         if existing is not None:
+            _check_start_replay(existing, request_hash)
             _store.cache(existing)
             replay = _public_state(existing)
             replay["idempotent_replay"] = True
@@ -2128,6 +2203,7 @@ def start_session(
         content_gate_mode=content_gate.selected_mode(student_id),
         created_at=now,
         updated_at=now,
+        start_request_hash=request_hash,
     )
     execution_context = _execution_context(
         actor_id=actor_id,
@@ -2159,6 +2235,19 @@ def start_session(
     state.executor_admission_reasons = list(admission.reason_codes)
     state.executor_admission_checked_at = admission.checked_at
     state.executor_fallback_reason = None
+    from agents.autotutor_demo_policy import enabled as demo_enabled, eligibility_reason as demo_reason, DEMO_CONFIG
+    if demo_enabled():
+        state.execution_scope = "demo"
+        reason = demo_reason(student_id, actor_id=actor_id, actor_role=actor_role,
+                             traffic_source=traffic_source, verification_run_id=verification_run_id)
+        if reason is None:
+            state.execution_profile = "local_demo_graph"
+            state.executor_mode = "graph_active"
+            state.executor_assigned_mode = "graph_active"
+            state.executor_config_version = DEMO_CONFIG
+            state.executor_assignment_reason = "demo_graph_selected"
+            state.executor_admission_status = "admitted"
+            state.executor_admission_reasons = []
     selected_outcome = _execute_selected_transition(
         state,
         transition_kind="start",
@@ -2202,6 +2291,7 @@ def start_session(
         if idempotency_key:
             existing = _load_start_idempotent_session(student_id, idempotency_key)
             if existing is not None:
+                _check_start_replay(existing, request_hash)
                 _store.cache(existing)
                 replay = _public_state(existing)
                 replay["idempotent_replay"] = True
@@ -2430,6 +2520,9 @@ def _submit_answer_locked(
     )
     settings = AutoTutorExecutorSettings.from_env()
     _apply_existing_session_canary_admission(state, context=execution_context, settings=settings)
+    if state.execution_profile == "local_demo_graph":
+        from agents.autotutor_demo_policy import isolated_context
+        execution_context = isolated_context(execution_context)
     set_trace_id(state.trace_id)
     previous_sequence = max((step.sequence for step in state.runtime_steps), default=0)
     try:

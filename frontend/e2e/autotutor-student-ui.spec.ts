@@ -3,12 +3,13 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 test.beforeAll(() => {
+  if (process.env.E2E_GRAPH_DEMO === "1") return; // isolated runner owns seeding
   execFileSync(process.env.E2E_PYTHON || "python3", ["scripts/seed_pilot_demo.py"], {
     cwd: path.resolve(process.cwd(), ".."),
     env: {
       ...process.env,
       PYTHONPATH: "backend",
-      EDU_AGENT_DB_PATH: "/tmp/edu-agent-playwright.sqlite3",
+      EDU_AGENT_DB_PATH: process.env.E2E_DB_PATH,
       JWT_SECRET: "edu-agent-playwright-only-secret",
     },
     stdio: "inherit",
@@ -39,6 +40,9 @@ async function enterStudent(page: Page) {
   await page.getByRole("tab", { name: "学生" }).click();
   await page.getByRole("button", { name: /体验 Agent 自主辅导/ }).click();
   await expect(page).toHaveURL(/\/student\/auto-tutor\?.*demo=1/);
+  // Navigation must not discard an in-flight start intent. Response-loss
+  // recovery is exercised separately with a deliberately dropped response.
+  await expect(page).toHaveURL(/session_id=at_[^&]+/, { timeout: 30_000 });
 }
 
 test("Pilot 主线完成答错、反思重规划与退出票证据", async ({ page }) => {
@@ -51,6 +55,10 @@ test("Pilot 主线完成答错、反思重规划与退出票证据", async ({ pa
   expect(new URL(page.url()).searchParams.has("fresh")).toBe(false);
 
   await expect(page.getByRole("complementary", { name: "Agent 演示旅程" })).toBeVisible({ timeout: 30_000 });
+  if (process.env.E2E_GRAPH_DEMO === "1") {
+    await expect(page.getByLabel("实际执行摘要")).toContainText("本地 Graph");
+    await expect(page.getByLabel("实际执行摘要")).toContainText("load_context");
+  }
   await expect(page.locator(".quiz-option-btn")).toHaveCount(4, { timeout: 30_000 });
 
   const correctMeaning = /维护.*统治|清政府.*统治|巩固.*统治/;

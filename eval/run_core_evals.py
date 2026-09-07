@@ -78,6 +78,9 @@ DEDICATED_INTEGRATION_SUITES = {
 }
 
 CORE_SUITES = [
+    "autotutor_demo_graph_policy_smoke",
+    "autotutor_demo_graph_flow_smoke",
+    "autotutor_demo_execution_projection_smoke",
     "llm_provider_contract_smoke",
     "autotutor_langchain_provenance_smoke",
     "autotutor_langgraph_shadow_parity_smoke",
@@ -316,6 +319,9 @@ QUICK_SUITES = [
     "learning_assistant_rollout_smoke",
 ]
 SMOKE_SUITES = [
+    "autotutor_demo_graph_policy_smoke",
+    "autotutor_demo_graph_flow_smoke",
+    "autotutor_demo_execution_projection_smoke",
     "eval_run_evidence_smoke",
     "alembic_transaction_boundary_smoke",
     "backend_startup_migration_smoke",
@@ -408,6 +414,9 @@ SMOKE_SUITES = [
     "agent_runtime_learning_assistant_api_smoke",
 ]
 SUITE_FILES = {
+    "autotutor_demo_graph_policy_smoke": EVAL_DIR / "autotutor_demo_graph_policy_smoke.py",
+    "autotutor_demo_graph_flow_smoke": EVAL_DIR / "autotutor_demo_graph_flow_smoke.py",
+    "autotutor_demo_execution_projection_smoke": EVAL_DIR / "autotutor_demo_execution_projection_smoke.py",
     "eval_run_evidence_smoke": EVAL_DIR / "eval_run_evidence_smoke.py",
     "alembic_transaction_boundary_smoke": EVAL_DIR / "alembic_transaction_boundary_smoke.py",
     "backend_startup_migration_smoke": EVAL_DIR / "backend_startup_migration_smoke.py",

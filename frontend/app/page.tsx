@@ -1,4 +1,5 @@
 "use client";
+import { apiErrorMessage } from "@/lib/api";
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
@@ -45,6 +46,13 @@ function HomeInner() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setTimeout(() => setSlow(true), 8000);
+    return () => { clearTimeout(timer); setSlow(false); };
+  }, [loading]);
 
   useEffect(() => setRole(requestedRole), [requestedRole]);
 
@@ -56,8 +64,8 @@ function HomeInner() {
       await login(username, password);
       const auth = JSON.parse(localStorage.getItem("edu_auth") || "{}");
       router.push(safeNextForRole(requestedNext, auth.role));
-    } catch {
-      setError("用户名或密码错误，请重试");
+    } catch (error) {
+      setError(apiErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -76,8 +84,8 @@ function HomeInner() {
       } else {
         router.push(role === "teacher" ? "/teacher" : `/student/auto-tutor?focus=${encodeURIComponent("洋务运动目的")}&demo=1&fresh=1`);
       }
-    } catch {
-      setError("Pilot 体验账号暂不可用，请先运行 seed_pilot_demo.py");
+    } catch (error) {
+      setError(apiErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -181,6 +189,7 @@ function HomeInner() {
             <button className="home-submit" type="submit" disabled={loading}>
               {loading ? "验证中…" : copy.cta}
             </button>
+            {slow && loading ? <p role="status">服务响应较慢，可能正在启动，请稍候；超时后可手动重试。</p> : null}
           </form>
 
           <div className="home-divider">

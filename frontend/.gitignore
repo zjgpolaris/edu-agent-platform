@@ -1,4 +1,6 @@
 node_modules
 .next
+.next-graph-demo/
+.next-e2e-graph/
 out
 .env*.local

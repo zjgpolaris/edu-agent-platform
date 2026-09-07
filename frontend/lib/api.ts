@@ -1,6 +1,21 @@
 import { authHeaders, clientSessionHeaders } from "@/lib/auth";
 
 export const DEFAULT_API_BASE_URL = "http://localhost:8000";
+export const REQUEST_TIMEOUTS = { read: 30_000, mutation: 90_000, slow: 8_000 };
+
+export class ApiTransportError extends Error {
+  constructor(public kind: "timeout" | "network" | "cancelled") {
+    super(kind === "timeout" ? "等待响应超时，请确认当前进度后重试" : kind === "cancelled" ? "已停止等待，服务端操作可能仍在进行" : "网络连接中断，请检查网络后同步进度");
+    this.name = "ApiTransportError";
+  }
+}
+
+export function apiErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return ({ 401: "登录已失效或账号密码错误，请重新登录", 403: "无权访问此内容", 409: "请求状态冲突，请同步最新进度", 429: "请求过于频繁，请稍后重试", 503: "服务暂不可用，请稍后重试" } as Record<number, string>)[error.status] || "服务请求失败，请稍后重试";
+  }
+  return error instanceof ApiTransportError ? error.message : "请求失败，请稍后重试";
+}
 
 type ErrorPayload = {
   detail?: unknown;
@@ -28,6 +43,7 @@ export type ApiJsonOptions = Omit<RequestInit, "body" | "headers"> & {
   token?: string | null;
   includeClientSession?: boolean;
   fallbackMessage?: string;
+  timeoutMs?: number;
 };
 
 export function getApiBaseUrl() {
@@ -72,7 +88,7 @@ export function normalizeError(error: unknown, fallback: string) {
 }
 
 export async function fetchApiJson<T>(path: string, options: ApiJsonOptions = {}): Promise<T> {
-  const { body, headers, token, includeClientSession, fallbackMessage = "请求失败，请稍后重试", ...init } = options;
+  const { body, headers, token, includeClientSession, timeoutMs, signal, fallbackMessage = "请求失败，请稍后重试", ...init } = options;
   const requestHeaders = new Headers(headers);
 
   if (body !== undefined && !requestHeaders.has("Content-Type")) {
@@ -85,16 +101,40 @@ export async function fetchApiJson<T>(path: string, options: ApiJsonOptions = {}
     applyHeaders(requestHeaders, clientSessionHeaders());
   }
 
-  const response = await fetch(apiUrl(path), {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  try {
+    const response = await fetch(apiUrl(path), {
     ...init,
+    signal: controller.signal,
     headers: requestHeaders,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const payload = await parseJsonSafely(response);
+  const payload = timeoutMs === undefined ? await parseJsonSafely(response) : await response.json().catch((error) => {
+    if (controller.signal.aborted) throw error;
+    if (response.ok) throw new ApiTransportError("network");
+    return {};
+  });
 
   if (!response.ok) {
     throw new ApiError(getPayloadMessage(payload) || fallbackMessage, response.status, payload, response);
   }
 
   return payload as T;
+  } catch (error) {
+    // Opt-in contract: older callers rely on native DOMException AbortError
+    // to ignore effect cleanup (including React Strict Mode's first request).
+    if (timeoutMs === undefined) throw error;
+    if (timedOut) throw new ApiTransportError("timeout");
+    if (signal?.aborted) throw new ApiTransportError("cancelled");
+    if (error instanceof ApiError || error instanceof ApiTransportError) throw error;
+    throw new ApiTransportError("network");
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
 }

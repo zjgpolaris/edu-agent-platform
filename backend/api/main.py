@@ -2,6 +2,10 @@
 import asyncio
 import os
 
+from agents.autotutor_demo_policy import validate_configuration as validate_demo_configuration
+
+validate_demo_configuration()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -31,6 +35,7 @@ from api.routers.agent_runtime import router as agent_runtime_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_demo_configuration()
     init_db()
     init_material_store()
     job_worker_stop = asyncio.Event()

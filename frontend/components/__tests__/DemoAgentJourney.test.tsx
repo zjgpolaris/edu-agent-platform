@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DemoAgentJourney } from "../DemoAgentJourney";
 
@@ -41,5 +41,28 @@ describe("DemoAgentJourney", () => {
     }), { status: 200, headers: { "Content-Type": "application/json" } }));
     render(<DemoAgentJourney sessionId="at_old" revision={1} token="token" />);
     expect(await screen.findByText("来源未记录")).toBeInTheDocument();
+  });
+
+  it("ignores an old response after session changes and aborts on unmount", async () => {
+    let finishOld!: (value: Response) => void;
+    const response = (label: string) => new Response(JSON.stringify({ enabled: true, events: [
+      { sequence: 1, phase: "plan", label, status: "completed", summary: "" },
+    ] }), { status: 200 });
+    const fetcher = vi.spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+      .mockResolvedValueOnce(response("当前会话"));
+    const view = render(<DemoAgentJourney sessionId="old" revision={0} token="token" />);
+    const oldSignal = fetcher.mock.calls[0][1]?.signal;
+    view.rerender(<DemoAgentJourney sessionId="new" revision={1} token="token" />);
+    expect(await screen.findByText(/当前会话/)).toBeInTheDocument();
+    expect(oldSignal?.aborted).toBe(true);
+    await act(async () => { finishOld(response("过期会话")); });
+    expect(screen.queryByText(/过期会话/)).not.toBeInTheDocument();
+    // A completed request has already removed its abort listener. Only an
+    // in-flight request should receive cancellation when the view unmounts.
+    fetcher.mockImplementationOnce(() => new Promise(() => {}));
+    view.rerender(<DemoAgentJourney sessionId="pending" revision={2} token="token" />);
+    view.unmount();
+    expect(fetcher.mock.calls[2][1]?.signal?.aborted).toBe(true);
   });
 });

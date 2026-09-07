@@ -7,6 +7,8 @@ import { TraceTimeline } from "@/components/TraceTimeline";
 import { DemoAgentJourney } from "@/components/DemoAgentJourney";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { fetchApiJson, ApiError, apiErrorMessage, REQUEST_TIMEOUTS } from "@/lib/api";
+import { readPending, savePending, clearPending, pendingKey, type PendingTransition } from "@/lib/autotutorPending";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -100,6 +102,7 @@ type SessionState = {
   reflection?: Reflection;
   last_answer_correct?: boolean;
   stale_answer_ignored?: boolean;
+  transition_in_progress?: boolean;
   answer_feedback?: {
     selected_option: string;
     message: string;
@@ -185,6 +188,22 @@ function AutoTutorInner() {
   const [restored, setRestored] = useState(false);
   const traceRef = useRef<HTMLDivElement>(null);
   const autoStartedFocusRef = useRef<string | null>(null);
+  const [pending, setPending] = useState<PendingTransition | null>(null);
+  const [pendingChecked, setPendingChecked] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const mutationRef = useRef<AbortController | null>(null);
+  const aliveRef = useRef(true);
+  useEffect(() => { aliveRef.current = true; return () => { aliveRef.current = false; mutationRef.current?.abort(); }; }, []);
+  useEffect(() => {
+    setPending(readPending(studentId));
+    setPendingChecked(true);
+  }, [studentId]);
+  useEffect(() => {
+    setSlow(false);
+    if (!loading) return;
+    const timer = setTimeout(() => setSlow(true), REQUEST_TIMEOUTS.slow);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   // 从 URL ?focus=知识点 读取作业/错题本跳转带来的聚焦知识点
   const focusTag = searchParams?.get("focus") ?? null;
@@ -224,14 +243,11 @@ function AutoTutorInner() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(
+        const data = await fetchApiJson<RootCauseInfo>(
           `${apiBaseUrl}/api/students/${studentId}/weakpoints/${encodeURIComponent(focusTag)}/root-cause`,
-          { headers }
+          { headers, timeoutMs: 5000 }
         );
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled && data && data.label) setRootCause(data as RootCauseInfo);
-        }
+        if (!cancelled && data && data.label) setRootCause(data);
       } catch {
         /* 根因缺失时静默降级为纯 focus 规划 */
       } finally {
@@ -243,64 +259,86 @@ function AutoTutorInner() {
     };
   }, [focusTag, studentId, user?.token, headers]);
 
-  const start = useCallback(async () => {
-    if (!studentId || loading) return;
+  const start = useCallback(async (fresh = false) => {
+    if (!studentId || loading || mutationRef.current) return;
+    const previous = readPending(studentId);
+    if (previous && (previous.kind !== "start" || previous.focus !== focusTag) && !fresh) {
+      setPending(previous); setError("存在待确认的请求，请先同步进度"); return;
+    }
+    const intent: PendingTransition = !fresh && previous?.kind === "start" ? previous : {
+      version: 1, kind: "start", actor: studentId, key: pendingKey(), createdAt: Date.now(), focus: focusTag,
+    };
+    try { savePending(intent); } catch { setError("无法保存恢复信息，请允许浏览器会话存储后重试"); return; }
+    setPending(intent);
+    const controller = new AbortController();
+    mutationRef.current = controller;
     setLoading(true);
     setError("");
     setSelected(null);
     setStatus("正在读取你的画像与错题本，准备本节课……");
     try {
       const body: Record<string, unknown> = { student_id: studentId };
-      if (focusTag) body.focus_tags = [focusTag];
-      if (rootCause?.label) body.focus_reason = `${rootCause.label}：${rootCause.description}`;
-      const res = await fetch(`${apiBaseUrl}/api/autotutor/start`, {
+      if (intent.focus) body.focus_tags = [intent.focus];
+      body.idempotency_key = intent.key;
+      // Root-cause stays explanatory UI data; no sensitive mutable reason in replay payloads.
+      const data = await fetchApiJson<SessionState>(`${apiBaseUrl}/api/autotutor/start`, {
         method: "POST",
         headers,
-        body: JSON.stringify(body),
+        body,
+        signal: controller.signal,
+        timeoutMs: REQUEST_TIMEOUTS.mutation,
       });
-      if (!res.ok) throw new Error(`启动失败：${res.status}`);
-      const data = (await res.json()) as SessionState;
+      if (!aliveRef.current) return;
+      clearPending(studentId); setPending(null);
       setSession(data);
       bindDemoSessionToUrl(data.session_id);
       setStatus(data.status === "needs_content" ? "当前内容需要补充" : data.current_question ? "请作答当前题目" : "本节课已完成");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "启动失败");
-      setStatus("启动失败");
+      if (!aliveRef.current) return;
+      setError(apiErrorMessage(e));
+      setStatus("开课结果待确认");
     } finally {
-      setLoading(false);
+      mutationRef.current = null;
+      if (aliveRef.current) setLoading(false);
     }
-  }, [studentId, loading, headers, focusTag, rootCause, bindDemoSessionToUrl]);
+  }, [studentId, loading, headers, focusTag, bindDemoSessionToUrl]);
 
   // 从错题库/学习路径带 focus 进入时，自动开始本节针对性辅导，避免用户二次点击。
   useEffect(() => {
-    if (!focusTag || !studentId || session || loading || !rootCauseChecked) return;
+    if (!focusTag || !studentId || session || requestedSessionId || loading || !rootCauseChecked || !pendingChecked || pending) return;
     if (showDemoJourney && !restored) return;
     if (autoStartedFocusRef.current === focusTag) return;
     autoStartedFocusRef.current = focusTag;
     void start();
-  }, [focusTag, studentId, session, loading, rootCauseChecked, restored, showDemoJourney, start]);
+  }, [focusTag, studentId, session, requestedSessionId, loading, rootCauseChecked, restored, showDemoJourney, start, pendingChecked, pending]);
 
   useEffect(() => {
     if (freshDemo && !requestedSessionId) setRestored(true);
   }, [freshDemo, requestedSessionId]);
 
   useEffect(() => {
-    if (!requestedSessionId || !studentId || !user?.token || session || loading) return;
+    if (!requestedSessionId || !studentId || !user?.token || session || loading || pending) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(
+        const data = await fetchApiJson<SessionState>(
           `${apiBaseUrl}/api/autotutor/session/${encodeURIComponent(requestedSessionId)}`,
-          { headers, cache: "no-store" },
+          { headers, cache: "no-store", timeoutMs: REQUEST_TIMEOUTS.read },
         );
-        if (res.status === 403) {
+        if (cancelled) return;
+        if (focusTag) autoStartedFocusRef.current = focusTag;
+        setSession(data);
+        setStatus(data.status === "needs_content" ? "已恢复等待补充内容的课程" : "已恢复当前演示课程");
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof ApiError && error.status === 403) {
           if (!cancelled) {
             setError("无权访问该辅导会话");
             if (focusTag) autoStartedFocusRef.current = focusTag;
           }
           return;
         }
-        if (res.status === 404) {
+        if (error instanceof ApiError && error.status === 404) {
           if (!cancelled) {
             const params = new URLSearchParams(searchParams?.toString() || "");
             params.delete("session_id");
@@ -308,14 +346,7 @@ function AutoTutorInner() {
           }
           return;
         }
-        if (!res.ok) throw new Error(String(res.status));
-        const data = (await res.json()) as SessionState;
-        if (cancelled) return;
-        if (focusTag) autoStartedFocusRef.current = focusTag;
-        setSession(data);
-        setStatus(data.status === "completed" ? "已恢复当前演示课程" : data.status === "needs_content" ? "已恢复等待补充内容的课程" : "已恢复当前演示课程");
-      } catch {
-        if (!cancelled) setError("恢复指定辅导会话失败，请重新开始");
+        setError(apiErrorMessage(error));
       } finally {
         if (!cancelled) setRestored(true);
       }
@@ -323,27 +354,42 @@ function AutoTutorInner() {
     return () => {
       cancelled = true;
     };
-  }, [requestedSessionId, studentId, user?.token, session, loading, headers, focusTag, router, searchParams]);
+  }, [requestedSessionId, studentId, user?.token, session, loading, headers, focusTag, router, searchParams, pending]);
 
-  async function answer(letter: string) {
-    if (!session || loading || session.status !== "awaiting_answer") return;
+  async function answer(letter: string, recovering = false) {
+    if (!studentId || loading || mutationRef.current) return;
+    const previous = readPending(studentId);
+    if (!recovering && (previous || !session || session.status !== "awaiting_answer")) return;
+    const intent: PendingTransition | null = recovering && previous?.kind === "answer" ? previous : session ? {
+      version: 1, kind: "answer", key: pendingKey(), actor: studentId, createdAt: Date.now(),
+      sessionId: session.session_id, revision: session.revision, answer: letter,
+    } : null;
+    if (!intent || intent.kind !== "answer") return;
+    try { savePending(intent); } catch { setError("无法保存恢复信息，请允许浏览器会话存储后重试"); return; }
+    setPending(intent);
+    const controller = new AbortController();
+    mutationRef.current = controller;
     setSelected(letter);
     setLoading(true);
     setError("");
     setStatus("正在检查答案……");
     try {
-      const res = await fetch(`${apiBaseUrl}/api/autotutor/answer`, {
+      const data = await fetchApiJson<SessionState>(`${apiBaseUrl}/api/autotutor/answer`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          session_id: session.session_id,
-          answer: letter,
+        body: {
+          session_id: intent.sessionId,
+          answer: intent.answer,
           student_id: studentId,
-          expected_revision: session.revision,
-        }),
+          expected_revision: intent.revision,
+          idempotency_key: intent.key,
+        },
+        signal: controller.signal,
+        timeoutMs: REQUEST_TIMEOUTS.mutation,
       });
-      if (!res.ok) throw new Error(`提交失败：${res.status}`);
-      const data = (await res.json()) as SessionState;
+      if (!aliveRef.current) return;
+      if (data.transition_in_progress) { setStatus("结果待确认，请稍后同步进度"); return; }
+      clearPending(studentId); setPending(null);
       setSession(data);
       setSelected(null);
       if (data.stale_answer_ignored) setStatus("已同步最新辅导进度");
@@ -353,12 +399,33 @@ function AutoTutorInner() {
       else if (data.reflection) setStatus("已根据你的作答调整讲解，请再试一次");
       else setStatus(data.last_answer_correct ? "练习答对了，继续完成独立检验" : "已根据你的选择调整讲解");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "提交失败");
-      setStatus("提交失败");
+      if (!aliveRef.current) return;
+      setError(apiErrorMessage(e));
+      setStatus("答题结果待确认，请同步进度");
       setSelected(null);
     } finally {
-      setLoading(false);
+      mutationRef.current = null;
+      if (aliveRef.current) setLoading(false);
     }
+  }
+
+  async function recoverPending() {
+    const intent = readPending(studentId);
+    if (!intent || mutationRef.current || loading) return;
+    if (intent.kind === "start") { await start(); return; }
+    const controller = new AbortController();
+    mutationRef.current = controller; setLoading(true); setError("");
+    try {
+      const data = await fetchApiJson<SessionState>(`/api/autotutor/session/${encodeURIComponent(intent.sessionId)}`, {
+        headers, cache: "no-store", signal: controller.signal, timeoutMs: REQUEST_TIMEOUTS.read,
+      });
+      if (!aliveRef.current) return;
+      setSession(data); bindDemoSessionToUrl(data.session_id);
+      if (data.revision > intent.revision || data.status === "completed") {
+        clearPending(studentId); setPending(null); setStatus("已同步最新辅导进度");
+      } else { setStatus("结果尚未确认，可稍后同步或使用同一请求重试"); }
+    } catch (e) { if (aliveRef.current) setError(apiErrorMessage(e)); }
+    finally { mutationRef.current = null; if (aliveRef.current) setLoading(false); }
   }
 
   useEffect(() => {
@@ -366,16 +433,14 @@ function AutoTutorInner() {
   }, [session?.runtime_steps.length]);
 
   useEffect(() => {
-    if (!studentId || !user?.token || freshDemo || requestedSessionId || (focusTag && !showDemoJourney) || session || loading || restored) return;
+    if (!studentId || !user?.token || !pendingChecked || pending || freshDemo || requestedSessionId || (focusTag && !showDemoJourney) || session || loading || restored) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(
+        const data = await fetchApiJson<SessionState>(
           `${apiBaseUrl}/api/autotutor/student/${studentId}/latest-session?include_completed=false`,
-          { headers },
+          { headers, timeoutMs: REQUEST_TIMEOUTS.read },
         );
-        if (!res.ok) return;
-        const data = (await res.json()) as SessionState;
         if (cancelled) return;
         if (focusTag) {
           const restoredFocus = data.lesson_plan[0]?.source_tag || data.lesson_plan[0]?.knowledge_point;
@@ -393,7 +458,7 @@ function AutoTutorInner() {
     return () => {
       cancelled = true;
     };
-  }, [studentId, user?.token, focusTag, showDemoJourney, freshDemo, requestedSessionId, session, loading, restored, headers]);
+  }, [studentId, user?.token, focusTag, showDemoJourney, freshDemo, requestedSessionId, session, loading, restored, headers, pendingChecked, pending]);
 
   const plan = session?.lesson_plan ?? [];
   const q = session?.current_question ?? null;
@@ -402,6 +467,13 @@ function AutoTutorInner() {
 
   return (
     <main className="academy-shell">
+      {slow ? <p role="status">服务响应较慢，可能正在启动。停止等待不会撤销已发送的操作。</p> : null}
+      {loading ? <button type="button" onClick={() => mutationRef.current?.abort()}>停止等待</button> : null}
+      {pending && !loading ? <section aria-label="请求恢复"><p role="status">请求结果待确认，请先恢复进度，避免重复操作。</p>
+        <button type="button" onClick={() => void recoverPending()}>同步进度 / 恢复请求</button>
+        {pending.kind === "answer" ? <button type="button" onClick={() => void answer(pending.answer, true)}>同一请求重试</button> : null}
+        {pending.kind === "start" && pending.focus !== focusTag ? <button type="button" onClick={() => void start(true)}>明确开始新的学习目标</button> : null}
+      </section> : null}
       <section className="academy-hero">
         <div className="hero-copy">
           <div className="eyebrow">Autonomous Tutor</div>
@@ -459,7 +531,7 @@ function AutoTutorInner() {
             type="button"
             className="autotutor-launch-btn"
             onClick={() => void start()}
-            disabled={loading || !studentId}
+            disabled={loading || !studentId || !!pending}
           >
             {loading ? "规划中…" : "开始本节课"}
           </button>
@@ -541,7 +613,7 @@ function AutoTutorInner() {
                   href={`/?role=teacher&next=${encodeURIComponent(`/teacher/evidence?session_id=${session.session_id}`)}`}
                   className="learning-tool-action"
                 >切换教师视角查看证据</Link>
-                <button type="button" onClick={() => void start()} disabled={loading}>重新演示</button>
+                <button type="button" onClick={() => void start(true)} disabled={loading || !!pending}>重新演示</button>
               </div>
             </div>
           ) : session?.status === "needs_content" && session.content_blocked ? (
@@ -625,7 +697,7 @@ function AutoTutorInner() {
                         type="button"
                         className={`quiz-option-btn ${selected === letter ? "selected" : ""}`}
                         onClick={() => void answer(letter)}
-                        disabled={loading}
+                        disabled={loading || !!pending}
                       >
                         {opt}
                       </button>
@@ -689,10 +761,16 @@ function AutoTutorInner() {
   );
 }
 
+function ScopedAutoTutor() {
+  const { user } = useAuth();
+  const params = useSearchParams();
+  return <AutoTutorInner key={`${user?.actorId || "anonymous"}:${params.get("focus") || ""}`} />;
+}
+
 export default function AutoTutorPage() {
   return (
     <Suspense fallback={null}>
-      <AutoTutorInner />
+      <ScopedAutoTutor />
     </Suspense>
   );
 }

@@ -31,6 +31,8 @@ def _load_json(path: Path) -> dict:
         raise ValueError(f"invalid JSON artifact: {path.name}") from exc
     if not isinstance(payload, dict):
         raise ValueError(f"JSON artifact must be an object: {path.name}")
+    if payload.get("production_evidence") is False or payload.get("profile") == "local_demo_graph":
+        raise ValueError("demo_artifact_is_not_production_evidence")
     return payload
 
 

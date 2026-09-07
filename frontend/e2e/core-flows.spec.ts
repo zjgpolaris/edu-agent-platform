@@ -37,7 +37,7 @@ test.beforeAll(() => {
   const env = {
     ...process.env,
     PYTHONPATH: "backend",
-    EDU_AGENT_DB_PATH: "/tmp/edu-agent-playwright.sqlite3",
+    EDU_AGENT_DB_PATH: process.env.E2E_DB_PATH,
     JWT_SECRET: "edu-agent-playwright-only-secret",
   };
   execFileSync(process.env.E2E_PYTHON || "python3", ["scripts/seed_pilot_demo.py"], {
@@ -62,6 +62,7 @@ async function enterDemo(page: Page, role: "student" | "teacher") {
   await page.getByRole("button", { name: new RegExp(role === "student" ? "体验 Agent 自主辅导" : "教师体验") }).click();
   if (role === "student") {
     await expect(page).toHaveURL(/\/student\/auto-tutor\?.*demo=1/);
+    await expect(page).toHaveURL(/session_id=at_[^&]+/, { timeout: 30_000 });
     await page.goto("/student");
   } else {
     await expect(page).toHaveURL(/\/teacher$/);

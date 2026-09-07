@@ -12,6 +12,7 @@ def _text(value: Any, *, limit: int = 160) -> str:
 
 def project_autotutor_evidence(state: dict[str, Any]) -> dict[str, Any]:
     """Project public AutoTutor state into a bounded evidence-only contract."""
+    from agents.autotutor_demo_execution import project_execution
     lesson_plan = state.get("lesson_plan") if isinstance(state.get("lesson_plan"), list) else []
     knowledge_points: list[str] = []
     for item in lesson_plan:
@@ -28,6 +29,7 @@ def project_autotutor_evidence(state: dict[str, Any]) -> dict[str, Any]:
     exit_point = _text(exit_result.get("knowledge_point"))
 
     return {
+        "execution": project_execution(state.get("execution")),
         "session_id": _text(state.get("session_id"), limit=128),
         "student_id": _text(state.get("student_id"), limit=128),
         "status": _text(state.get("status"), limit=40),
